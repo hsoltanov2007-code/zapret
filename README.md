@@ -43,7 +43,7 @@ Open `Northpass.sln` in Visual Studio 2022 with .NET desktop development, or use
 
 ## Run on Windows
 
-From the repository root in PowerShell:
+From the repository root in **PowerShell opened as Administrator** (`dotnet run` cannot request elevation itself):
 
 ```powershell
 .\scripts\run-dev.ps1

@@ -5,7 +5,7 @@
 1. Install .NET SDK 8.0.425 or Visual Studio 2022 with .NET desktop development and that SDK. `global.json` pins the 8.0.4xx patch family.
 2. Clone the repository and open `Northpass.sln`.
 3. From the root run `scripts/test.ps1`. Portable xUnit tests exercise a real harmless .NET child process plus model/service tests. The Windows test opens an actual WPF window on an STA thread, visits all five pages and closes it without starting an engine.
-4. Run `scripts/run-dev.ps1` and accept elevation. Configure the official bundle and a trusted version-specific profile. Follow `WINDOWS_ACCEPTANCE.md` for the driver, tray, scheduler and crash scenarios.
+4. Open PowerShell as Administrator and run `scripts/run-dev.ps1`. The development CLI cannot request elevation itself. A published `Northpass.exe` requests elevation when launched normally. Configure the official bundle and a trusted version-specific profile. Follow `WINDOWS_ACCEPTANCE.md` for the driver, tray, scheduler and crash scenarios.
 5. Run `scripts/build.ps1`; use `-Installer` after installing Inno Setup 6 to create the installer. No engine bundle is included. Checksums in the published folder describe that build, not an externally authenticated release signature.
 
 PowerShell scripts propagate nonzero exit status and run from the repository root. The installer includes the self-contained app, bundled draft and documentation. Data is stored outside the install directory. Do not move the published EXE while its scheduled autostart task is enabled.
