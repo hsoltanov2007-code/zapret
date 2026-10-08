@@ -41,6 +41,9 @@ jobs:
             Write-Host "::error title=Portable tests failed::$message"
             exit $result
           }
+          $summary = $output | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
+          if (!$summary) { throw 'Portable runner did not confirm nonzero completed tests.' }
+          Write-Host "::notice title=Windows portable test result::$summary"
       - shell: pwsh
         name: Windows WPF smoke test
         run: |
@@ -54,6 +57,9 @@ jobs:
             Write-Host "::error title=Windows smoke test failed::$message"
             exit $result
           }
+          $summary = $output | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
+          if (!$summary) { throw 'Windows runner did not confirm nonzero completed tests.' }
+          Write-Host "::notice title=Windows WPF test result::$summary"
       - shell: pwsh
         run: ./scripts/build.ps1 -Installer
       - uses: actions/upload-artifact@v4
