@@ -91,6 +91,7 @@ public sealed class WindowSmokeTests
         }
         public Task<EngineUpdateStatus> CheckForUpdatesAsync(CancellationToken token = default) => throw new NotSupportedException();
         public Task<InstalledEngine> UpdateAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<InstalledEngine> RepairAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default) => throw new NotSupportedException();
         public Task<InstalledEngine> RollbackAsync(CancellationToken token = default) => throw new NotSupportedException();
         public Task<IAsyncDisposable> AcquireLaunchLeaseAsync(string path, CancellationToken token = default) => throw new InvalidOperationException("UI smoke test must not launch an engine.");
     }

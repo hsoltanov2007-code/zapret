@@ -40,6 +40,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             (controller, registry, settingsStore, profileStore, diagnostics, updates, desktop, dispatcher);
         _installation = installation;
         SetupEngineCommand = Command(SetupEngineAsync, () => CanConfigure);
+        RepairEngineCommand = Command(RepairEngineAsync, () => CanConfigure);
         UpdateEngineCommand = Command(UpdateEngineAsync, () => CanConfigure);
         RollbackEngineCommand = Command(RollbackEngineAsync, () => CanConfigure);
         _controller.LogReceived += EngineLog;
@@ -95,6 +96,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public double EngineSetupProgress { get => _setupProgress; private set => Set(ref _setupProgress, value); }
     public string EngineRevision { get => _engineRevision; private set => Set(ref _engineRevision, value); }
     public AsyncRelayCommand SetupEngineCommand { get; }
+    public AsyncRelayCommand RepairEngineCommand { get; }
     public AsyncRelayCommand UpdateEngineCommand { get; }
     public AsyncRelayCommand RollbackEngineCommand { get; }
     public string DiagnosticUrl { get => _url; set => Set(ref _url, value); }
@@ -250,6 +252,16 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (!update.CanUpdate || !_desktop.ConfirmTrust(Strings["EngineUpdateConsent"])) return;
         var task = _installation.UpdateAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
         try { ApplyInstalled(await task); }
+        finally { _setupTask = null; }
+    }
+    private async Task RepairEngineAsync()
+    {
+        if (_installation is null || !_desktop.ConfirmTrust(Strings["EngineRepairConsent"])) return;
+        await _controller.DisconnectAsync(_lifetime.Token);
+        if (!_settings.EngineSetupConsent) { await EnsureEngineAsync(); return; }
+        var task = _installation.RepairAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
+        try { ApplyInstalled(await task); }
+        catch { SetSetupPhase("SetupFailed"); throw; }
         finally { _setupTask = null; }
     }
     private async Task RollbackEngineAsync()

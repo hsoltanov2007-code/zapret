@@ -190,6 +190,41 @@ public sealed class EngineInstallationTests : IDisposable
         await Assert.ThrowsAsync<IOException>(() => manager.UpdateAsync()); Assert.Equal(original, await manager.DetectAsync());
     }
     [Fact]
+    public async Task ExplicitRepairRestoresReviewedBytesAndQuarantinesCorruption()
+    {
+        var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);
+        var manager = Manager(http, fixture.Manifest); var engine = await manager.EnsureInstalledAsync();
+        await File.WriteAllTextAsync(engine.ExecutablePath, "corrupt");
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.DetectAsync());
+        Assert.Equal(engine, await manager.RepairAsync()); Assert.Equal(engine, await manager.DetectAsync());
+        var backup = Assert.Single(Directory.EnumerateDirectories(Path.GetDirectoryName(State)!, ".repair-backup-*"));
+        Assert.Equal("corrupt", await File.ReadAllTextAsync(Path.Combine(backup, "winws2.exe")));
+        Assert.Equal(2, handler.Requests);
+    }
+    [Fact]
+    public async Task FailedRepairRestoresPriorDirectoryAndSelectionWithoutExecutingCorruptBytes()
+    {
+        var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);
+        var original = Manager(http, fixture.Manifest); var installed = await original.EnsureInstalledAsync();
+        await File.WriteAllTextAsync(installed.ExecutablePath, "corrupt"); string selection = await File.ReadAllTextAsync(State);
+        using var failedHandler = new Handler([], HttpStatusCode.ServiceUnavailable); using var failedHttp = new HttpClient(failedHandler);
+        await Assert.ThrowsAsync<IOException>(() => Manager(failedHttp, fixture.Manifest).RepairAsync());
+        Assert.Equal("corrupt", await File.ReadAllTextAsync(installed.ExecutablePath)); Assert.Equal(selection, await File.ReadAllTextAsync(State));
+        await Assert.ThrowsAsync<InvalidDataException>(() => original.DetectAsync());
+        Assert.Equal(installed, await original.RepairAsync());
+    }
+    [Fact]
+    public async Task TamperedRollbackTargetCannotReplaceHealthySelection()
+    {
+        var old = Fixture(); using var oldHandler = new Handler(old.Archive); using var oldHttp = new HttpClient(oldHandler);
+        var original = await Manager(oldHttp, old.Manifest).EnsureInstalledAsync();
+        var newer = Fixture('b', "new engine"); using var handler = new Handler(newer.Archive); using var http = new HttpClient(handler);
+        var manager = Manager(http, newer.Manifest, [old.Manifest]); var updated = await manager.UpdateAsync();
+        await File.WriteAllTextAsync(original.ExecutablePath, "corrupt");
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.RollbackAsync());
+        Assert.Equal(updated, await manager.DetectAsync());
+    }
+    [Fact]
     public async Task UnknownRevisionIsNotAuthorizedByEditableSelection()
     {
         var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);

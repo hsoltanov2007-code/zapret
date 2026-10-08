@@ -15,6 +15,7 @@ public interface IEngineInstallationManager
     Task<InstalledEngine> EnsureInstalledAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default);
     Task<EngineUpdateStatus> CheckForUpdatesAsync(CancellationToken token = default);
     Task<InstalledEngine> UpdateAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default);
+    Task<InstalledEngine> RepairAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default);
     Task<InstalledEngine> RollbackAsync(CancellationToken token = default);
     Task<IAsyncDisposable> AcquireLaunchLeaseAsync(string executablePath, CancellationToken token = default);
 }

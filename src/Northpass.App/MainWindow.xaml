@@ -35,9 +35,9 @@
             <Border Style="{StaticResource Card}"><StackPanel>
               <TextBlock Text="{Binding Strings[EngineSetup]}" Style="{StaticResource Muted}"/>
               <TextBlock Text="{Binding EngineSetupText}" Margin="0,8,0,8"/>
-              <ProgressBar Minimum="0" Maximum="100" Value="{Binding EngineSetupProgress}" Height="8"/>
+              <ProgressBar Minimum="0" Maximum="100" Value="{Binding EngineSetupProgress, Mode=OneWay}" Height="8"/>
               <TextBlock Text="{Binding EngineRevision}" Style="{StaticResource Muted}" FontSize="11" Margin="0,8,0,12"/>
-              <Button Content="{Binding Strings[SetupEngine]}" Command="{Binding SetupEngineCommand}" HorizontalAlignment="Left"/>
+              <WrapPanel><Button Content="{Binding Strings[SetupEngine]}" Command="{Binding SetupEngineCommand}"/><Button Content="{Binding Strings[RepairEngine]}" Command="{Binding RepairEngineCommand}"/></WrapPanel>
             </StackPanel></Border>
             <TextBlock Text="{Binding ProfileDescription}" Style="{StaticResource Muted}" Margin="0,0,0,16"/>
             <TextBlock Text="{Binding ResultText}" Foreground="#B5C6D7"/>

@@ -3,7 +3,7 @@
 ## 0.3.0 — development
 
 - Automatic consent-based Zapret2 x64 setup from a reviewed Git pin, archive/component SHA-256 verification, safe bounded extraction and protected Windows ACLs.
-- Verified installation reuse and launch leases; managed EXE/Lua paths, environment scrubbing, update transaction and catalog-based rollback.
+- Verified installation reuse, explicit repair with quarantine/failure restoration and launch leases; managed EXE/Lua paths, environment scrubbing, update transaction and catalog-based rollback.
 - EN/RU/AZ setup consent/status/progress, reviewed example profile and automatic Connect preparation through the existing engine architecture.
 - Reproducible offline payload and installer packaging with full notices and corresponding third-party sources.
 - Security regression tests, real Windows offline installation/ACL/version/parser checks and a no-traffic driver lifecycle check with explicit policy-block evidence.

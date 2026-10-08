@@ -119,22 +119,43 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
         => InstallAsync(false, progress, token);
     public Task<InstalledEngine> UpdateAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default)
         => InstallAsync(true, progress, token);
+    public Task<InstalledEngine> RepairAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default)
+        => InstallAsync(true, progress, token, repair: true);
 
-    private async Task<InstalledEngine> InstallAsync(bool update, IProgress<InstallationProgress>? progress, CancellationToken token)
+    private void ValidateRemovalTree(string directory)
+    {
+        SafeArchive.NoLinks(directory); _security.ValidateDirectory(directory);
+        foreach (string entry in Directory.EnumerateFileSystemEntries(directory))
+        {
+            SafeArchive.NoLinks(entry);
+            if (Directory.Exists(entry)) ValidateRemovalTree(entry); else _security.ValidateFile(entry);
+        }
+    }
+    private async Task<InstalledEngine> InstallAsync(bool update, IProgress<InstallationProgress>? progress, CancellationToken token, bool repair = false)
     {
         await _operations.WaitAsync(token);
         string? staging = null;
+        string? repairBackup = null;
+        string destination = Path.Combine(_root, _current.Revision);
+        bool activated = false;
+        FileStream? operation = null;
         try
         {
-            using var operation = LockRoot();
+            operation = LockRoot();
             var state = ReadSelection();
-            if (state is not null)
+            if (state is not null && !repair)
             {
                 await VerifyAsync(_catalog[state.Current], token);
                 if (!update || state.Current == _current.Revision)
                 { progress?.Report(new("Ready", 1, 1)); return Installed(_catalog[state.Current]); }
             }
-            string destination = Path.Combine(_root, _current.Revision);
+            if (repair && Directory.Exists(destination))
+            {
+                // Never execute or bless corrupt bytes. Keep an isolated backup for failure recovery.
+                ValidateRemovalTree(destination);
+                repairBackup = Path.Combine(_root, ".repair-backup-" + Guid.NewGuid().ToString("N"));
+                Directory.Move(destination, repairBackup);
+            }
             if (!Directory.Exists(destination))
             {
                 staging = Path.Combine(_root, ".stage-" + Guid.NewGuid().ToString("N"));
@@ -166,13 +187,23 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
             token.ThrowIfCancellationRequested();
             // Same-volume atomic pointer change is last; failures leave the previous selection intact.
             WriteSelection(new(_current.Revision, state?.Current == _current.Revision ? state.Previous : state?.Current));
+            activated = true;
             progress?.Report(new("Ready", 1, 1));
             return Installed(_current);
         }
         finally
         {
-            try { if (staging is not null && Directory.Exists(staging)) Directory.Delete(staging, true); }
-            finally { _operations.Release(); }
+            try
+            {
+                if (repairBackup is not null && Directory.Exists(repairBackup) && !activated)
+                {
+                    if (Directory.Exists(destination)) { ValidateRemovalTree(destination); Directory.Delete(destination, true); }
+                    Directory.Move(repairBackup, destination);
+                }
+                // Successful repair keeps the quarantined protected backup (a driver image may still be loaded).
+                if (staging is not null && Directory.Exists(staging)) Directory.Delete(staging, true);
+            }
+            finally { operation?.Dispose(); _operations.Release(); }
         }
     }
     private void WriteSelection(Selection selection)
