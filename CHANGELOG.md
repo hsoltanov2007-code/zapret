@@ -1,3 +1,12 @@
+# Northpass v0.7
+
+- Russian first-launch/default language, preserved saved EN/RU/AZ choices and immediate language persistence.
+- Vector flag/native-label selector, refined graphite controls, hierarchy, connection action, service cards and About.
+- Removed the advanced-tools toggle and localized toggle text; legacy opt-ins cannot reopen tools. A Debug-only developer argument retains internal access.
+- Branded localized startup screen with real setup status, no minimum dwell, short transition and cancellable owned cleanup; tray launches skip the splash.
+- Subtle entrance/page/hover/press/refresh/loading motion respects Windows animation settings; loading clocks stop when hidden/unloaded.
+- v0.7 offline installer and expanded language/startup/vector/hidden-tool UI checks with localized screenshot evidence. Reviewed engine payload, legal notices and honest web checks stay intact.
+
 # Northpass v0.6
 
 - Removes the old adapter/catalog/profiles/payload and all executable/engine switching UI. Retains one reviewed offline Flowseal-derived module with protected lifecycle and replaceable interfaces.

@@ -91,7 +91,7 @@ public sealed class NetworkServiceProbeTransport : IServiceProbeTransport
                 }, timeout.Token);
                 tls = new(ProbeState.Passed, "TLS certificate and hostname verified on the connected address.", watch.Elapsed.TotalMilliseconds);
                 stage = "https"; watch.Restart();
-                byte[] request = Encoding.ASCII.GetBytes($"GET {target.HttpsUrl.PathAndQuery} HTTP/1.1\r\nHost: {target.HttpsUrl.Host}\r\nUser-Agent: Northpass/0.6\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+                byte[] request = Encoding.ASCII.GetBytes($"GET {target.HttpsUrl.PathAndQuery} HTTP/1.1\r\nHost: {target.HttpsUrl.Host}\r\nUser-Agent: Northpass/0.7\r\nAccept: */*\r\nConnection: close\r\n\r\n");
                 await stream.WriteAsync(request, timeout.Token);
                 await stream.FlushAsync(timeout.Token);
                 var status = new List<byte>(); byte[] one = new byte[1]; bool completeLine = false;

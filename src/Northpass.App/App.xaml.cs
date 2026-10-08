@@ -7,6 +7,7 @@ using Northpass.Engine.Zapret1;
 using Northpass.Services;
 using Northpass.Services.Installation;
 using Northpass.ViewModels;
+using Northpass.Presentation;
 
 namespace Northpass;
 
@@ -17,19 +18,22 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        var strings = new UiStrings("ru");
+        MainViewModel? model = null;
         try
         {
+            var settings = new SettingsStore(SettingsStore.DefaultFolder);
+            try { strings = new UiStrings(settings.Load().Language); } catch { /* The model preserves and reports unreadable settings. */ }
             string sid = WindowsIdentity.GetCurrent().User!.Value;
             _instance = new Mutex(true, "Local\\Northpass-" + sid, out bool first);
             if (!first)
             {
-                ProductDialog.Show(null, new UiStrings("en"), new UiStrings("en")["AlreadyOpen"], false);
+                ProductDialog.Show(null, strings, strings["AlreadyOpen"], false);
                 _instance.Dispose(); _instance = null;
                 Shutdown(); return;
             }
             var registry = new EngineRegistry();
 
-            var settings = new SettingsStore(SettingsStore.DefaultFolder);
             var profiles = new ProfileStore(System.IO.Path.Combine(settings.Folder, "profiles"));
             _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(15) };
             var dataLists = new DataListStore(Path.Combine(settings.Folder, "lists"));
@@ -52,20 +56,24 @@ public partial class App : Application
                 if (await flowseal.DetectAsync() != installed) throw new IOException("Installation verification failed.");
                 Shutdown(0); return;
             }
-            var model = new MainViewModel(new EngineController(registry), settings, profiles,
+            bool developerTools = false;
+#if DEBUG
+            developerTools = e.Args.Contains("--dev-tools");
+#endif
+            model = new MainViewModel(new EngineController(registry), settings, profiles,
                 new UpdateChecker(_http), new DesktopServices(), Dispatcher, flowseal,
-                new ServiceProbeService(new NetworkServiceProbeTransport()), dataLists, new StrategyTestRecordStore(Path.Combine(settings.Folder, "strategy-tests")));
+                new ServiceProbeService(new NetworkServiceProbeTransport()), dataLists, new StrategyTestRecordStore(Path.Combine(settings.Folder, "strategy-tests")), developerTools);
             var window = new MainWindow(model);
             MainWindow = window;
-            window.Show();
-            if (e.Args.Contains("--tray")) { window.WindowState = WindowState.Minimized; window.Hide(); }
-            await model.InitializeAsync();
+            if (!await StartupPresentation.ShowAsync(window, model, e.Args.Contains("--tray"))) Shutdown();
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.WriteLine(ex);
+            if (model is not null)
+            { try { await model.DisposeAsync(); } catch (Exception cleanup) { System.Diagnostics.Trace.WriteLine(cleanup); } }
             if (!e.Args.Contains("--installation-check"))
-                ProductDialog.Show(MainWindow, new UiStrings("en"), new UiStrings("en")["StartupFailed"], false);
+                ProductDialog.Show(MainWindow?.IsVisible == true ? MainWindow : null, strings, strings["StartupFailed"], false);
             Shutdown(1);
         }
     }

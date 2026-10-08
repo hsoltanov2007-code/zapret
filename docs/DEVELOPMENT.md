@@ -5,7 +5,7 @@
 1. Install .NET SDK 8.0.425 or Visual Studio 2022 with .NET desktop development and that SDK. `global.json` pins the 8.0.4xx patch family.
 2. Clone the repository and open `Northpass.sln`.
 3. Install Python 3.10+ and run `scripts/test.ps1` from Administrator PowerShell. Portable xUnit tests exercise a real harmless .NET child process plus model/service tests. Windows checks exercise real WPF automatic preparation/reuse, localized consumer text, screenshots and custom modals, protected offline engine installation, ACL/file lock failures and the actual pinned PE version/parser. A separate no-traffic driver test records initialized versus policy-blocked outcomes explicitly.
-4. Open PowerShell as Administrator and run `scripts/run-dev.ps1`. The development CLI cannot request elevation itself. A published `Northpass.exe` requests elevation when launched normally. The development launcher prepares verified offline inputs before compiling. Fresh settings automatically select the included configuration; strategies are selected on Home; typed inputs remain in Advanced. Follow `WINDOWS_ACCEPTANCE.md` for the driver, tray, scheduler and crash scenarios.
+4. Open PowerShell as Administrator and run `scripts/run-dev.ps1`. The development CLI cannot request elevation itself. A published `Northpass.exe` requests elevation when launched normally. The development launcher prepares verified offline inputs before compiling. Fresh settings automatically select the included configuration; strategies are selected on Home; production hides advanced tools. A Debug-only `--dev-tools` argument enables the internal typed/guided tools. Follow `WINDOWS_ACCEPTANCE.md` for the driver, tray, scheduler and crash scenarios.
 5. Run `scripts/build.ps1`; use `-Installer` after installing Inno Setup 6.3+ to create the installer. The sole pinned Flowseal offline engine payload, full licences and corresponding source archives are included. Checksums in the published folder describe that build, not an externally authenticated release signature.
 
 PowerShell scripts propagate nonzero exit status and run from the repository root. The installer includes the self-contained app, bundled draft and documentation. Data is stored outside the install directory. Do not move the published EXE while its scheduled autostart task is enabled.
@@ -42,3 +42,10 @@ The default CI artifacts are unsigned. On a Windows release machine with Windows
 
 
 v0.6 uses three fixed web probes instead of a manual URL field. Availability tests and WPF screenshots use explicitly labelled endpoint fixtures. Actual engine tests still use the reviewed PE and no-traffic driver; they do not claim real service/ISP access. The installer test seeds known obsolete product filenames as inert fixtures to exercise cleanup, rather than claiming a complete historical-version upgrade was run. Full upgrade/high-DPI/ordinary-user/provider checks remain manual.
+
+
+## v0.7 presentation
+
+First launch uses Russian; existing EN/RU/AZ preferences remain. The native-name/vector-flag selector saves language immediately. No standard advanced-tools opt-in exists; historical saved fields are retained as inert data. For internal development only, compile Debug and pass `--dev-tools` to Northpass (the Release entry point ignores it). No signing/elevation/integrity checks are bypassed by that argument.
+
+Windows UI acceptance includes actual localized splash/main-window transition and close-during-preparation cleanup, visible native language labels/flags, 100/150/200% vector-flag raster checks, language changes through the control, hidden legacy opt-ins, and reduced-motion/loading-clock cleanup. UI endpoint/session outcomes remain fixtures. `TestResults` includes all three locales for Home/About/Settings/Splash; CI annotations carry bounded Russian previews. Real multi-monitor/DPI interaction, tray/UAC/animation-policy changes and live ISP checks remain manual acceptance.

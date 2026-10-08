@@ -4,7 +4,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $install = Join-Path $env:ProgramFiles ('Northpass-Acceptance-' + [guid]::NewGuid().ToString('N'))
 $results = Join-Path $root 'TestResults'
 New-Item -ItemType Directory -Force $results | Out-Null
-$setup = Join-Path $root 'dist/installer/Northpass-0.6.0-win-x64-setup.exe'
+$setup = Join-Path $root 'dist/installer/Northpass-0.7.0-win-x64-setup.exe'
 $catalogs = @(
     @{ Name = 'flowseal'; Root = 'Northpass-Flowseal' }
 )
@@ -25,7 +25,7 @@ try {
     Invoke-Checked $setup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"", "/LOG=`"$(Join-Path $results 'installer-install.log')`"")
     $app = Join-Path $install 'Northpass.exe'
     if (!(Test-Path $app)) { throw 'Installer did not install the application.' }
-    if ((Get-Item $app).VersionInfo.ProductVersion -notlike '0.6.0*') { throw 'Installed version is incorrect.' }
+    if ((Get-Item $app).VersionInfo.ProductVersion -notlike '0.7.0*') { throw 'Installed version is incorrect.' }
     foreach ($required in @('engine-payload/flowseal-offline.zip', 'THIRD_PARTY_NOTICES.md', 'docs/third-party-source', 'docs/licenses/dotnet')) {
         if (!(Test-Path (Join-Path $install $required))) { throw "Bundled distribution content is missing: $required" }
     }
