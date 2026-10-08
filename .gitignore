@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+dist/
+.vs/
+*.user
+engine/*.exe
+engine/*.dll
+engine/*.sys
+engine/*.lua
+engine/cygwin1.dll
+!engine/PLACE_ENGINE_HERE.txt
