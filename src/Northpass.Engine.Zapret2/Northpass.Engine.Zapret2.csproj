@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Northpass.Engine.Abstractions/Northpass.Engine.Abstractions.csproj" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../engine/catalog/zapret2.json" LogicalName="Northpass.Zapret2.TrustedManifest" /></ItemGroup>
+  <ItemGroup><EmbeddedResource Include="../../engine/catalog/previous/*.json" LogicalName="Northpass.Zapret2.Previous.%(Filename)" /></ItemGroup>
+</Project>

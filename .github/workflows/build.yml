@@ -1,0 +1,102 @@
+name: Build and test
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.425
+      - run: dotnet restore tests/Northpass.Tests/Northpass.Tests.csproj --locked-mode
+      - run: dotnet test tests/Northpass.Tests/Northpass.Tests.csproj -c Release --no-restore --logger trx --results-directory TestResults
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-test-results
+          path: TestResults
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.425
+      - shell: pwsh
+        name: Portable tests on Windows
+        run: |
+          dotnet restore tests/Northpass.Tests/Northpass.Tests.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Portable test restore failed.' }
+          $output = dotnet test tests/Northpass.Tests/Northpass.Tests.csproj -c Release --no-restore --logger trx --results-directory TestResults 2>&1
+          $result = $LASTEXITCODE
+          $output | Write-Output
+          if ($result -ne 0) {
+            $message = ($output | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Portable tests failed::$message"
+            exit $result
+          }
+          $summary = $output | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
+          if (!$summary) { throw 'Portable runner did not confirm nonzero completed tests.' }
+          Write-Host "::notice title=Windows portable test result::$summary"
+      - shell: pwsh
+        name: Acquire pinned offline engine and corresponding sources
+        run: |
+          python ./scripts/prepare-engine.py
+          if ($LASTEXITCODE -ne 0) { throw 'Verified engine acquisition failed.' }
+      - shell: pwsh
+        name: Windows WPF and engine installation tests
+        run: |
+          dotnet restore tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Windows test restore failed.' }
+          $output = dotnet test tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj -c Release --no-restore --logger trx --results-directory TestResults 2>&1
+          $result = $LASTEXITCODE
+          $output | Write-Output
+          if ($result -ne 0) {
+            $message = ($output | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows integration tests failed::$message"
+            exit $result
+          }
+          $summary = $output | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
+          if (!$summary) { throw 'Windows runner did not confirm nonzero completed tests.' }
+          Write-Host "::notice title=Windows integration test result::$summary"
+          Get-ChildItem TestResults/engine-*.txt | ForEach-Object {
+            $evidence = (Get-Content $_.FullName -Raw).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::notice title=$($_.BaseName)::$evidence"
+          }
+      - shell: pwsh
+        name: Publish bounded UI review preview
+        run: |
+          $preview = Get-Content TestResults/ui-preview.txt -Raw
+          # GitHub allows ten notices per step, each at most 4096 characters.
+          # Full-resolution EN/RU/AZ images are always in windows-test-results.
+          if ($preview.Length -gt 40000) { throw 'UI annotation preview exceeds its bounded size.' }
+          for ($offset = 0; $offset -lt $preview.Length; $offset += 4000) {
+            $part = $preview.Substring($offset, [Math]::Min(4000, $preview.Length - $offset))
+            $index = [int]($offset / 4000)
+            Write-Host "::notice title=Northpass UI preview $index::$part"
+          }
+      - shell: pwsh
+        run: ./scripts/build.ps1 -Installer
+      - shell: pwsh
+        name: Install and verify the published application
+        run: ./scripts/test-installer.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-test-results
+          path: TestResults
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Northpass-win-x64
+          path: dist/Northpass/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Northpass-0.4.0-installer
+          path: dist/installer/Northpass-0.4.0-win-x64-setup.exe
+          if-no-files-found: error

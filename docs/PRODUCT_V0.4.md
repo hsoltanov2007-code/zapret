@@ -1,0 +1,13 @@
+# Northpass 0.4 product experience
+
+Home uses black and graphite surfaces, rounded controls, restrained typography and a single primary Connect action. Window chrome, dropdowns, checkboxes, text inputs, progress bars and scrollbars have dark templates. Keyboard focus indicators, accessible window-button names and owned modal focus remain available. The window can move, resize, maximize and minimize; content scrolls at smaller supported sizes.
+
+The installer includes all required components. First launch prepares them automatically under the existing Windows privilege/security policy. The old `EngineSetupConsent` settings field is retained for compatibility but no longer controls preparation: installing Northpass authorizes preparation of its bundled components. There is no independent component-consent popup, manual file picker or secondary download in the normal flow. Custom dark owned WPF modals handle repair and optional advanced changes.
+
+Home and ordinary Settings never bind raw exception messages, engine names, revisions, executable paths, profile descriptions or integrity metadata. Localized friendly messages direct users to Diagnostics when an operation fails. Advanced tools are hidden until enabled in Settings; disabling them returns Home when necessary. Settings saves that preference with existing per-user preferences. Imported/custom profiles remain opt-in advanced capabilities; valid existing selections and files are preserved. A fresh install selects the included usable HTTP/TLS configuration automatically.
+
+Connection state and website access remain distinct. `Connection started` means the owned process is running. The visible note explicitly says website access has not been verified. Diagnostics performs requested HTTPS checks and preserves detailed driver/parser/process errors. No generic `Connected` badge or success claim is inferred from an alive process or a reachable unrelated website.
+
+About → Licenses lists the complete packaged notices and licence files, including exact .NET runtime notices. The included third-party source archives can be opened from that section. They are not shown as a separate installer consent page or technical onboarding step. Developer/security documentation intentionally retains precise implementation details.
+
+CI captures actual WPF EN/RU/AZ Home screenshots, checks that ordinary Home/Settings exclude technical component terms even after an exception, verifies modal acceptance/cancellation and licence display, and exercises the installer and published offline bootstrap. Automated tests do not replace visual evaluation on Windows at multiple DPI/text-scale settings or real-network effectiveness tests.
