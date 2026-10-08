@@ -75,11 +75,16 @@ public sealed class ProcessSupervisorTests
     public async Task CrashReportsActualExitCode()
     {
         await using var supervisor = new ProcessSupervisor();
-        await supervisor.StartAsync(Child("crash"));
-        var deadline = DateTime.UtcNow.AddSeconds(5);
-        EngineStatus status;
-        do { await Task.Delay(100); status = await supervisor.GetStatusAsync(); } while (status.State == EngineState.Active && DateTime.UtcNow < deadline);
-        Assert.Equal(EngineState.Error, status.State); Assert.Equal(23, status.ExitCode);
+        string signal = Path.Combine(Path.GetTempPath(), "northpass-crash-" + Guid.NewGuid().ToString("N"));
+        await supervisor.StartAsync(Child("crash", signal));
+        try
+        {
+            await File.WriteAllTextAsync(signal, "crash after acknowledged startup");
+            var deadline = DateTime.UtcNow.AddSeconds(5);
+            EngineStatus status;
+            do { await Task.Delay(100); status = await supervisor.GetStatusAsync(); } while (status.State == EngineState.Active && DateTime.UtcNow < deadline);
+            Assert.Equal(EngineState.Error, status.State); Assert.Equal(23, status.ExitCode);
+        } finally { File.Delete(signal); }
     }
     [Fact]
     public async Task CancelledStartupDoesNotLeaveAnOwnedProcess()

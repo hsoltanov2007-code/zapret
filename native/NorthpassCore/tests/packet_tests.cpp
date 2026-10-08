@@ -68,6 +68,7 @@ void check(std::string_view name) {
         FlowTracker tracker(2); auto now = Clock::now(); auto v = classify(packet());
         require(tracker.observe(v, 40, now)->tcp == TcpObservation::Syn);
         std::swap(v.source, v.destination); v.tcp_flags = 0x12; require(tracker.observe(v, 40, now)->tcp == TcpObservation::SynAck);
+        v.tcp_flags = 0x10; require(tracker.observe(v, 40, now)->tcp == TcpObservation::SynAck);
         std::swap(v.source, v.destination); v.tcp_flags = 0x10;
         const auto* flow = tracker.observe(v, 40, now); require(flow->tcp == TcpObservation::Established && flow->packets[0] == 2 && flow->packets[1] == 1 && tracker.size() == 1);
         v.tcp_flags = 1; require(tracker.observe(v, 40, now)->tcp == TcpObservation::Closing);

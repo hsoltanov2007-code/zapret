@@ -17,6 +17,7 @@ struct FlowSummary {
     std::array<std::uint64_t, 2> packets{}, bytes{};
     Clock::time_point last_seen{};
     TcpObservation tcp{TcpObservation::Traffic};
+    int syn_direction{-1};
     bool tls_framing{};
 };
 class FlowTracker {

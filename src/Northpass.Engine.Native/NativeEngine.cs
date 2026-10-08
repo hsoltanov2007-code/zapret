@@ -100,13 +100,22 @@ public sealed class NativeEngine : IDpiEngine
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await _operations.WaitAsync(cancellationToken);
-        try { await _process.StopAsync(cancellationToken); await ReleaseLeaseAsync(); _failure = null; }
-        finally { _operations.Release(); }
+        try { await _process.StopAsync(cancellationToken); _failure = null; }
+        finally
+        {
+            try { if ((await _process.GetStatusAsync()).ProcessId is null) await ReleaseLeaseAsync(); }
+            finally { _operations.Release(); }
+        }
     }
     public async Task RestartAsync(EngineConfiguration configuration, CancellationToken cancellationToken = default)
     {
         await _operations.WaitAsync(cancellationToken);
-        try { await _process.StopAsync(cancellationToken); await ReleaseLeaseAsync(); await StartCoreAsync(configuration, cancellationToken); }
+        try
+        {
+            try { await _process.StopAsync(cancellationToken); }
+            finally { if ((await _process.GetStatusAsync()).ProcessId is null) await ReleaseLeaseAsync(); }
+            await StartCoreAsync(configuration, cancellationToken);
+        }
         finally { _operations.Release(); }
     }
     public async Task<EngineStatus> GetStatusAsync(CancellationToken cancellationToken = default)
@@ -122,7 +131,12 @@ public sealed class NativeEngine : IDpiEngine
     public async ValueTask DisposeAsync()
     {
         await _operations.WaitAsync();
-        try { if (_disposed) return; await _process.DisposeAsync(); await ReleaseLeaseAsync(); _disposed = true; }
+        try
+        {
+            if (_disposed) return;
+            try { await _process.DisposeAsync(); _disposed = true; }
+            finally { if ((await _process.GetStatusAsync()).ProcessId is null) await ReleaseLeaseAsync(); }
+        }
         finally { _operations.Release(); }
     }
 }

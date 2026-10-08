@@ -47,8 +47,8 @@ const FlowSummary* FlowTracker::observe(const PacketView& packet, std::size_t by
         if ((flags & 4) != 0) flow.tcp = TcpObservation::Reset;
         else if ((flags & 1) != 0) flow.tcp = TcpObservation::Closing;
         else if ((flags & 0x12) == 0x12) flow.tcp = TcpObservation::SynAck;
-        else if ((flags & 2) != 0) flow.tcp = TcpObservation::Syn;
-        else if ((flags & 0x10) != 0 && flow.tcp == TcpObservation::SynAck) flow.tcp = TcpObservation::Established;
+        else if ((flags & 2) != 0) { flow.tcp = TcpObservation::Syn; flow.syn_direction = static_cast<int>(direction); }
+        else if ((flags & 0x10) != 0 && flow.tcp == TcpObservation::SynAck && flow.syn_direction == static_cast<int>(direction)) flow.tcp = TcpObservation::Established;
     }
     return &flow;
 }

@@ -182,8 +182,15 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             await RequestGracefulStopAsync(process);
             await TerminateAsync(process);
             await _pumps;
+            int exitCode = process.ExitCode;
             _process = null;
             process.Dispose();
+            if (_protocol is not null && exitCode != 0)
+            {
+                var failure = new InvalidOperationException($"Native engine stopped with an error (code {exitCode}). See the diagnostic logs; scoped packet delivery is not guaranteed.");
+                SetStatus(new(EngineState.Error, ExitCode: exitCode, Error: failure.Message));
+                throw failure;
+            }
             SetStatus(new(EngineState.Disconnected));
             LogReceived?.Invoke("Owned engine process stopped.");
         }

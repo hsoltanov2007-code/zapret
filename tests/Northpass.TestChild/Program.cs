@@ -4,12 +4,12 @@ using System.Text.Json;
 // A harmless, real child-process fixture. This is not the production engine or a Windows driver.
 string mode = args.FirstOrDefault() ?? "wait";
 if (mode == "exit") { Console.Error.WriteLine("fixture startup error"); return 17; }
-if (mode is "protocol" or "protocol-stderr" or "protocol-hang")
+if (mode is "protocol" or "protocol-stderr" or "protocol-hang" or "protocol-error")
 {
     if (mode == "protocol-stderr") Console.Error.WriteLine("NORTHPASS_READY protocol=1");
     if (mode == "protocol-hang") { await Task.Delay(TimeSpan.FromMinutes(2)); return 0; }
-    if (mode == "protocol") Console.WriteLine("NORTHPASS_READY protocol=1");
-    if (await Console.In.ReadLineAsync() == "STOP") { Console.WriteLine("fixture graceful stop"); return 0; }
+    if (mode is "protocol" or "protocol-error") Console.WriteLine("NORTHPASS_READY protocol=1");
+    if (await Console.In.ReadLineAsync() == "STOP") { Console.WriteLine("fixture graceful stop"); return mode == "protocol-error" ? 27 : 0; }
     return 18;
 }
 if (mode == "native-parent")
@@ -26,7 +26,14 @@ if (mode == "native-parent")
 Console.WriteLine("fixture ready");
 Console.WriteLine(JsonSerializer.Serialize(args.Skip(1).ToArray()));
 Console.Error.WriteLine("fixture stderr");
-if (mode == "crash") { await Task.Delay(800); return 23; }
+if (mode == "crash")
+{
+    // Host signals only after StartAsync has returned; runner scheduling must not
+    // turn an unexpected-exit test into an immediate-startup-exit test.
+    var deadline = DateTime.UtcNow.AddSeconds(20);
+    while (!File.Exists(args[1]) && DateTime.UtcNow < deadline) await Task.Delay(20);
+    return File.Exists(args[1]) ? 23 : 24;
+}
 if (mode == "spawn")
 {
     var child = new ProcessStartInfo(Environment.ProcessPath!) { UseShellExecute = false };

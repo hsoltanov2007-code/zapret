@@ -74,8 +74,19 @@ public sealed class NativeEngineTests
     {
         await using var supervisor = new ProcessSupervisor(new("fixture ready", "STOP", TimeSpan.FromSeconds(3), TimeSpan.FromMilliseconds(100)));
         var logs = new ConcurrentQueue<string>(); supervisor.LogReceived += logs.Enqueue;
-        await supervisor.StartAsync(ProcessSupervisorTests.Child()); await supervisor.StopAsync();
+        await supervisor.StartAsync(ProcessSupervisorTests.Child());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => supervisor.StopAsync());
         Assert.Contains(logs, line => line.StartsWith("Graceful native shutdown failed"));
         Assert.Null((await supervisor.GetStatusAsync()).ProcessId);
+    }
+    [Fact]
+    public async Task NativeShutdownErrorIsReportedAfterOwnedCleanupAndRestartRemainsPossible()
+    {
+        await using var supervisor = new ProcessSupervisor(Protocol());
+        await supervisor.StartAsync(ProcessSupervisorTests.Child("protocol-error"));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => supervisor.StopAsync());
+        Assert.Contains("code 27", failure.Message);
+        var state = await supervisor.GetStatusAsync(); Assert.Equal(27, state.ExitCode); Assert.Equal(EngineState.Error, state.State); Assert.Null(state.ProcessId);
+        await supervisor.StartAsync(ProcessSupervisorTests.Child("protocol")); await supervisor.StopAsync();
     }
 }
