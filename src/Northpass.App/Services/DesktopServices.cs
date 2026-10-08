@@ -44,12 +44,19 @@ public sealed class DesktopServices : IDesktopServices
         var start = new ProcessStartInfo(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "schtasks.exe"))
             { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         string[] arguments = enabled
-            ? ["/Create", "/TN", taskName, "/SC", "ONLOGON", "/RU", user, "/RL", "HIGHEST", "/TR", "\"" + executable + "\" --tray", "/F"]
+            ? ["/Create", "/TN", taskName, "/SC", "ONLOGON", "/RU", user, "/IT", "/RL", "HIGHEST", "/TR", "\"" + executable + "\" --tray", "/F"]
             : ["/Delete", "/TN", taskName, "/F"];
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
         using var process = Process.Start(start) ?? throw new IOException("Cannot start Windows Task Scheduler tool.");
         Task<string> output = process.StandardOutput.ReadToEndAsync(), error = process.StandardError.ReadToEndAsync();
-        await process.WaitForExitAsync();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+            throw new TimeoutException("Windows Task Scheduler did not respond within ten seconds.");
+        }
         await Task.WhenAll(output, error);
         if (process.ExitCode != 0) throw new IOException("Autostart configuration failed: " + await error + " " + await output);
     }
