@@ -62,7 +62,11 @@ def dependency(output, cache, supplied=None):
             destination.parent.mkdir(parents=True, exist_ok=True)
             if destination.is_symlink():
                 raise RuntimeError("Untrusted SDK output symlink")
-            destination.write_bytes(data)
+            # Preserve build-input timestamps when verified bytes are unchanged.
+            # Packaging after integration must reuse the exact tested native PE,
+            # not relink it merely because the SDK header was rewritten.
+            if not destination.is_file() or destination.read_bytes() != data:
+                destination.write_bytes(data)
     # Full corresponding source accompanies every native binary distribution.
     spec = importlib.util.spec_from_file_location("reviewed_acquisition", ROOT / "scripts/prepare-engine.py")
     module = importlib.util.module_from_spec(spec)
