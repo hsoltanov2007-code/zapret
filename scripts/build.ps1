@@ -21,6 +21,10 @@ try {
     $project = Join-Path $root 'src\Northpass.App\Northpass.App.csproj'
     $output = Join-Path $root 'dist\Northpass'
     if (Test-Path $output) { Remove-Item $output -Recurse -Force }
+    # The exact native PE hashes are embedded in the managed adapter at compile time.
+    $nativeBuildOptions = @{ TimestampUrl = $TimestampUrl }
+    if ($SignCertificateThumbprint) { $nativeBuildOptions.SignCertificateThumbprint = $SignCertificateThumbprint }
+    ./scripts/build-native.ps1 @nativeBuildOptions
     Write-Host 'Publishing Northpass 0.7 for Windows x64...'
     dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
@@ -50,6 +54,9 @@ try {
     # Every distributable includes the selected reviewed engine plus licences and corresponding sources.
     python (Join-Path $root 'scripts/prepare-engine.py') --output $output
     if ($LASTEXITCODE -ne 0) { throw 'Reviewed offline engine packaging failed; installer build is blocked.' }
+    $nativeSources = Join-Path $docsOutput 'native-source'
+    Copy-Item (Join-Path $root 'dist/native/source') $nativeSources -Recurse -Force
+    Copy-Item (Join-Path $root 'dist/native-sdk/licenses/*') (Join-Path $docsOutput 'licenses') -Force
     # Sign only Northpass's own PE files. Reviewed upstream bytes must stay exact.
     Get-ChildItem $output -File | Where-Object { $_.Name -eq 'Northpass.exe' -or $_.Name -like 'Northpass*.dll' } | ForEach-Object { Sign-NorthpassFile $_.FullName }
     Get-ChildItem $output -File -Recurse | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
@@ -65,5 +72,5 @@ try {
         Sign-NorthpassFile (Join-Path $root 'dist/installer/Northpass-0.7.0-win-x64-setup.exe')
     }
     Write-Host "Completed: $output\Northpass.exe"
-    Write-Host 'Reviewed Flowseal offline payload and third-party sources are bundled. Clean-machine Windows acceptance is required before release.'
+    Write-Host 'Reviewed Flowseal fallback and experimental NorthpassCore pass-through payloads, licences and sources are bundled. No native DPI bypass is implemented.'
 } finally { Pop-Location }

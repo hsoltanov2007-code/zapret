@@ -4,6 +4,7 @@ using System.Security.Principal;
 using Northpass.Desktop;
 using Northpass.Engine;
 using Northpass.Engine.Zapret1;
+using Northpass.Engine.Native;
 using Northpass.Services;
 using Northpass.Services.Installation;
 using Northpass.ViewModels;
@@ -48,6 +49,28 @@ public partial class App : Application
                 offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "flowseal-offline.zip"),
                 probe: Zapret1Engine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
             registry.Register(Zapret1Engine.Metadata, () => new Zapret1Engine(flowseal, data));
+            EngineInstallationManager? native = null;
+            if (NativeCatalog.IsBundled)
+            {
+                using var manifest = NativeCatalog.OpenTrustedManifest();
+                native = new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native"),
+                    _http, new WindowsInstallationSecurity(), EngineManifest.Parse(manifest),
+                    offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "native-offline.zip"),
+                    probe: NativeEngine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
+                registry.Register(NativeEngine.Metadata, () => new NativeEngine(native));
+            }
+            // Internal acceptance path; never switches the consumer UI to a non-bypass engine.
+            if (e.Args.Contains("--native-check"))
+            {
+                if (native is null) throw new IOException("The native offline build is missing.");
+                var installed = await native.EnsureInstalledAsync();
+                if (await native.DetectAsync() != installed) throw new IOException("Native installation verification failed.");
+                await using var controller = new EngineController(registry);
+                await controller.ConnectAsync(new(installed.ExecutablePath, NativeCatalog.Idle()), autoRecover: false);
+                if ((await controller.GetStatusAsync()).State != Northpass.Models.EngineState.Active) throw new IOException("Native initialization failed.");
+                await controller.DisconnectAsync();
+                Shutdown(0); return;
+            }
             // Packaging acceptance probe: exercises the published application's real
             // offline composition without opening a window or intercepting traffic.
             if (e.Args.Contains("--installation-check"))
@@ -72,7 +95,7 @@ public partial class App : Application
             System.Diagnostics.Trace.WriteLine(ex);
             if (model is not null)
             { try { await model.DisposeAsync(); } catch (Exception cleanup) { System.Diagnostics.Trace.WriteLine(cleanup); } }
-            if (!e.Args.Contains("--installation-check"))
+            if (!e.Args.Contains("--installation-check") && !e.Args.Contains("--native-check"))
                 ProductDialog.Show(MainWindow?.IsVisible == true ? MainWindow : null, strings, strings["StartupFailed"], false);
             Shutdown(1);
         }

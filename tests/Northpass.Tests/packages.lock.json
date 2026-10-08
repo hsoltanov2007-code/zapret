@@ -107,19 +107,25 @@
       "northpass.engine.abstractions": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Core": "[0.6.0, )"
+          "Northpass.Core": "[0.7.0, )"
+        }
+      },
+      "northpass.engine.native": {
+        "type": "Project",
+        "dependencies": {
+          "Northpass.Engine.Abstractions": "[0.7.0, )"
         }
       },
       "northpass.engine.zapret1": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Engine.Abstractions": "[0.6.0, )"
+          "Northpass.Engine.Abstractions": "[0.7.0, )"
         }
       },
       "northpass.services": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Engine.Abstractions": "[0.6.0, )"
+          "Northpass.Engine.Abstractions": "[0.7.0, )"
         }
       }
     }

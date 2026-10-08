@@ -7,6 +7,21 @@ on:
 permissions:
   contents: read
 jobs:
+  native-portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build original packet core with sanitizers
+        run: |
+          cmake -S native/NorthpassCore -B dist/native-portable -DCMAKE_BUILD_TYPE=Debug -DNORTHPASS_SANITIZERS=ON
+          cmake --build dist/native-portable --parallel 2
+          mkdir -p TestResults
+          ctest --test-dir dist/native-portable --output-on-failure --output-junit "$PWD/TestResults/native-linux.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-linux-test-results
+          path: TestResults
   portable:
     runs-on: ubuntu-latest
     steps:
@@ -28,6 +43,9 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.425
+      - shell: pwsh
+        name: Build and verify original NorthpassCore Windows x64
+        run: ./scripts/build-native.ps1
       - shell: pwsh
         name: Portable tests on Windows
         run: |
@@ -125,6 +143,13 @@ jobs:
         with:
           name: Northpass-win-x64
           path: dist/Northpass/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NorthpassCore-0.1.0-win-x64
+          path: |
+            dist/native/
+            dist/native-build/Release/NorthpassCore.exe
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
           name: Northpass-0.7.0-installer

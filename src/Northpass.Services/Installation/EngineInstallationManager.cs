@@ -26,6 +26,8 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
         _current = Freeze(current);
         _catalog = (previous ?? []).Select(Freeze).Append(_current).ToDictionary(m => m.Revision, StringComparer.Ordinal);
         if (_catalog.Values.Any(m => m.EngineId != EngineId)) throw new InvalidDataException("Mixed engine catalog.");
+        if (_catalog.Values.Any(m => m.AcquisitionKind == "OfflineBuild") && !requireOfflinePayload)
+            throw new InvalidDataException("Native builds can only be installed from this application's bundled offline payload.");
     }
     private static EngineManifest Freeze(EngineManifest manifest)
     {

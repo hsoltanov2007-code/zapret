@@ -6,7 +6,7 @@ namespace Northpass.Services.Installation;
 public sealed record EngineComponent(string SourcePath, string Path, long Size, string Sha256);
 public sealed record EngineManifest(string EngineId, string Revision, string Version, string Executable,
     string ArchiveUrl, string ArchiveSha256, long ArchiveSize, string ArchivePrefix,
-    string OfflineSha256, long OfflineSize, IReadOnlyList<EngineComponent> Components, string SourceRevision = "")
+    string OfflineSha256, long OfflineSize, IReadOnlyList<EngineComponent> Components, string SourceRevision = "", string AcquisitionKind = "PinnedGit")
 {
     public static EngineManifest Parse(Stream stream)
     {
@@ -22,7 +22,13 @@ public sealed record EngineManifest(string EngineId, string Revision, string Ver
         SafeArchive.RelativePath(Executable);
         if (SourceRevision.Length > 0 && !Regex.IsMatch(SourceRevision, "^[a-f0-9]{40}$")) throw new InvalidDataException("Invalid engine source revision.");
         if (ArchivePrefix.Length > 0) SafeArchive.RelativePath(ArchivePrefix.TrimEnd('/'));
-        if (!Uri.TryCreate(ArchiveUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.Host != "codeload.github.com" ||
+        if (AcquisitionKind == "OfflineBuild")
+        {
+            if (EngineId != "native" || SourceRevision.Length != 40 || ArchiveUrl.Length != 0 || ArchivePrefix.Length != 0 ||
+                ArchiveSha256 != OfflineSha256 || ArchiveSize != OfflineSize || OfflineSha256.Length != 64 || Revision != OfflineSha256[..40])
+                throw new InvalidDataException("Native builds require an immutable offline payload and source revision.");
+        }
+        else if (AcquisitionKind != "PinnedGit" || !Uri.TryCreate(ArchiveUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.Host != "codeload.github.com" ||
             !uri.AbsolutePath.EndsWith("/zip/" + Revision, StringComparison.Ordinal) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.UserInfo))
             throw new InvalidDataException("Engine acquisition must use a pinned HTTPS Git source archive.");
         foreach (string hash in new[] { ArchiveSha256, OfflineSha256 }.Concat(Components.Select(c => c.Sha256)))

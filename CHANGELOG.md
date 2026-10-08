@@ -1,3 +1,10 @@
+# Northpass Native Engine v0.1 (on v0.7)
+
+- Original C++20/CMake NorthpassCore with read-only IPv4/IPv6, TCP/UDP/TLS framing classification, bounded bidirectional flow tracking and extensible pass-through strategy interface.
+- Independently pinned/verified official WinDivert SDK, protected offline payload/catalog, native ACL/hash/file leases and restricted idle/dedicated-loopback scope; no DPI bypass or traffic modification.
+- IDpiEngine adapter, actual readiness protocol, graceful drain/owned cancellation/parent-death cleanup; existing Flowseal production fallback and premium RU/EN/AZ UI remain.
+- Native sanitizer/unit/Windows integration CI, bundled native/source/licence artifacts and installer acceptance. No security/global-network policy changes.
+
 # Northpass v0.7
 
 - Russian first-launch/default language, preserved saved EN/RU/AZ choices and immediate language persistence.

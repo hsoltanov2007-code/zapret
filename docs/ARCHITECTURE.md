@@ -1,6 +1,6 @@
 # Northpass v0.7 architecture
 
-Northpass.App composes one reviewed Flowseal-derived Zapret1 adapter and installer. The view model has no executable picker, engine selection or raw-URL diagnostic flow. Only reviewed canonical profiles reach Home. The product layer references the compiled catalog; the controller, registry, installation/data APIs and process supervisor remain engine independent for a future replacement.
+Northpass.App composes one reviewed Flowseal-derived Zapret1 adapter and installer. The view model has no executable picker, engine selection or raw-URL diagnostic flow. Only reviewed canonical profiles reach Home. The product layer references the compiled catalog; the controller, registry, installation/data APIs and process supervisor remain engine independent for replacement. The original native v0.1 adapter is registered internally when its immutable offline catalog is compiled in; Home remains Flowseal-only. See [NorthpassCore architecture and restrictions](NATIVE_ENGINE.md).
 
 ```mermaid
 flowchart TD
@@ -14,7 +14,9 @@ flowchart TD
   Adapter --> Data[IEngineDataProvider protected snapshots]
   VM --> Probes[Built-in service probes]
   Probes --> Cards[Independent web outcomes]
-  Future[Future native adapter] -.-> API
+  API --> Native[Original NorthpassCore adapter]
+  Native --> NativeProcess[Owned C++20 pass-through child]
+  Native --> Install
 ```
 
 IDpiEngine exposes asynchronous start/stop/restart/status/validation and log/status events. The controller copies profiles, serializes lifecycle, stops only owned children and limits optional recovery to three attempts. The adapter accepts compiled ordered strategy arguments, typed numeric ports and validated data-only list bindings. Full PE/version/parser and protected-file checks precede capture. No BAT execution, external-code imports, global network/security mutation or external process killing occurs.

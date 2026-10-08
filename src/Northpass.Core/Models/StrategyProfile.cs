@@ -12,6 +12,8 @@ public sealed class StrategyProfile
     public string GameTcpPorts { get; set; } = "12";
     public string GameUdpPorts { get; set; } = "12";
     public Dictionary<string, string> ListBindings { get; set; } = new(StringComparer.Ordinal);
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public NativeSessionOptions? Native { get; set; }
 
     // Not part of JSON; set when loaded from disk.
     [System.Text.Json.Serialization.JsonIgnore]
@@ -19,3 +21,6 @@ public sealed class StrategyProfile
 
     public override string ToString() => Name;
 }
+
+// Experimental scope only, never an arbitrary packet filter or command line.
+public sealed record NativeSessionOptions(int? LoopbackPort = null, string Transport = "both");

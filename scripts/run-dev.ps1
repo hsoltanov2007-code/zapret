@@ -6,6 +6,7 @@ if (!$principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Push-Location $root
 try {
+    ./scripts/build-native.ps1
     python ./scripts/prepare-engine.py
     if ($LASTEXITCODE -ne 0) { throw 'Verified component preparation failed.' }
     dotnet run --project 'src\Northpass.App\Northpass.App.csproj'

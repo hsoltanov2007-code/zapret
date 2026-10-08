@@ -12,8 +12,13 @@
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2"><PrivateAssets>all</PrivateAssets></PackageReference>
     <ProjectReference Include="../../src/Northpass.App/Northpass.App.csproj" />
+    <ProjectReference Include="../Northpass.TestChild/Northpass.TestChild.csproj" ReferenceOutputAssembly="false" />
     <Using Include="System.IO" />
     <Using Include="System.Net.Http" />
     <Using Include="Xunit" />
   </ItemGroup>
+  <Target Name="CopyTestChild" AfterTargets="Build">
+    <ItemGroup><Fixture Include="../Northpass.TestChild/bin/$(Configuration)/net8.0/Northpass.TestChild.*" /></ItemGroup>
+    <Copy SourceFiles="@(Fixture)" DestinationFolder="$(OutDir)fixture" />
+  </Target>
 </Project>

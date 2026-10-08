@@ -24,7 +24,7 @@ public static class ProfileValidation
         if (profile.Arguments is null) issues.Add(new("profile.arguments", "Arguments must be an array."));
         else
         {
-            if (requireArguments && profile.Arguments.Count == 0)
+            if (requireArguments && profile.Engine != "native" && profile.Arguments.Count == 0)
                 issues.Add(new("profile.empty", "This draft has no arguments. Configure a verified strategy before connecting."));
             if (profile.Arguments.Count > 512) issues.Add(new("profile.limit", "A profile may contain at most 512 arguments."));
             if (profile.Arguments.Any(a => string.IsNullOrWhiteSpace(a) || a.Length > 32768 || a.Any(c => c is '\0' or '\r' or '\n')))
@@ -37,6 +37,7 @@ public static class ProfileValidation
         Id = profile.Id, Name = profile.Name, Description = profile.Description,
         Engine = profile.Engine, Arguments = profile.Arguments.ToList(), SourcePath = profile.SourcePath,
         StrategyId = profile.StrategyId, GameTcpPorts = profile.GameTcpPorts, GameUdpPorts = profile.GameUdpPorts,
-        ListBindings = profile.ListBindings is null ? null! : new(profile.ListBindings, StringComparer.Ordinal)
+        ListBindings = profile.ListBindings is null ? null! : new(profile.ListBindings, StringComparer.Ordinal),
+        Native = profile.Native is null ? null : profile.Native with { }
     };
 }

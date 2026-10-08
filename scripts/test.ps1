@@ -5,6 +5,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Verified engine acquisition failed.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Push-Location $root
 try {
+    ./scripts/build-native.ps1
     dotnet restore tests/Northpass.Tests/Northpass.Tests.csproj --locked-mode
     if ($LASTEXITCODE -ne 0) { throw 'Portable test restore failed.' }
     dotnet test tests/Northpass.Tests/Northpass.Tests.csproj -c Release --no-restore

@@ -10,15 +10,17 @@ A branded splash presents real preparation progress, followed by a short fade in
 
 New installations open in Russian. Saved EN/RU/AZ preferences are preserved; the vector flag/native-name selector in Settings saves language changes immediately. No advanced-tools toggle is shown. Legacy saved opt-ins no longer expose advanced pages. About focuses on Northpass, support and optional application updates; full attribution, licences and source access are separate under **Licenses & legal**. The original route logo is in `branding/` and appears in the title, About, app/tray and installer icons.
 
-## One reviewed engine
+## Production engine and native preview
 
-v0.6 removes the old Zapret2 adapter, catalog, bundled profiles, installer payload, executable picker and engine switching. Only the pinned Flowseal-derived Zapret1 module is registered. Five reviewed typed strategies preserve argument ordering, repeated options and YouTube/Discord/voice filters without running BAT files or upstream service scripts. The protected install, integrity verification, safe extraction, data-list snapshots, repair/rollback and owned-child lifecycle remain intact. `IDpiEngine` and installer/data interfaces remain replaceable internally.
+v0.6 removes the old Zapret2 adapter, catalog, bundled profiles, installer payload, executable picker and engine switching. The pinned Flowseal-derived Zapret1 module remains the consumer default/fallback. Five reviewed typed strategies preserve argument ordering, repeated options and YouTube/Discord/voice filters without running BAT files or upstream service scripts. The protected install, integrity verification, safe extraction, data-list snapshots, repair/rollback and owned-child lifecycle remain intact. `IDpiEngine` and installer/data interfaces remain replaceable internally.
+
+**Northpass Native Engine v0.1** adds an original C++20/CMake `NorthpassCore` behind `IDpiEngine`, with independently verified WinDivert, protected offline installation, packet classification/flow tracking, owned lifecycle and isolated pass-through tests. It performs **no DPI bypass**, cannot modify traffic and is not a consumer engine selection. The installer includes its payload, licences and source. Read [native architecture, security, build and limitations](docs/NATIVE_ENGINE.md).
 
 Valid Flowseal selections/preferences survive upgrades. Unsupported old selections migrate to the included starter while existing user files are retained. The installer removes only known legacy product files from an in-place app upgrade; it does not terminate external programs or delete protected shared drivers. Read [v0.7 UI/startup behavior](docs/UI_V0.7.md), [v0.6 behavior and migration](docs/PRODUCT_V0.6.md), [reviewed input](docs/FLOWSEAL_REVIEW.md), [architecture](docs/ARCHITECTURE.md) and [security](docs/ENGINE_INSTALLATION.md).
 
 ## Development and builds
 
-Use .NET SDK 8.0.425, Python 3.10+ and Inno Setup 6.3+ on Windows:
+Use .NET SDK 8.0.425, Visual Studio 2022 C++ tools/Windows SDK, CMake 3.24+, Python 3.10+ and Inno Setup 6.3+ on Windows:
 
 ```powershell
 # Administrator PowerShell for actual Windows integration

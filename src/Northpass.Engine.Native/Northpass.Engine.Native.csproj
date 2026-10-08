@@ -1,4 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup><ProjectReference Include="../Northpass.Engine.Abstractions/Northpass.Engine.Abstractions.csproj" /></ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../dist/native/native-manifest.json" Condition="Exists('../../dist/native/native-manifest.json')" LogicalName="Northpass.Native.Manifest" />
+  </ItemGroup>
 </Project>
