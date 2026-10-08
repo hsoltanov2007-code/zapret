@@ -16,56 +16,76 @@ public sealed class WindowSmokeTests
     public async Task WindowOpensAllPagesAndClosesWithoutStartingAnEngine()
     {
         var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        string stage = "STA startup";
         var thread = new Thread(() =>
         {
             string temporary = Path.Combine(Path.GetTempPath(), "northpass-ui-" + Guid.NewGuid().ToString("N"));
+            Exception? failure = null;
             try
             {
-                var app = new App(); app.InitializeComponent();
-                var registry = new EngineRegistry(); registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine());
-                var profiles = new ProfileStore(Path.Combine(temporary, "profiles"));
-                profiles.Save(new() { Id = "draft", Name = "Draft", Arguments = [] });
-                using var http = new HttpClient();
-                var desktop = new SetupConsent(); var installation = new FakeInstallation();
-                var store = new SettingsStore(temporary);
-                var model = new MainViewModel(new EngineController(registry), registry, store, profiles,
-                    new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
-                var window = new MainWindow(model); app.MainWindow = window;
-                model.InitializeAsync(null).GetAwaiter().GetResult();
-                window.Show(); window.UpdateLayout();
-                Assert.True(window.IsVisible);
-                Assert.Equal("Disconnected", model.StatusText);
-                Assert.Equal("Engine ready", model.EngineSetupText);
-                Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
-                Assert.True(store.Load().EngineSetupConsent);
-                Assert.False(model.CanChooseEngine);
-                var tabs = Assert.IsType<TabControl>(window.FindName("NavigationTabs"));
-                Assert.Equal(5, tabs.Items.Count);
-                for (int page = 0; page < tabs.Items.Count; page++) { tabs.SelectedIndex = page; window.UpdateLayout(); }
-                model.Language = "ru"; Assert.Equal("Главная", model.Strings["Dashboard"]);
-                model.Language = "az"; Assert.Equal("İdarə paneli", model.Strings["Dashboard"]);
-                var frame = new DispatcherFrame();
-                window.Closed += (_, _) => frame.Continue = false;
-                window.Close();
-                Dispatcher.PushFrame(frame);
-                Assert.False(window.IsVisible);
-                // Next launch reuses the installation without asking for consent or installing again.
-                var next = new MainViewModel(new EngineController(registry), registry, store, profiles,
-                    new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
-                next.InitializeAsync(null).GetAwaiter().GetResult();
-                Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
-                Assert.Equal("Engine ready", next.EngineSetupText);
-                next.DisposeAsync().AsTask().GetAwaiter().GetResult();
-                // Drain WPF shutdown before the STA thread exits; native callbacks cannot outlive it.
-                app.Shutdown();
+                var app = new App { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
+                app.InitializeComponent();
+                // A continuously running dispatcher allows genuine asynchronous UI setup/cleanup.
+                app.Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    MainWindow? window = null;
+                    var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                    try
+                    {
+                        var registry = new EngineRegistry(); registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine());
+                        var profiles = new ProfileStore(Path.Combine(temporary, "profiles"));
+                        profiles.Save(new() { Id = "draft", Name = "Draft", Arguments = [] });
+                        using var http = new HttpClient();
+                        var desktop = new SetupConsent(); var installation = new FakeInstallation();
+                        var store = new SettingsStore(temporary);
+                        var model = new MainViewModel(new EngineController(registry), registry, store, profiles,
+                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
+                        window = new MainWindow(model); app.MainWindow = window;
+                        window.Closed += (_, _) => closed.TrySetResult();
+                        stage = "initial consent and setup";
+                        await model.InitializeAsync(null);
+                        stage = "window layout";
+                        window.Show(); window.UpdateLayout();
+                        Assert.True(window.IsVisible);
+                        Assert.Equal("Disconnected", model.StatusText);
+                        Assert.Equal("Engine ready", model.EngineSetupText);
+                        Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
+                        Assert.True(store.Load().EngineSetupConsent); Assert.False(model.CanChooseEngine);
+                        var tabs = Assert.IsType<TabControl>(window.FindName("NavigationTabs"));
+                        Assert.Equal(5, tabs.Items.Count);
+                        for (int page = 0; page < tabs.Items.Count; page++) { tabs.SelectedIndex = page; window.UpdateLayout(); }
+                        model.Language = "ru"; Assert.Equal("Главная", model.Strings["Dashboard"]);
+                        Assert.Equal("Движок готов", model.EngineSetupText);
+                        model.Language = "az"; Assert.Equal("İdarə paneli", model.Strings["Dashboard"]);
+                        Assert.Equal("Mühərrik hazırdır", model.EngineSetupText);
+                        stage = "asynchronous close";
+                        window.Close(); await closed.Task;
+                        Assert.False(window.IsVisible);
+                        stage = "subsequent launch reuse";
+                        var next = new MainViewModel(new EngineController(registry), registry, store, profiles,
+                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
+                        await next.InitializeAsync(null);
+                        Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
+                        Assert.Equal("Engine ready", next.EngineSetupText);
+                        await next.DisposeAsync();
+                    }
+                    catch (Exception ex) { failure = ex; }
+                    finally
+                    {
+                        if (window is not null && !closed.Task.IsCompleted) { window.Close(); await closed.Task; }
+                        stage = "dispatcher shutdown";
+                        app.Shutdown();
+                    }
+                }));
                 Dispatcher.Run();
-                complete.TrySetResult();
+                if (failure is null) complete.TrySetResult(); else complete.TrySetException(failure);
             }
             catch (Exception ex) { complete.TrySetException(ex); }
             finally { if (Directory.Exists(temporary)) Directory.Delete(temporary, true); }
         }) { IsBackground = true };
         thread.SetApartmentState(ApartmentState.STA); thread.Start();
-        await complete.Task.WaitAsync(TimeSpan.FromSeconds(45));
+        try { await complete.Task.WaitAsync(TimeSpan.FromSeconds(45)); }
+        catch (TimeoutException) { throw new TimeoutException("WPF smoke timed out at: " + stage); }
     }
     private sealed class SetupConsent : IDesktopServices
     {
