@@ -214,13 +214,20 @@ public sealed class WindowSmokeTests
         {
             // Small CI annotation preview complements the full-resolution artifact,
             // allowing visual review even where artifact-storage hosts are blocked.
-            int width = 560, height = (int)(window.ActualHeight * width / window.ActualWidth);
-            var visual = new DrawingVisual();
-            using (var drawing = visual.RenderOpen()) drawing.DrawImage(bitmap, new Rect(0, 0, width, height));
-            var preview = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); preview.Render(visual);
-            var encoded = new PngBitmapEncoder(); encoded.Frames.Add(BitmapFrame.Create(preview));
-            using var bytes = new MemoryStream(); encoded.Save(bytes);
-            File.WriteAllText(Path.Combine(output, "ui-preview.txt"), Convert.ToBase64String(bytes.ToArray()));
+            string encodedPreview = "";
+            for (int width = 560; width >= 320; width -= 40)
+            {
+                int height = (int)(window.ActualHeight * width / window.ActualWidth);
+                var visual = new DrawingVisual();
+                using (var drawing = visual.RenderOpen()) drawing.DrawImage(bitmap, new Rect(0, 0, width, height));
+                var preview = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); preview.Render(visual);
+                var encoded = new PngBitmapEncoder(); encoded.Frames.Add(BitmapFrame.Create(preview));
+                using var bytes = new MemoryStream(); encoded.Save(bytes);
+                encodedPreview = Convert.ToBase64String(bytes.ToArray());
+                if (encodedPreview.Length <= 40000) break;
+            }
+            Assert.True(encodedPreview.Length <= 40000, "Review preview must fit GitHub's annotation bound.");
+            File.WriteAllText(Path.Combine(output, "ui-preview.txt"), encodedPreview);
         }
     }
     private static string FindRepository()
