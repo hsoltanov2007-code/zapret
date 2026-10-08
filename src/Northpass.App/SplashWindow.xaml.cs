@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Media.Animation;
 using Northpass.Presentation;
 using Northpass.ViewModels;
 
@@ -28,6 +29,7 @@ public partial class SplashWindow : Window
         {
             var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var fade = Motion.Fade(Opacity, 0, 160);
+            fade.FillBehavior = FillBehavior.HoldEnd;
             fade.Completed += (_, _) => finished.TrySetResult();
             BeginAnimation(OpacityProperty, fade);
             // A Windows animation-policy change can remove an active clock.

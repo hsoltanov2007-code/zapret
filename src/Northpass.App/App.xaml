@@ -28,14 +28,14 @@
       <DataTrigger Binding="{Binding Code}" Value="en"><Setter TargetName="Flag" Property="Source" Value="{StaticResource FlagEn}"/></DataTrigger>
       <DataTrigger Binding="{Binding Code}" Value="az"><Setter TargetName="Flag" Property="Source" Value="{StaticResource FlagAz}"/></DataTrigger>
     </DataTemplate.Triggers></DataTemplate>
-    <DataTemplate x:Key="QuickServiceCard"><Border x:Name="ServiceCard" Background="#141416" BorderBrush="#2A2A30" BorderThickness="1" CornerRadius="16" Padding="20,18" Margin="0,0,10,0" motion:Motion.Enter="True" motion:Motion.Revision="{Binding CheckedAt}">
+    <DataTemplate x:Key="QuickServiceCard"><Border x:Name="ServiceCard" Background="#141416" BorderBrush="#2A2A30" BorderThickness="1" CornerRadius="16" Padding="18,16" Margin="0,0,10,0" motion:Motion.Enter="True" motion:Motion.Revision="{Binding CheckedAt}">
       <StackPanel>
-        <Grid Margin="0,0,0,22"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
-          <Border Width="30" Height="30" CornerRadius="9" Background="#242429" Margin="0,0,10,0"><Viewbox Width="16" Height="16"><Path x:Name="ServiceGlyph" Data="M4,3 L18,10 4,17 Z" Fill="#D4D4DF"/></Viewbox></Border>
-          <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center"/>
+        <Grid Margin="0,0,0,16"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+          <Border Width="28" Height="28" CornerRadius="9" Background="#242429" Margin="0,0,10,0"><Viewbox Width="16" Height="16"><Path x:Name="ServiceGlyph" Data="M4,3 L18,10 4,17 Z" Fill="#D4D4DF"/></Viewbox></Border>
+          <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center"/>
         </Grid>
-        <StackPanel Orientation="Horizontal"><Ellipse Width="6" Height="6" Fill="{Binding Color}" Margin="0,0,8,0"/><TextBlock Text="{Binding Summary}" Foreground="{Binding Color}" FontSize="14" FontWeight="Medium"/></StackPanel>
-        <TextBlock Text="{Binding Scope}" Foreground="#92929E" FontSize="11" Margin="0,8,0,0"/>
+        <StackPanel Orientation="Horizontal"><Ellipse Width="6" Height="6" Fill="{Binding Color}" Margin="0,0,8,0"/><TextBlock Text="{Binding Summary}" Foreground="{Binding Color}" FontSize="13" FontWeight="Medium"/></StackPanel>
+        <TextBlock Text="{Binding Scope}" Foreground="#92929E" FontSize="11" Margin="0,6,0,0"/>
       </StackPanel>
     </Border><DataTemplate.Triggers>
       <DataTrigger Binding="{Binding Id}" Value="discord"><Setter TargetName="ServiceGlyph" Property="Data" Value="M0,8 L2,8 2,12 0,12 Z M4,4 L6,4 6,16 4,16 Z M8,0 L10,0 10,20 8,20 Z M12,4 L14,4 14,16 12,16 Z M16,8 L18,8 18,12 16,12 Z"/></DataTrigger>

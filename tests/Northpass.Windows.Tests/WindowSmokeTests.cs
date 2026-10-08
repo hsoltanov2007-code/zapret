@@ -58,6 +58,7 @@ public sealed class WindowSmokeTests
                         {
                             Assert.False(window.IsVisible);
                             Assert.Equal("Запускаем Northpass", startup.Status);
+                            Assert.Equal(Color.FromRgb(240, 240, 242), ((SolidColorBrush)((TextBlock)startup.FindName("StartupBrand")).Foreground).Color);
                             startup.UpdateLayout(); Screenshot(startup, "ru-splash");
                         };
                         Assert.True(await StartupPresentation.ShowAsync(window, model, splash: startup));
@@ -90,11 +91,13 @@ public sealed class WindowSmokeTests
                         Assert.Equal(5, tabs.Items.Count);
                         Assert.False(model.ShowAdvancedTools);
                         Assert.Equal(Visibility.Collapsed, ((TabItem)tabs.Items[1]).Visibility);
+                        Assert.True(((ScrollViewer)window.FindName("HomeScrollHost")).ScrollableHeight <= 1, $"Default Home overflow: {((ScrollViewer)window.FindName("HomeScrollHost")).ScrollableHeight:F1} at {window.ActualWidth:F1}x{window.ActualHeight:F1}.");
                         foreach (string language in model.Languages)
                         {
                             model.Language = language; tabs.SelectedIndex = 0; window.UpdateLayout();
                             AssertConsumerText(window);
                             Assert.Contains(Visuals(selector).OfType<TextBlock>().Where(block => block.IsVisible), block => block.Text == model.SelectedStrategy!.Label);
+                            Assert.True(((ScrollViewer)window.FindName("HomeScrollHost")).ScrollableHeight <= 1, $"Home overflow in {language}: {((ScrollViewer)window.FindName("HomeScrollHost")).ScrollableHeight:F1} at {window.ActualWidth:F1}x{window.ActualHeight:F1}.");
                             Screenshot(window, language);
                             tabs.SelectedIndex = 3; window.UpdateLayout(); AssertConsumerText(window);
                             var languageSelector = Assert.IsType<ComboBox>(window.FindName("LanguageSelector"));

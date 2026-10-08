@@ -2,13 +2,13 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:motion="clr-namespace:Northpass.Presentation"
         Title="Northpass" Width="460" Height="360" WindowStyle="None" ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
-        ShowInTaskbar="False" AllowsTransparency="True" Background="Transparent" Icon="Assets/Northpass.ico">
+        ShowInTaskbar="False" AllowsTransparency="True" Background="Transparent" Foreground="#F0F0F2" FontFamily="Segoe UI Variable, Segoe UI" Icon="Assets/Northpass.ico">
   <Border CornerRadius="24" BorderBrush="#34343D" BorderThickness="1" Padding="38" motion:Motion.Enter="True">
     <Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Color="#1C1C22" Offset="0"/><GradientStop Color="#0C0C10" Offset="1"/></LinearGradientBrush></Border.Background>
     <Grid><Grid.RowDefinitions><RowDefinition/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
         <Border Width="72" Height="72" CornerRadius="21" Background="#E7E7ED" Margin="0,0,0,22"><Image Source="{StaticResource NorthpassMark}" Margin="6" AutomationProperties.Name="Northpass logo"/></Border>
-        <TextBlock Text="Northpass" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+        <TextBlock x:Name="StartupBrand" Text="Northpass" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center"/>
         <TextBlock x:Name="StartupTagline" Foreground="#9696A4" FontSize="12" TextAlignment="Center" Margin="0,9,0,0"/>
       </StackPanel>
       <StackPanel Grid.Row="1" HorizontalAlignment="Center" Margin="0,24,0,0">
