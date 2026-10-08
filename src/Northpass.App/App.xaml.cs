@@ -23,7 +23,7 @@ public partial class App : Application
             _instance = new Mutex(true, "Local\\Northpass-" + sid, out bool first);
             if (!first)
             {
-                MessageBox.Show("Northpass is already open. Use its system tray icon.", "Northpass");
+                ProductDialog.Show(null, new UiStrings("en"), new UiStrings("en")["AlreadyOpen"], false);
                 _instance.Dispose(); _instance = null;
                 Shutdown(); return;
             }
@@ -40,8 +40,16 @@ public partial class App : Application
                 _http, new WindowsInstallationSecurity(), EngineManifest.Parse(manifestStream),
                 previous: previous,
                 offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "zapret2-offline.zip"),
-                probe: Zapret2Engine.VerifyInstalledVersionAsync);
+                probe: Zapret2Engine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
             registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine(installation));
+            // Packaging acceptance probe: exercises the published application's real
+            // offline composition without opening a window or intercepting traffic.
+            if (e.Args.Contains("--installation-check"))
+            {
+                var installed = await installation.EnsureInstalledAsync();
+                if (await installation.DetectAsync() != installed) throw new IOException("Installation verification failed.");
+                Shutdown(0); return;
+            }
             var model = new MainViewModel(new EngineController(registry), registry, settings, profiles,
                 new DiagnosticsService(_http), new UpdateChecker(_http), new DesktopServices(), Dispatcher, installation);
             var window = new MainWindow(model);
@@ -52,7 +60,9 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show("Northpass could not initialize: " + ex.Message, "Northpass", MessageBoxButton.OK, MessageBoxImage.Error);
+            System.Diagnostics.Trace.WriteLine(ex);
+            if (!e.Args.Contains("--installation-check"))
+                ProductDialog.Show(MainWindow, new UiStrings("en"), new UiStrings("en")["StartupFailed"], false);
             Shutdown(1);
         }
     }

@@ -9,6 +9,7 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
 {
     private readonly string _root;
     private readonly string? _offlinePayload;
+    private readonly bool _requireOfflinePayload;
     private readonly HttpClient _http;
     private readonly IInstallationSecurity _security;
     private readonly EngineManifest _current;
@@ -18,9 +19,10 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
     public string EngineId => _current.EngineId;
     public EngineInstallationManager(string root, HttpClient http, IInstallationSecurity security,
         EngineManifest current, IEnumerable<EngineManifest>? previous = null, string? offlinePayload = null,
-        Func<InstalledEngine, CancellationToken, Task>? probe = null)
+        Func<InstalledEngine, CancellationToken, Task>? probe = null, bool requireOfflinePayload = false)
     {
         (_root, _http, _security, _offlinePayload, _probe) = (Path.GetFullPath(root), http, security, offlinePayload, probe);
+        _requireOfflinePayload = requireOfflinePayload;
         _current = Freeze(current);
         _catalog = (previous ?? []).Select(Freeze).Append(_current).ToDictionary(m => m.Revision, StringComparer.Ordinal);
         if (_catalog.Values.Any(m => m.EngineId != EngineId)) throw new InvalidDataException("Mixed engine catalog.");
@@ -162,6 +164,8 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
                 Directory.CreateDirectory(staging); _security.ProtectDirectory(staging);
                 string archive = Path.Combine(staging, "acquisition.zip");
                 bool offline = _offlinePayload is not null && File.Exists(_offlinePayload);
+                if (_requireOfflinePayload && !offline)
+                    throw new FileNotFoundException("The bundled network module is missing. Repair the Northpass application installation. No download was attempted.");
                 if (offline)
                 {
                     SafeArchive.NoLinks(_offlinePayload!);

@@ -72,6 +72,16 @@ public sealed class EngineInstallationTests : IDisposable
         public void Report(Northpass.Engine.InstallationProgress value) => Values.Add(value);
     }
     [Fact]
+    public async Task PackagedApplicationNeverDownloadsWhenItsBundledPayloadIsMissing()
+    {
+        var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);
+        var manager = new EngineInstallationManager(Path.Combine(_directory, "protected"), http, new TestSecurity(),
+            fixture.Manifest, offlinePayload: Path.Combine(_directory, "missing.zip"), requireOfflinePayload: true);
+        await Assert.ThrowsAsync<FileNotFoundException>(() => manager.EnsureInstalledAsync());
+        Assert.Equal(0, handler.Requests); Assert.False(File.Exists(State));
+        Assert.Empty(Directory.EnumerateDirectories(Path.GetDirectoryName(State)!, ".stage-*"));
+    }
+    [Fact]
     public async Task OfflineInstallMakesNoNetworkRequests()
     {
         var fixture = Fixture(); Directory.CreateDirectory(_directory);

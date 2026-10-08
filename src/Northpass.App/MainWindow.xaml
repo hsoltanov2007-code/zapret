@@ -1,52 +1,48 @@
 <Window x:Class="Northpass.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Northpass" Width="1100" Height="800" MinWidth="820" MinHeight="620"
-        WindowStartupLocation="CenterScreen" Background="#11161D" Foreground="#E7ECF2" FontFamily="Segoe UI" FontSize="14"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="Northpass" Width="1040" Height="760" MinWidth="820" MinHeight="620" WindowStyle="None"
+        WindowStartupLocation="CenterScreen" Background="#0C0C0E" Foreground="#F0F0F2" FontFamily="Segoe UI Variable, Segoe UI" FontSize="14"
         Icon="Assets/Northpass.ico">
+  <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="76" ResizeBorderThickness="6" CornerRadius="16" GlassFrameThickness="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
   <Grid Margin="28">
     <Grid.RowDefinitions><RowDefinition Height="78"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <Grid>
       <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
-        <Border Width="42" Height="42" Background="#CCD9D2" CornerRadius="12" Margin="0,0,14,0"><Viewbox Margin="11"><Path Data="M0,20 L0,0 L5,0 L15,14 L15,0 L20,0 L20,20 L15,20 L5,6 L5,20 Z" Fill="#19231F"/></Viewbox></Border>
-        <StackPanel><TextBlock Text="NORTHPASS" FontSize="24" FontWeight="Bold"/><TextBlock Text="WINDOWS · ENGINE CONTROL" Style="{StaticResource Muted}" FontSize="10"/></StackPanel>
+        <Border Width="42" Height="42" Background="#E3E3EB" CornerRadius="12" Margin="0,0,14,0"><Viewbox Margin="11"><Path Data="M0,20 L0,0 L5,0 L15,14 L15,0 L20,0 L20,20 L15,20 L5,6 L5,20 Z" Fill="#16161C"/></Viewbox></Border>
+        <StackPanel><TextBlock Text="NORTHPASS" FontSize="24" FontWeight="Bold"/><TextBlock Text="{Binding Strings[Tagline]}" Style="{StaticResource Muted}" FontSize="10"/></StackPanel>
       </StackPanel>
-      <TextBlock Text="0.3 / DEVELOPMENT" HorizontalAlignment="Right" Foreground="#8291A3" FontSize="11" Margin="0,12,0,0"/>
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" shell:WindowChrome.IsHitTestVisibleInChrome="True">
+        <Button Style="{StaticResource TitleButton}" Content="&#xE921;" ToolTip="{Binding Strings[Minimize]}" AutomationProperties.Name="{Binding Strings[Minimize]}" Click="Minimize_Click"/>
+        <Button Style="{StaticResource TitleButton}" Content="&#xE922;" ToolTip="{Binding Strings[Maximize]}" AutomationProperties.Name="{Binding Strings[Maximize]}" Click="Maximize_Click"/>
+        <Button Style="{StaticResource TitleButton}" Content="&#xE8BB;" ToolTip="{Binding Strings[Close]}" AutomationProperties.Name="{Binding Strings[Close]}" Click="Close_Click"/>
+      </StackPanel>
     </Grid>
     <TabControl x:Name="NavigationTabs" Grid.Row="1" SelectedIndex="{Binding PageIndex}">
       <TabItem Header="{Binding Strings[Dashboard]}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="0,0,12,0">
-            <TextBlock Text="{Binding Strings[Dashboard]}" Style="{StaticResource Heading}"/>
-            <Border Style="{StaticResource Card}" Padding="32">
-              <StackPanel HorizontalAlignment="Center">
-                <Ellipse Width="12" Height="12" Fill="{Binding StatusColor}" Margin="0,0,0,12"/>
-                <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColor}" FontSize="32" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-                <TextBlock Text="{Binding Strings[StateNote]}" Style="{StaticResource Muted}" TextAlignment="Center" MaxWidth="450" Margin="0,14,0,24"/>
-                <Button Content="{Binding ConnectText}" Command="{Binding ConnectCommand}" Background="#CCD9D2" Foreground="#16231C" FontSize="17" FontWeight="Bold" Padding="56,20" MinWidth="270"/>
+            <TextBlock Text="{Binding Strings[Hero]}" FontSize="42" FontWeight="SemiBold" LineHeight="52" Margin="0,0,0,24"/>
+            <Border Style="{StaticResource Card}" Padding="36,28">
+              <StackPanel>
+                <Grid Margin="0,0,0,24"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                  <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="{Binding StatusColor}" Margin="0,0,10,0"/><TextBlock Text="{Binding StatusText}" FontSize="17" FontWeight="SemiBold"/></StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding SessionDuration}" Style="{StaticResource Muted}" VerticalAlignment="Center"/>
+                </Grid>
+                <Border Width="94" Height="94" CornerRadius="47" Background="#222229" HorizontalAlignment="Center" Margin="0,8,0,26"><TextBlock Text="&#xE705;" FontFamily="Segoe MDL2 Assets" FontSize="36" Foreground="#DADAE4" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+                <Button Content="{Binding ConnectText}" Command="{Binding ConnectCommand}" Background="#E3E3EB" Foreground="#141419" FontSize="18" FontWeight="SemiBold" Padding="40,17" HorizontalAlignment="Stretch" Margin="0,0,0,16"/>
+                <TextBlock Text="{Binding ConnectionNote}" Style="{StaticResource Muted}" TextAlignment="Center"/>
+                <StackPanel Visibility="{Binding Preparing, Converter={StaticResource VisibleWhenTrue}}" Margin="0,20,0,0"><TextBlock Text="{Binding EngineSetupText}" Style="{StaticResource Muted}" Margin="0,0,0,8"/><ProgressBar Minimum="0" Maximum="100" Value="{Binding EngineSetupProgress, Mode=OneWay}" Height="4"/></StackPanel>
               </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}">
-              <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
-                <StackPanel><TextBlock Text="{Binding Strings[Engine]}" Style="{StaticResource Muted}"/><TextBlock Text="{Binding CurrentEngine}" FontSize="19" Margin="0,6,0,20"/><TextBlock Text="{Binding Strings[Strategy]}" Style="{StaticResource Muted}"/><ComboBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" IsEnabled="{Binding CanConfigure}" DisplayMemberPath="Name" Margin="0,6,20,0"/></StackPanel>
-                <StackPanel Grid.Column="1"><TextBlock Text="{Binding Strings[Session]}" Style="{StaticResource Muted}"/><TextBlock Text="{Binding SessionDuration}" FontSize="19" Margin="0,6,0,20"/><TextBlock Text="{Binding Strings[Reachability]}" Style="{StaticResource Muted}"/><TextBlock Text="{Binding Reachability}" FontSize="17" Margin="0,8,0,0"/></StackPanel>
-              </Grid>
-            </Border>
-            <Border Style="{StaticResource Card}"><StackPanel>
-              <TextBlock Text="{Binding Strings[EngineSetup]}" Style="{StaticResource Muted}"/>
-              <TextBlock Text="{Binding EngineSetupText}" Margin="0,8,0,8"/>
-              <ProgressBar Minimum="0" Maximum="100" Value="{Binding EngineSetupProgress, Mode=OneWay}" Height="8"/>
-              <TextBlock Text="{Binding EngineRevision}" Style="{StaticResource Muted}" FontSize="11" Margin="0,8,0,12"/>
-              <WrapPanel><Button Content="{Binding Strings[SetupEngine]}" Command="{Binding SetupEngineCommand}"/><Button Content="{Binding Strings[RepairEngine]}" Command="{Binding RepairEngineCommand}"/></WrapPanel>
-            </StackPanel></Border>
-            <TextBlock Text="{Binding ProfileDescription}" Style="{StaticResource Muted}" Margin="0,0,0,16"/>
-            <TextBlock Text="{Binding ResultText}" Foreground="#B5C6D7"/>
+            <TextBlock Text="{Binding UserMessage}" Style="{StaticResource Muted}" TextAlignment="Center" Margin="10,0,10,0"/>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
-      <TabItem Header="{Binding Strings[Strategies]}">
+      <TabItem Header="{Binding Strings[Strategies]}" Visibility="{Binding ShowAdvancedTools, Converter={StaticResource VisibleWhenTrue}}">
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,0">
-          <TextBlock Text="{Binding Strings[Strategies]}" Style="{StaticResource Heading}"/>
+          <TextBlock Text="{Binding Strings[Strategies]}" Style="{StaticResource Heading}"/><TextBlock Text="{Binding Strings[AdvancedNote]}" Style="{StaticResource Muted}" Margin="0,0,0,24"/>
           <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="{Binding Strings[Strategy]}" Style="{StaticResource Muted}"/>
             <ComboBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" IsEnabled="{Binding CanConfigure}" DisplayMemberPath="Name" Margin="0,12,0,16"/>
@@ -54,7 +50,7 @@
             <WrapPanel><Button Content="{Binding Strings[New]}" Command="{Binding NewProfileCommand}"/><Button Content="{Binding Strings[Edit]}" Command="{Binding EditProfileCommand}"/><Button Content="{Binding Strings[Import]}" Command="{Binding ImportCommand}"/><Button Content="{Binding Strings[Export]}" Command="{Binding ExportCommand}"/><Button Content="{Binding Strings[Refresh]}" Command="{Binding RefreshProfilesCommand}"/></WrapPanel>
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="{Binding Strings[EnginePath]}" Style="{StaticResource Muted}"/>
+            <TextBlock Text="{Binding Strings[EnginePath]}" Style="{StaticResource Muted}"/><TextBlock Text="{Binding CurrentEngine}" Margin="0,8,0,0"/><TextBlock Text="{Binding EngineRevision}" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
             <Grid Margin="0,12,0,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding EnginePath, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="True"/><Button Grid.Column="1" Content="{Binding Strings[Browse]}" Command="{Binding BrowseCommand}" IsEnabled="{Binding CanChooseEngine}" Margin="12,0,0,0"/></Grid>
             <Button Content="{Binding Strings[Validate]}" Command="{Binding ValidateCommand}" HorizontalAlignment="Left"/>
             <TextBlock Text="{Binding ResultText}" Margin="0,12,0,0"/>
@@ -81,26 +77,27 @@
           <Border Style="{StaticResource Card}"><StackPanel IsEnabled="{Binding CanConfigure}">
             <TextBlock Text="{Binding Strings[Language]}" Style="{StaticResource Muted}"/>
             <ComboBox ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" Width="140" HorizontalAlignment="Left" Margin="0,10,0,24"/>
-            <CheckBox Content="{Binding Strings[Tray]}" IsChecked="{Binding MinimizeToTray}"/>
+            <CheckBox Content="{Binding Strings[ShowAdvanced]}" IsChecked="{Binding ShowAdvancedTools}"/><CheckBox Content="{Binding Strings[Tray]}" IsChecked="{Binding MinimizeToTray}"/>
             <CheckBox Content="{Binding Strings[AutoStart]}" IsChecked="{Binding StartWithWindows}"/>
             <CheckBox Content="{Binding Strings[Recovery]}" IsChecked="{Binding AutoRecover}"/>
             <CheckBox Content="{Binding Strings[Updates]}" IsChecked="{Binding CheckForUpdates}"/>
             <Button Content="{Binding Strings[Save]}" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left"/>
           </StackPanel></Border>
-          <WrapPanel><Button Content="{Binding Strings[UpdateEngine]}" Command="{Binding UpdateEngineCommand}"/><Button Content="{Binding Strings[RollbackEngine]}" Command="{Binding RollbackEngineCommand}"/></WrapPanel>
-          <Button Content="{Binding Strings[CheckUpdates]}" Command="{Binding CheckUpdatesCommand}" HorizontalAlignment="Left"/>
-          <TextBlock Text="{Binding ResultText}" Margin="0,10,0,20"/>
+          <Button Content="{Binding Strings[RepairEngine]}" Command="{Binding RepairEngineCommand}" HorizontalAlignment="Left"/>
+          <WrapPanel Visibility="{Binding ShowAdvancedTools, Converter={StaticResource VisibleWhenTrue}}"><Button Content="{Binding Strings[UpdateEngine]}" Command="{Binding UpdateEngineCommand}"/><Button Content="{Binding Strings[RollbackEngine]}" Command="{Binding RollbackEngineCommand}"/></WrapPanel>
+          <Button Content="{Binding Strings[CheckUpdates]}" Command="{Binding CheckUpdatesCommand}" HorizontalAlignment="Left" Visibility="{Binding ShowAdvancedTools, Converter={StaticResource VisibleWhenTrue}}"/>
+          <TextBlock Text="{Binding UserMessage}" Margin="0,10,0,20"/>
           <TextBlock Text="{Binding Strings[Privacy]}" Style="{StaticResource Muted}"/>
         </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="{Binding Strings[About]}">
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,0">
           <TextBlock Text="{Binding Strings[About]}" Style="{StaticResource Heading}"/>
-          <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="NORTHPASS" FontSize="30" FontWeight="Bold" Margin="0,0,0,20"/><TextBlock Text="{Binding Strings[AboutText]}" Margin="0,0,0,20"/><TextBlock Text="{Binding Strings[Licenses]}" Style="{StaticResource Muted}" Margin="0,0,0,20"/><TextBlock Text="{Binding Strings[AvailabilityNote]}" Style="{StaticResource Muted}"/></StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="NORTHPASS" FontSize="30" FontWeight="Bold" Margin="0,0,0,20"/><TextBlock Text="{Binding Strings[AboutText]}" Margin="0,0,0,20"/><TextBlock Text="{Binding Strings[Licenses]}" Style="{StaticResource Muted}" Margin="0,0,0,20"/><Button Content="{Binding Strings[ViewLicenses]}" Click="Licenses_Click" HorizontalAlignment="Left"/><TextBlock Text="{Binding Strings[AvailabilityNote]}" Style="{StaticResource Muted}"/></StackPanel></Border>
           <TextBlock Text="Windows 10/11 x64 · .NET 8 · WPF / MVVM" Style="{StaticResource Muted}"/>
         </StackPanel></ScrollViewer>
       </TabItem>
     </TabControl>
-    <TextBlock Grid.Row="2" Text="Northpass · independent software · external Zapret2 engine" Style="{StaticResource Muted}" FontSize="10" Margin="190,20,0,0"/>
+    <TextBlock Grid.Row="2" Text="Northpass 0.4" Style="{StaticResource Muted}" FontSize="10" Margin="190,20,0,0"/>
   </Grid>
 </Window>

@@ -27,7 +27,7 @@ public sealed class DesktopServices : IDesktopServices
         var dialog = new SaveFileDialog { FileName = name + "." + extension, Filter = $"{extension.ToUpperInvariant()} files|*.{extension}", OverwritePrompt = true };
         return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
     }
-    public bool ConfirmTrust(string message) => MessageBox.Show(Owner, message, "Northpass", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes;
+    public bool ConfirmTrust(string message) => ProductDialog.Show(Owner, (Owner.DataContext as MainViewModel)?.Strings ?? new UiStrings("en"), message);
     public StrategyProfile? EditProfile(ProfileStore store, StrategyProfile? original)
     {
         var model = new ProfileEditorViewModel(store, original);

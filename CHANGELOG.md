@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 — development
+
+- Graphite WPF redesign with custom window chrome and fully dark controls; a simple Home view with one Connect action and truthful access status.
+- Automatic bundled first-launch preparation; packaged builds require offline inputs and fail closed without a network fallback.
+- Localized product messages, dark in-app confirmation modals, optional advanced tools and an About licence/source viewer.
+- Single installer EXE with optional launch, separate installer CI artifact, localized screenshots and actual installed-app preparation/reuse/failure/uninstall acceptance.
+- Reviewed pins, archive/component verification, protected ACLs, launch leases, owned process lifecycle and replaceable engine interfaces retained.
+
 ## 0.3.0 — development
 
 - Automatic consent-based Zapret2 x64 setup from a reviewed Git pin, archive/component SHA-256 verification, safe bounded extraction and protected Windows ACLs.

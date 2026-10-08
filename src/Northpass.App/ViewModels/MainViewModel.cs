@@ -31,6 +31,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private EngineStatus _status = new(EngineState.Disconnected);
     private ReachabilityResult? _reachability;
     private int _pageIndex;
+    private bool _showAdvanced;
+    private string _messageKey = "Welcome";
     private readonly List<AsyncRelayCommand> _commands = new();
 
     public MainViewModel(EngineController controller, EngineRegistry registry, SettingsStore settingsStore,
@@ -67,7 +69,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             Busy = true;
             try { await action(); }
             finally { Busy = false; }
-        }, Fail, () => !_disposed && !_shuttingDown && !Busy && (condition?.Invoke() ?? true));
+        }, ex => Fail(ex), () => !_disposed && !_shuttingDown && !Busy && (condition?.Invoke() ?? true));
         _commands.Add(command);
         return command;
     }
@@ -76,6 +78,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public string[] Languages { get; } = ["en", "ru", "az"];
     public UiStrings Strings => new(Language);
     public int PageIndex { get => _pageIndex; set => Set(ref _pageIndex, value); }
+    public bool ShowAdvancedTools
+    {
+        get => _showAdvanced;
+        set { if (Set(ref _showAdvanced, value) && !value && PageIndex == 1) PageIndex = 0; }
+    }
+    public string UserMessage => Strings[_messageKey];
+    public bool Preparing => _installation is not null && _setupPhase is not ("Ready" or "SetupFailed");
+    public string ConnectionNote => Strings[SessionOpen ? "ActiveNote" : "HomeNote"];
     public string ProfilesDirectory => _profileStore.DirectoryPath;
     public StrategyProfile? SelectedProfile
     {
@@ -106,18 +116,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         set
         {
             if (!Set(ref _language, value)) return;
-            Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(Reachability));
+            Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(Reachability)); Changed(nameof(UserMessage)); Changed(nameof(ConnectionNote));
         }
     }
     public bool MinimizeToTray { get => _tray; set => Set(ref _tray, value); }
     public bool StartWithWindows { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool AutoRecover { get => _recover; set => Set(ref _recover, value); }
     public bool CheckForUpdates { get => _checkUpdates; set => Set(ref _checkUpdates, value); }
-    public bool Busy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanConfigure)); Changed(nameof(CanChooseEngine)); RefreshCommands(); } } }
+    public bool Busy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanConfigure)); Changed(nameof(CanChooseEngine)); Changed(nameof(StatusText)); RefreshCommands(); } } }
     public bool SessionOpen => _status.State is EngineState.Active or EngineState.Connecting or EngineState.Stopping || _status.ProcessId is not null;
     public bool CanConfigure => !SessionOpen && !Busy;
     public string ConnectText => Strings[SessionOpen ? "Disconnect" : "Connect"];
-    public string StatusText => Strings[_status.State.ToString()];
+    public string StatusText => Preparing ? EngineSetupText : Strings[_status.State == EngineState.Disconnected && _setupPhase == "Ready" ? "Ready" : _status.State.ToString()];
     public string StatusColor => _status.State switch { EngineState.Active => "#9DC5B1", EngineState.Error => "#DC998D", EngineState.Connecting or EngineState.Stopping => "#D2BE8F", _ => "#949EAA" };
     public string CurrentEngine => _registry.Find(SelectedProfile?.Engine ?? "")?.Name ?? "Unavailable";
     public string ProfileDescription => SelectedProfile?.Description ?? "Select or import a strategy.";
@@ -155,19 +165,20 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             StartWithWindows = _appliedAutoStart = _settings.StartWithWindows;
             AutoRecover = _settings.AutoRecover;
             CheckForUpdates = _settings.CheckForUpdates;
+            ShowAdvancedTools = _settings.ShowAdvancedTools;
             _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
             ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? "zapret2-reviewed-example" : null);
             _loading = false;
-            Log("Northpass 0.3. Engine process state and website reachability are reported separately.");
+            Log("Northpass 0.4. Engine process state and website reachability are reported separately.");
             if (_installation is not null)
             {
                 try
                 {
                     var installed = await _installation.DetectAsync(_lifetime.Token);
-                    if (installed is not null && _settings.EngineSetupConsent) ApplyInstalled(installed);
+                    if (installed is not null) ApplyInstalled(installed);
                     else await SetupEngineAsync();
                 }
-                catch (Exception ex) { SetSetupPhase("SetupFailed"); Fail(ex); }
+                catch (Exception ex) { SetSetupPhase("SetupFailed"); Fail(ex, "InstallationFailed"); }
             }
             if (CheckForUpdates)
             {
@@ -196,18 +207,24 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (SessionOpen) { await _controller.DisconnectAsync(_lifetime.Token); return; }
         // End any pending crash recovery before preparing a manually requested session.
         await _controller.DisconnectAsync(_lifetime.Token);
-        if (ManagedEngine && !await EnsureEngineAsync()) return;
+        if (ManagedEngine)
+        {
+            try { if (!await EnsureEngineAsync()) return; }
+            catch (Exception ex) { Fail(ex, "InstallationFailed"); return; }
+        }
         var configuration = Configuration();
         var validation = await _controller.ValidateAsync(configuration, _lifetime.Token);
         ResultText = validation.Summary;
-        if (!validation.IsValid) throw new InvalidOperationException(validation.Summary);
+        if (!validation.IsValid) { Fail(new InvalidOperationException(validation.Summary), "ValidationFailed"); return; }
         if (!ManagedEngine && !_desktop.ConfirmTrust("Start the selected executable and profile with administrator rights?\n\nUse only an official trusted engine bundle. Lua files are executable code and can access your computer. Imported profiles are not sandboxed.\n\n" + configuration.ExecutablePath + "\n" + configuration.Profile.SourcePath)) return;
         PersistSelection();
         _reachability = null; Changed(nameof(Reachability));
-        await _controller.ConnectAsync(configuration, AutoRecover, _lifetime.Token);
+        SetMessage("Welcome");
+        try { await _controller.ConnectAsync(configuration, AutoRecover, _lifetime.Token); }
+        catch (Exception ex) { Fail(ex, "ConnectionFailed"); }
     }
 
-    private void SetSetupPhase(string phase) { _setupPhase = phase; Changed(nameof(EngineSetupText)); }
+    private void SetSetupPhase(string phase) { _setupPhase = phase; Changed(nameof(EngineSetupText)); Changed(nameof(Preparing)); Changed(nameof(StatusText)); }
     private IProgress<InstallationProgress> SetupProgress() => new Progress<InstallationProgress>(p =>
     {
         if (!_disposed && !_shuttingDown) { SetSetupPhase(p.Phase); EngineSetupProgress = p.Percent; }
@@ -216,18 +233,15 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         EnginePath = engine.ExecutablePath; EngineRevision = engine.Version + " · " + engine.Revision;
         SetSetupPhase("Ready"); EngineSetupProgress = 100;
+        SetMessage("Welcome");
         PersistSelection();
     }
     private async Task<bool> EnsureEngineAsync()
     {
         if (_installation is null) return true;
-        if (!_settingsReadable) throw new IOException("Restore readable settings before consenting to engine setup.");
-        if (!_settings.EngineSetupConsent)
-        {
-            if (!_desktop.ConfirmTrust(Strings["EngineConsent"])) { SetSetupPhase("SetupRequired"); return false; }
-            _settings.EngineSetupConsent = true;
-            _settingsStore.Save(_settings);
-        }
+        // Installing the bundled module is part of installing Northpass. v0.3's separate
+        // component consent remains in settings for backwards compatibility only.
+        SetSetupPhase("Extracting");
         try
         {
             var task = _installation.EnsureInstalledAsync(SetupProgress(), _lifetime.Token);
@@ -258,8 +272,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_installation is null || !_desktop.ConfirmTrust(Strings["EngineRepairConsent"])) return;
         await _controller.DisconnectAsync(_lifetime.Token);
-        if (!_settings.EngineSetupConsent) { await EnsureEngineAsync(); return; }
-        var task = _installation.RepairAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
+                var task = _installation.RepairAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
         try { ApplyInstalled(await task); }
         catch { SetSetupPhase("SetupFailed"); throw; }
         finally { _setupTask = null; }
@@ -326,6 +339,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _settings.EnginePath = EnginePath.Trim();
         _settings.SelectedProfileId = SelectedProfile?.Id ?? "";
         _settings.Language = Language;
+        _settings.ShowAdvancedTools = ShowAdvancedTools;
         _settings.DiagnosticUrl = DiagnosticUrl;
         _settings.MinimizeToTray = MinimizeToTray;
         _settings.StartWithWindows = StartWithWindows;
@@ -333,6 +347,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _settings.CheckForUpdates = CheckForUpdates;
         _settingsStore.Save(_settings);
         ResultText = "Settings saved.";
+        SetMessage("SettingsSaved");
         Log(ResultText);
     }
     private async Task CheckUpdatesAsync()
@@ -348,7 +363,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         return Task.CompletedTask;
     }
     private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); }
-    public void Fail(Exception ex) { ResultText = ex.Message; Log("Error: " + ex.Message); }
+    private void SetMessage(string key) { _messageKey = key; Changed(nameof(UserMessage)); }
+    public void Fail(Exception ex, string messageKey = "ActionFailed")
+    {
+        ResultText = ex.Message; Log("Error: " + ex.Message);
+        if (messageKey == "ConnectionFailed" && (ex.Message.Contains("driver", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("windivert", StringComparison.OrdinalIgnoreCase)))
+            messageKey = "NetworkBlocked";
+        SetMessage(messageKey);
+    }
     public void Log(string text)
     {
         LogText += $"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}";
@@ -360,8 +382,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_status.State != status.State) { _reachability = null; Changed(nameof(Reachability)); }
         _status = status;
-        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(CanChooseEngine), nameof(ConnectText), nameof(SessionDuration) }) Changed(name);
-        if (status.Error is not null) ResultText = status.Error;
+        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(CanChooseEngine), nameof(ConnectText), nameof(SessionDuration), nameof(ConnectionNote) }) Changed(name);
+        if (status.Error is not null) Fail(new IOException(status.Error), "ConnectionFailed");
         RefreshCommands();
     }
     public async Task RefreshAsync()

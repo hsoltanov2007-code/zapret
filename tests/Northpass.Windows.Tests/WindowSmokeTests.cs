@@ -1,3 +1,6 @@
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Northpass.Desktop;
@@ -43,23 +46,58 @@ public sealed class WindowSmokeTests
                             new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
                         window = new MainWindow(model); app.MainWindow = window;
                         window.Closed += (_, _) => closed.TrySetResult();
-                        stage = "initial consent and setup";
+                        stage = "automatic bundled setup";
                         await model.InitializeAsync(null);
                         stage = "window layout";
                         window.Show(); window.UpdateLayout();
                         Assert.True(window.IsVisible);
-                        Assert.Equal("Disconnected", model.StatusText);
-                        Assert.Equal("Engine ready", model.EngineSetupText);
-                        Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
-                        Assert.True(store.Load().EngineSetupConsent); Assert.False(model.CanChooseEngine);
+                        Assert.Equal("Ready", model.StatusText);
+                        Assert.Equal("Ready", model.EngineSetupText);
+                        Assert.Equal(0, desktop.Consents); Assert.Equal(1, installation.Setups);
+                        Assert.False(store.Load().EngineSetupConsent); Assert.False(model.CanChooseEngine);
                         Assert.True(model.ManagedEngine);
                         var tabs = Assert.IsType<TabControl>(window.FindName("NavigationTabs"));
                         Assert.Equal(5, tabs.Items.Count);
+                        Assert.False(model.ShowAdvancedTools);
+                        Assert.Equal(Visibility.Collapsed, ((TabItem)tabs.Items[1]).Visibility);
+                        foreach (string language in model.Languages)
+                        {
+                            model.Language = language; tabs.SelectedIndex = 0; window.UpdateLayout();
+                            AssertConsumerText(window);
+                            Screenshot(window, language);
+                            tabs.SelectedIndex = 3; window.UpdateLayout(); AssertConsumerText(window);
+                        }
+                        model.Language = "en";
+                        model.Fail(new IOException("SHA-256 mismatch: Zapret2 WinDivert64.sys at C:\\protected"));
+                        tabs.SelectedIndex = 0; window.UpdateLayout(); AssertConsumerText(window);
+                        Assert.Contains("SHA-256", model.ResultText);
+                        Assert.DoesNotContain("SHA-256", model.UserMessage);
+                        model.ShowAdvancedTools = true;
+                        Assert.Equal(Visibility.Visible, ((TabItem)tabs.Items[1]).Visibility);
                         for (int page = 0; page < tabs.Items.Count; page++) { tabs.SelectedIndex = page; window.UpdateLayout(); }
                         model.Language = "ru"; Assert.Equal("Главная", model.Strings["Dashboard"]);
-                        Assert.Equal("Движок готов", model.EngineSetupText);
-                        model.Language = "az"; Assert.Equal("İdarə paneli", model.Strings["Dashboard"]);
-                        Assert.Equal("Mühərrik hazırdır", model.EngineSetupText);
+                        Assert.Equal("Готово", model.EngineSetupText);
+                        model.Language = "az"; Assert.Equal("Əsas", model.Strings["Dashboard"]);
+                        Assert.Equal("Hazır", model.EngineSetupText);
+                        stage = "custom modal accept and cancel";
+                        foreach (bool accept in new[] { false, true })
+                        {
+                            var dialog = new ProductDialog(model.Strings, model.Strings["EngineRepairConsent"]) { Owner = window };
+                            dialog.Loaded += (_, _) => dialog.Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                var button = Assert.IsType<Button>(dialog.FindName(accept ? "AcceptButton" : "CancelButton"));
+                                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                            }));
+                            Assert.Equal(accept, dialog.ShowDialog());
+                        }
+                        stage = "license viewer";
+                        var licenses = new LicensesWindow(model.Strings) { Owner = window };
+                        licenses.Loaded += (_, _) => licenses.Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            Assert.Contains("Zapret2", ((TextBox)licenses.FindName("LicenseText")).Text);
+                            licenses.Close();
+                        }));
+                        licenses.ShowDialog();
                         stage = "asynchronous close";
                         window.Close(); await closed.Task;
                         Assert.False(window.IsVisible);
@@ -67,8 +105,8 @@ public sealed class WindowSmokeTests
                         var next = new MainViewModel(new EngineController(registry), registry, store, profiles,
                             new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
                         await next.InitializeAsync(null);
-                        Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
-                        Assert.Equal("Engine ready", next.EngineSetupText);
+                        Assert.Equal(0, desktop.Consents); Assert.Equal(1, installation.Setups);
+                        Assert.Equal("Ready", next.EngineSetupText);
                         await next.DisposeAsync();
                     }
                     catch (Exception ex) { failure = ex; }
@@ -91,13 +129,39 @@ public sealed class WindowSmokeTests
         try { await complete.Task.WaitAsync(TimeSpan.FromSeconds(45)); }
         catch (TimeoutException) { throw new TimeoutException("WPF smoke timed out at: " + stage); }
     }
+    private static IEnumerable<DependencyObject> Visuals(DependencyObject root)
+    {
+        yield return root;
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+            foreach (var child in Visuals(VisualTreeHelper.GetChild(root, i))) yield return child;
+    }
+    private static void AssertConsumerText(Window window)
+    {
+        string text = string.Join("\n", Visuals(window).OfType<TextBlock>().Where(block => block.IsVisible).Select(block => block.Text));
+        foreach (string forbidden in new[] { "Zapret", "WinDivert", "SHA-256", "GitHub", "winws", "revision", "Program Files", "JSON" })
+            Assert.DoesNotContain(forbidden, text, StringComparison.OrdinalIgnoreCase);
+    }
+    private static void Screenshot(Window window, string language)
+    {
+        string output = Path.Combine(FindRepository(), "TestResults"); Directory.CreateDirectory(output);
+        var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(window);
+        var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
+        using var file = File.Create(Path.Combine(output, "northpass-v0.4-" + language + ".png")); png.Save(file);
+    }
+    private static string FindRepository()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Northpass.sln"))) directory = directory.Parent;
+        return directory?.FullName ?? throw new DirectoryNotFoundException("Repository not found.");
+    }
     private sealed class SetupConsent : IDesktopServices
     {
         public int Consents;
         public string? PickEngine(EngineDescriptor descriptor) => throw new InvalidOperationException("Unexpected dialog.");
         public string? PickProfile() => throw new InvalidOperationException("Unexpected dialog.");
         public string? PickExport(string name, string extension) => throw new InvalidOperationException("Unexpected dialog.");
-        public bool ConfirmTrust(string message) { Assert.Contains("Install the reviewed official Zapret2", message); Consents++; return true; }
+        public bool ConfirmTrust(string message) { Consents++; throw new InvalidOperationException("Automatic preparation must not prompt for component consent."); }
         public StrategyProfile? EditProfile(ProfileStore store, StrategyProfile? original) => throw new InvalidOperationException("Unexpected dialog.");
         public Task SetAutoStartAsync(bool enabled) => throw new InvalidOperationException("Unexpected autostart change.");
     }

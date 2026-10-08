@@ -45,6 +45,15 @@ public partial class MainWindow : Window
         _timer.Start();
     }
 
+    private void Minimize_Click(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+    private void Maximize_Click(object sender, RoutedEventArgs e)
+    {
+        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this);
+        else SystemCommands.MaximizeWindow(this);
+    }
+    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void Licenses_Click(object sender, RoutedEventArgs e) => new LicensesWindow(_model.Strings) { Owner = this }.ShowDialog();
+
     public void ShowFromTray()
     {
         Show(); WindowState = WindowState.Normal; Activate();
@@ -78,7 +87,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             _model.Fail(ex); ShowFromTray();
-            MessageBox.Show(this, "The engine could not be stopped. The window will remain open so you can retry.\n" + ex.Message, "Northpass", MessageBoxButton.OK, MessageBoxImage.Error);
+            ProductDialog.Show(this, _model.Strings, _model.Strings["StopFailed"], false);
             _closing = false;
             _timer.Start();
         }

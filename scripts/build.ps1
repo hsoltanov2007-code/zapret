@@ -5,7 +5,7 @@ Push-Location $root
 try {
     $project = Join-Path $root 'src\Northpass.App\Northpass.App.csproj'
     $output = Join-Path $root 'dist\Northpass'
-    Write-Host 'Publishing Northpass 0.3 for Windows x64...'
+    Write-Host 'Publishing Northpass 0.4 for Windows x64...'
     dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
     Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'CHANGELOG.md') $output -Force

@@ -1,5 +1,5 @@
 ; Compile with Inno Setup 6 after scripts/build.ps1. Reviewed offline engine payload is bundled.
-#define AppVersion "0.3.0"
+#define AppVersion "0.4.0"
 [Setup]
 AppId={{292E32E3-4A84-4F03-B41E-64F5B3C05E96}
 AppName=Northpass
@@ -18,11 +18,16 @@ PrivilegesRequired=admin
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
-LicenseFile=..\THIRD_PARTY_NOTICES.md
+DisableProgramGroupPage=yes
+DisableDirPage=yes
+WizardStyle=modern
+SetupLogging=yes
 [Files]
 Source: "..\dist\Northpass\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
 Name: "{group}\Northpass"; Filename: "{app}\Northpass.exe"
+[Run]
+Filename: "{app}\Northpass.exe"; Description: "Launch Northpass"; Flags: postinstall skipifsilent shellexec runasoriginaluser
 [UninstallRun]
 ; Remove this user's task only; user settings and protected engine revisions stay intact.
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Northpass-{code:CurrentUserSid}"" /F"; Flags: runhidden; RunOnceId: "RemoveNorthpassAutostart"

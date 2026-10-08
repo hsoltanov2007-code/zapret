@@ -71,6 +71,9 @@ jobs:
           }
       - shell: pwsh
         run: ./scripts/build.ps1 -Installer
+      - shell: pwsh
+        name: Install and verify the published application
+        run: ./scripts/test-installer.ps1
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -79,6 +82,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Northpass-win-x64
-          path: |
-            dist/Northpass/
-            dist/installer/
+          path: dist/Northpass/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Northpass-0.4.0-installer
+          path: dist/installer/Northpass-0.4.0-win-x64-setup.exe
+          if-no-files-found: error

@@ -20,6 +20,7 @@
     <ProjectReference Include="../Northpass.Services/Northpass.Services.csproj" />
     <ProjectReference Include="../Northpass.Engine.Zapret2/Northpass.Engine.Zapret2.csproj" />
     <ProjectReference Include="../Northpass.Engine.Native/Northpass.Engine.Native.csproj" />
+    <None Include="../../dist/Northpass/engine-payload/zapret2-offline.zip" Condition="Exists('../../dist/Northpass/engine-payload/zapret2-offline.zip')" Link="engine-payload/zapret2-offline.zip" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Never" />
     <None Include="../../profiles/*.json" Link="profiles/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../docs/licenses/*" Link="docs/licenses/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <None Include="../../THIRD_PARTY_NOTICES.md" Link="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" />

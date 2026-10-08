@@ -1,46 +1,35 @@
-# Northpass 0.3
+# Northpass 0.4
 
-Windows 10/11 **x64**, C# / .NET 8 / WPF / MVVM. Northpass is independent software; Zapret2 is its initial external engine. `IDpiEngine` remains the replacement boundary for a future native engine.
+Northpass is a Windows 10/11 x64 desktop application with a dark interface and automatic internal component preparation.
 
-First launch requests Windows UAC elevation, then asks for engine-installation consent. After consent Northpass acquires a **pinned Git source archive** from the official [bol-van/zapret-win-bundle](https://github.com/bol-van/zapret-win-bundle), verifies its SHA-256 and all 18 selected components, and installs under `%ProgramFiles%\Northpass-Zapret2\<revision>`. Subsequent launches verify and reuse the installation. There is no engine file-picker step and no assumption that the bundle has GitHub Releases.
+Download **Northpass-0.4.0-win-x64-setup.exe**, install, launch, then click **Connect**. This single installer includes the self-contained .NET application, reviewed network components, licences and corresponding third-party sources. No engine download, file selection or archive extraction is required. Windows may ask for administrator approval; Northpass never disables Windows security.
 
-The Windows offline installer and published application folder include a verified selected-component payload, full notices and corresponding third-party sources. Offline setup makes no network request. Keep the entire published folder with the application. A damaged offline payload fails closed instead of switching silently to a download. Use Repair engine to restore missing/modified installed components from verified bytes.
+On first launch, Northpass verifies and prepares the included components. Later launches verify and reuse them. Home shows preparation and connection state without implementation details. Settings includes **Repair installation** and an optional **Show advanced tools** switch. Diagnostics retains detailed errors and logs; About provides full licences, notices and source-package access. EN/RU/AZ cover the consumer interface and custom confirmation dialogs.
 
-Connect verifies the protected installation again, validates the selected profile, runs the real `--version` / `--dry-run` probes and starts one owned `winws2.exe` child. Disconnect and exit stop the owned process tree and release file/installation locks. Actual logs, exit codes and bounded crash recovery are retained. **A running process or successful dry run does not establish successful DPI bypass.** Use Diagnostics to test an explicit HTTPS URL; the included HTTP/TLS example is not proven effective for your ISP.
+**Connection started means the owned network process is running, not that blocked websites are accessible.** Home states that access is unverified. Diagnostics checks a specific HTTPS address only. The included configuration is available automatically, but effectiveness varies by provider; automatic provider-specific strategy discovery is not implemented.
 
-The interface supports EN/RU/AZ, including setup progress and consent. Technical diagnostics and the JSON editor remain English. Existing profile editing/import/export, tray, session duration, settings and opt-in elevated logon task remain available. The entire app currently runs elevated; a separate privileged service and automatic strategy discovery are future work. Defender, Firewall, Secure Boot and UAC are never disabled or reconfigured.
+## Development and builds
 
-## Trusted engine and updates
-
-- Bundle Git revision: `6eb463a6758fb48cd101bc55dfd057e6e9d98af1`.
-- Executable: Zapret2 `v1.0.5.2`, embedded source revision `6b6c63e3385fa73f8af3be4a69171e947f5a319d`.
-- Reviewed archive/component hashes: [engine/catalog/zapret2.json](engine/catalog/zapret2.json), embedded in the application; editable downloaded metadata cannot authorize execution.
-- Components: x64 executable, WinDivert DLL and signed x64 driver, Cygwin 3.4.10 runtime, six Lua files, filters and example data. Upstream command scripts and unrelated utilities are excluded.
-- Updates are optional and limited to revisions included in a newer reviewed Northpass build. Check updates compares the installed engine with that trusted catalog; Northpass never installs arbitrary upstream HEAD/latest. A verified previous revision is retained, and Settings offers rollback. The initial v0.3 catalog has one revision, so there is no fabricated update or rollback target.
-- See [installation security and pin review](docs/ENGINE_INSTALLATION.md) and [third-party notices](THIRD_PARTY_NOTICES.md).
-
-## Windows development and artifacts
-
-Install .NET SDK **8.0.425**, Python 3.10+ and, for the installer, [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php). Open `Northpass.sln` in Visual Studio with .NET desktop development or use **Administrator PowerShell**:
+Use .NET SDK 8.0.425. On Windows, install Python 3.10+ and Inno Setup 6.3+:
 
 ```powershell
-.\scripts\test.ps1
-.\scripts\run-dev.ps1
-.\scripts\build.ps1 -Installer
+# Administrator PowerShell for development/runtime integration checks
+./scripts/test.ps1
+./scripts/run-dev.ps1
+./scripts/build.ps1 -Installer
+./scripts/test-installer.ps1
 ```
 
-Tests acquire verified offline inputs first. Development startup can acquire the engine online after consent. Build creates `dist\Northpass\Northpass.exe` (self-contained), the offline payload and notices/sources, and `dist\installer\Northpass-0.3.0-win-x64-setup.exe`. Artifacts are unsigned; CI uploads builds without publishing or merging a release. Use the entire application folder, not an isolated EXE. The installer keeps protected engine revisions and user data on uninstall; it removes the current user's Northpass autostart task.
+The build produces `dist/Northpass/` and the single installer in `dist/installer/`. GitHub Actions uploads the installer separately as **Northpass-0.4.0-installer**, the application folder as **Northpass-win-x64**, and Windows results including EN/RU/AZ screenshots. GitHub wraps CI artifacts in ZIP containers; the installer artifact contains one EXE. Release signing and a public release download are separate publishing steps. CI does not publish or merge automatically.
 
-Profiles/settings live in `%LOCALAPPDATA%\Northpass`. Existing files are preserved. First-time users default to the bundled HTTP/TLS example; existing selections remain selected. Empty drafts cannot connect. Use one `--option=value` per JSON item and `{ENGINE_DIR}` / `{PROFILE_DIR}` paths. Managed Zapret2 permits Lua only inside its verified installation; inline/external Lua, shell/config shortcuts, unknown/abbreviated options and detached lifecycle flags are rejected. Imported JSON does not copy assets. Review strategies before using them.
+For Linux cloud development, run `bash scripts/setup-cloud.sh`, activate `/workspace/.northpass-tools/env.sh`, and use the portable test suite. Linux cross-compilation cannot validate WPF, Windows elevation, drivers or the installer. See [development instructions](docs/DEVELOPMENT.md) and [Windows acceptance](docs/WINDOWS_ACCEPTANCE.md).
 
-## Cloud development
+## Internal architecture and security
 
-```bash
-bash scripts/setup-cloud.sh
-source /workspace/.northpass-tools/env.sh
-python3 scripts/prepare-engine.py
-dotnet test tests/Northpass.Tests/Northpass.Tests.csproj -c Release --no-restore
-dotnet build Northpass.sln -c Release --no-restore
-```
+`IDpiEngine`, its registry and `IEngineInstallationManager` remain replaceable. The current adapter uses the official [bol-van/zapret-win-bundle](https://github.com/bol-van/zapret-win-bundle) at reviewed commit `6eb463a6758fb48cd101bc55dfd057e6e9d98af1`. No conventional upstream Release asset is assumed. Build-time acquisition checks pinned archive/component hashes and produces a deterministic offline payload. The packaged application **requires this offline payload** whenever new components are needed; missing or modified bytes fail closed without falling back to the Internet.
 
-Linux runs portable tests and Windows-target compilation. WPF, Windows ACL enforcement, real PE execution, Task Scheduler, driver initialization and installer execution require Windows. CI has separate Linux and Windows jobs, actual Windows installation/runtime checks, and app/installer compilation. See [development](docs/DEVELOPMENT.md), [architecture](docs/ARCHITECTURE.md), and [Windows acceptance](docs/WINDOWS_ACCEPTANCE.md). The original v0.1 ZIP remains preserved in the repository.
+Installed components live in protected Program Files, with verified hashes, owners and explicit ACLs, safe extraction and rejection of links/extra DLLs. Every launch/recovery validates configuration, acquires immutable-file leases, probes the actual version/parser and owns the child until termination. Updates/rollback remain limited to compiled reviewed manifests; the present catalog has one revision and therefore no invented update or rollback target. [Installation security](docs/ENGINE_INSTALLATION.md) describes the trust boundary and [architecture](docs/ARCHITECTURE.md) explains the replacement interfaces.
+
+The whole app currently runs elevated. Artifacts are unsigned development builds. CI exercises real Windows rendering, component/version/parser checks, no-traffic driver initialization, silent installer execution and published bootstrap/reuse/failure/uninstall. It does not prove ISP bypass, normal-user UAC interaction, interactive tray/autostart behavior or clean consumer-machine compatibility. Installed engine revisions and user preferences remain on uninstall so shared loaded drivers and user data are not deleted.
+
+Full third-party terms and copyright notices are retained in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), `docs/licenses/`, and About → Licenses. Offline distribution includes corresponding sources and exact self-contained runtime notices. The starter ZIP is preserved. No Northpass source licence has been invented; the owner must select one before a public source release.
