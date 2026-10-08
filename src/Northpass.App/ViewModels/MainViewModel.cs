@@ -192,7 +192,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task ToggleAsync()
     {
         if (SessionOpen) { await _controller.DisconnectAsync(_lifetime.Token); return; }
-        await _controller.GetStatusAsync(_lifetime.Token);
+        // End any pending crash recovery before preparing a manually requested session.
+        await _controller.DisconnectAsync(_lifetime.Token);
         if (ManagedEngine && !await EnsureEngineAsync()) return;
         var configuration = Configuration();
         var validation = await _controller.ValidateAsync(configuration, _lifetime.Token);
@@ -235,10 +236,15 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         catch { SetSetupPhase("SetupFailed"); throw; }
         finally { _setupTask = null; }
     }
-    private async Task SetupEngineAsync() { await EnsureEngineAsync(); }
+    private async Task SetupEngineAsync()
+    {
+        await _controller.DisconnectAsync(_lifetime.Token);
+        await EnsureEngineAsync();
+    }
     private async Task UpdateEngineAsync()
     {
         if (_installation is null) return;
+        await _controller.DisconnectAsync(_lifetime.Token);
         var update = await _installation.CheckForUpdatesAsync(_lifetime.Token);
         ResultText = update.Detail;
         if (!update.CanUpdate || !_desktop.ConfirmTrust(Strings["EngineUpdateConsent"])) return;
@@ -249,6 +255,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task RollbackEngineAsync()
     {
         if (_installation is null || !_desktop.ConfirmTrust(Strings["EngineRollbackConsent"])) return;
+        await _controller.DisconnectAsync(_lifetime.Token);
         var task = _installation.RollbackAsync(_lifetime.Token); _setupTask = task;
         try { ApplyInstalled(await task); }
         finally { _setupTask = null; }

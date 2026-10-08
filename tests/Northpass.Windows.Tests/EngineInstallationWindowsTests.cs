@@ -131,6 +131,22 @@ public sealed class EngineInstallationWindowsTests
                 Evidence(repo, "engine-driver", "DRIVER INITIALIZATION BLOCKED by Windows runner security policy. Error/cleanup were verified; driver initialization and DPI bypass were NOT successful. " + ex.Message.Replace('\n', ' '));
             }
         }
-        finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                // A global WinDivert service can retain its signed image until Windows unloads it.
+                // Do not stop/delete a shared driver service to make test-directory deletion succeed.
+                foreach (string file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                {
+                    try { File.Delete(file); }
+                    catch (UnauthorizedAccessException) when (Path.GetFileName(file) == "WinDivert64.sys")
+                    { Evidence(repo, "engine-driver-retention", "Windows retained the loaded signed driver image after the owned child closed. No global shared driver service was deleted; that test directory can be removed after driver unload/reboot."); }
+                }
+                foreach (string folder in Directory.EnumerateDirectories(root, "*", SearchOption.AllDirectories).OrderByDescending(p => p.Length))
+                    if (!Directory.EnumerateFileSystemEntries(folder).Any()) Directory.Delete(folder);
+                if (!Directory.EnumerateFileSystemEntries(root).Any()) Directory.Delete(root);
+            }
+        }
     }
 }

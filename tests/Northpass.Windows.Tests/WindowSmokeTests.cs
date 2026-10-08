@@ -56,6 +56,9 @@ public sealed class WindowSmokeTests
                 Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
                 Assert.Equal("Engine ready", next.EngineSetupText);
                 next.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                // Drain WPF shutdown before the STA thread exits; native callbacks cannot outlive it.
+                app.Shutdown();
+                Dispatcher.Run();
                 complete.TrySetResult();
             }
             catch (Exception ex) { complete.TrySetException(ex); }
