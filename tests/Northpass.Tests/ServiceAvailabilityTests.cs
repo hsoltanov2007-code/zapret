@@ -43,7 +43,8 @@ public sealed class ServiceAvailabilityTests
     [InlineData(HttpStatusCode.NotFound, "{}", AppUpdateState.NoPublishedUpdate)]
     [InlineData(HttpStatusCode.OK, "{\"tag_name\":\"v0.6.0\"}", AppUpdateState.UpToDate)]
     [InlineData(HttpStatusCode.OK, "{\"tag_name\":\"v0.5.0\"}", AppUpdateState.UpToDate)]
-    [InlineData(HttpStatusCode.OK, "{\"tag_name\":\"v0.7.0\"}", AppUpdateState.UpdateAvailable)]
+    [InlineData(HttpStatusCode.OK, "{\"tag_name\":\"v0.7.0\"}", AppUpdateState.UpToDate)]
+    [InlineData(HttpStatusCode.OK, "{\"tag_name\":\"v0.8.0\"}", AppUpdateState.UpdateAvailable)]
     public async Task UpdateChecksCompareCurrentProductVersion(HttpStatusCode code, string json, AppUpdateState expected)
     {
         using var http = new HttpClient(new Handler(code, json));

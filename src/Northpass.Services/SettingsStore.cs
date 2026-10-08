@@ -10,8 +10,10 @@ public sealed class SettingsStore(string folder)
     {
         string path = Path.Combine(Folder, "settings.json");
         if (!File.Exists(path)) return new();
-        return JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), ProfileValidation.JsonOptions)
+        var settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path), ProfileValidation.JsonOptions)
             ?? throw new FormatException("settings.json must be an object.");
+        if (settings.Language is not ("ru" or "en" or "az")) settings.Language = "ru";
+        return settings;
     }
     public void Save(AppSettings settings) => AtomicFile.Write(Path.Combine(Folder, "settings.json"),
         JsonSerializer.Serialize(settings, ProfileValidation.JsonOptions));

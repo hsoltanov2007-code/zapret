@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Northpass.ViewModels;
+using Northpass.Presentation;
 using Forms = System.Windows.Forms;
 
 namespace Northpass;
@@ -52,6 +53,11 @@ public partial class MainWindow : Window
         else SystemCommands.MaximizeWindow(this);
     }
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void Navigation_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, NavigationTabs) && NavigationTabs.SelectedContent is FrameworkElement page)
+            Motion.Reveal(page);
+    }
     private void Licenses_Click(object sender, RoutedEventArgs e) => new LicensesWindow(_model.Strings) { Owner = this }.ShowDialog();
 
     public void ShowFromTray()

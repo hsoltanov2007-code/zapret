@@ -6,12 +6,12 @@ public sealed record AppUpdateResult(AppUpdateState State, string Detail);
 // Opt-in metadata only. No asset download/execution or product-facing upstream text.
 public sealed class UpdateChecker(HttpClient client)
 {
-    public static Version CurrentVersion { get; } = new(0, 6, 0);
+    public static Version CurrentVersion { get; } = new(0, 7, 0);
     public async Task<AppUpdateResult> CheckAsync(CancellationToken token = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get,
             "https://api.github.com/repos/hsoltanov2007-code/zapret/releases/latest");
-        request.Headers.UserAgent.ParseAdd("Northpass/0.6");
+        request.Headers.UserAgent.ParseAdd("Northpass/0.7");
         using var response = await client.SendAsync(request, token);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return new(AppUpdateState.NoPublishedUpdate, "No published application update.");
         response.EnsureSuccessStatusCode();

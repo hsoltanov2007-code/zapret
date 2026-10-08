@@ -6,7 +6,7 @@ public sealed class AppSettings
     public bool ShowAdvancedTools { get; set; }
     public string EnginePath { get; set; } = "";
     public string SelectedProfileId { get; set; } = "";
-    public string Language { get; set; } = "en";
+    public string Language { get; set; } = "ru";
     public bool MinimizeToTray { get; set; } = true;
     public bool StartWithWindows { get; set; }
     public bool AutoRecover { get; set; }

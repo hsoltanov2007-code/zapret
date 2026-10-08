@@ -35,28 +35,32 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private string _setupPhase = "SetupRequired", _engineRevision = "";
     private double _setupProgress;
     private Task? _setupTask;
+    private Task? _startupUpdateTask;
     private CancellationTokenSource _lifetime = new();
     private AppSettings _settings = new();
     private bool _loading = true, _settingsReadable = true, _busy, _refreshing, _disposed, _shuttingDown;
     private bool _appliedAutoStart;
     private StrategyProfile? _selectedProfile;
-    private string _enginePath = "", _language = "en", _result = "", _log = "";
+    private string _enginePath = "", _language = "ru", _result = "", _log = "";
     private bool _tray = true, _autoStart, _recover, _checkUpdates;
     private EngineStatus _status = new(EngineState.Disconnected);
     private int _pageIndex;
-    private bool _showAdvanced, _hasStartedSession;
+    private readonly bool _developerTools;
+    private bool _hasStartedSession;
     private string _messageKey = "Welcome";
     private readonly List<AsyncRelayCommand> _commands = new();
 
     public MainViewModel(EngineController controller, SettingsStore settingsStore,
         ProfileStore profileStore, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher,
         IEngineInstallationManager installation, ServiceProbeService serviceProbes, DataListStore? dataLists = null,
-        StrategyTestRecordStore? testRecords = null)
+        StrategyTestRecordStore? testRecords = null, bool developerTools = false)
     {
         if (installation.EngineId != "zapret1") throw new ArgumentException("The product requires its reviewed network module.");
         (_controller, _settingsStore, _profileStore, _updates, _desktop, _dispatcher, _installation, _serviceProbes) =
             (controller, settingsStore, profileStore, updates, desktop, dispatcher, installation, serviceProbes);
         (_dataLists, _testRecords) = (dataLists, testRecords);
+        _developerTools = developerTools;
+        try { _language = settingsStore.Load().Language; } catch { /* InitializeAsync reports unreadable settings without overwriting them. */ }
         foreach (var target in ServiceProbeService.Targets) ServiceCards.Add(new(target, Language));
         ImportListCommand = Command(ImportListAsync, () => CanConfigure && _dataLists is not null);
         SaveInputsCommand = Command(SaveInputsAsync, () => CanConfigure);
@@ -98,14 +102,11 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
 
     public ObservableCollection<StrategyProfile> Profiles { get; } = new();
-    public string[] Languages { get; } = ["en", "ru", "az"];
+    public string[] Languages { get; } = ["ru", "en", "az"];
+    public IReadOnlyList<LanguageChoice> LanguageChoices => LanguageChoice.All;
     public UiStrings Strings => new(Language);
-    public int PageIndex { get => _pageIndex; set => Set(ref _pageIndex, value); }
-    public bool ShowAdvancedTools
-    {
-        get => _showAdvanced;
-        set { if (Set(ref _showAdvanced, value) && !value && PageIndex == 1) PageIndex = 0; }
-    }
+    public int PageIndex { get => _pageIndex; set => Set(ref _pageIndex, value == 1 && !ShowAdvancedTools ? 0 : value); }
+    public bool ShowAdvancedTools => _developerTools;
     public string UserMessage => Strings[_messageKey];
     public bool Preparing => _setupPhase is not ("Ready" or "SetupFailed");
     public string ConnectionNote => Strings[SessionOpen ? "ActiveNote" : "HomeNote"];
@@ -165,11 +166,13 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         get => _language;
         set
         {
+            if (!Languages.Contains(value)) throw new ArgumentException("Unsupported language.", nameof(value));
             if (!Set(ref _language, value)) return;
             foreach (var card in ServiceCards) card.Localize(value);
             foreach (var choice in Strategies) choice.Localize(value);
             Changed(nameof(AppUpdateText)); Changed(nameof(QuickDiagnostics));
             Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(UserMessage)); Changed(nameof(ConnectionNote));
+            if (!_loading && _settingsReadable) { _settings.Language = value; PersistSelection(); }
         }
     }
     public bool MinimizeToTray { get => _tray; set => Set(ref _tray, value); }
@@ -203,17 +206,16 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         {
             try { _settings = _settingsStore.Load(); }
             catch (Exception ex) { _settingsReadable = false; Fail(new IOException("Settings are unreadable and will not be overwritten. Restore settings.json before saving. " + ex.Message)); }
-            Language = Languages.Contains(_settings.Language) ? _settings.Language : "en";
+            Language = Languages.Contains(_settings.Language) ? _settings.Language : "ru";
             MinimizeToTray = _settings.MinimizeToTray;
             StartWithWindows = _appliedAutoStart = _settings.StartWithWindows;
             AutoRecover = _settings.AutoRecover;
             CheckForUpdates = _settings.CheckForUpdates;
-            ShowAdvancedTools = _settings.ShowAdvancedTools;
             _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
             ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? FlowsealCatalog.StarterProfileId : null);
             ReloadLists();
             _loading = false;
-            Log("Northpass 0.6. Engine process state and website reachability are reported separately.");
+            Log("Northpass 0.7. Engine process state and website reachability are reported separately.");
             {
                 try
                 {
@@ -223,14 +225,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 }
                 catch (Exception ex) { SetSetupPhase("SetupFailed"); Fail(ex, "InstallationFailed"); }
             }
-            if (CheckForUpdates)
-            {
-                try { await CheckUpdatesAsync(); }
-                catch (Exception ex) { Fail(ex); }
-            }
+
         }
         finally { Busy = false; }
         BeginDiagnostics();
+        if (CheckForUpdates && !_shuttingDown) _startupUpdateTask = CheckStartupUpdatesAsync();
+    }
+
+    private async Task CheckStartupUpdatesAsync()
+    {
+        try { await CheckUpdatesAsync(); }
+        catch (OperationCanceledException) when (_shuttingDown) { }
+        catch (Exception ex) { if (!_shuttingDown) Fail(ex); }
     }
 
     private void ReloadProfiles(string? selectId = null)
@@ -521,7 +527,6 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _settings.EnginePath = EnginePath.Trim();
         _settings.SelectedProfileId = SelectedProfile?.Id ?? "";
         _settings.Language = Language;
-        _settings.ShowAdvancedTools = ShowAdvancedTools;
         _settings.MinimizeToTray = MinimizeToTray;
         _settings.StartWithWindows = StartWithWindows;
         _settings.AutoRecover = AutoRecover;
@@ -596,6 +601,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         RefreshCommands();
         _lifetime.Cancel();
         await CancelDiagnosticsAsync();
+        if (_startupUpdateTask is { } updates) await updates;
         if (_testTask is { } test)
         { try { await test; } catch (Exception ex) { Log("Strategy test ended during shutdown: " + ex.Message); } }
         if (_setupTask is { } setup)

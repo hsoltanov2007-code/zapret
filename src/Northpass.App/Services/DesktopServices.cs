@@ -21,7 +21,7 @@ public sealed class DesktopServices : IDesktopServices
         var dialog = new SaveFileDialog { FileName = name + "." + extension, Filter = $"{extension.ToUpperInvariant()} files|*.{extension}", OverwritePrompt = true };
         return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
     }
-    public bool ConfirmTrust(string message) => ProductDialog.Show(Owner, (Owner.DataContext as MainViewModel)?.Strings ?? new UiStrings("en"), message);
+    public bool ConfirmTrust(string message) => ProductDialog.Show(Owner, (Owner.DataContext as MainViewModel)?.Strings ?? new UiStrings("ru"), message);
     public async Task SetAutoStartAsync(bool enabled)
     {
         string executable = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot determine the app executable.");

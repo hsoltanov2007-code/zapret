@@ -1,4 +1,4 @@
-# Northpass v0.6 architecture
+# Northpass v0.7 architecture
 
 Northpass.App composes one reviewed Flowseal-derived Zapret1 adapter and installer. The view model has no executable picker, engine selection or raw-URL diagnostic flow. Only reviewed canonical profiles reach Home. The product layer references the compiled catalog; the controller, registry, installation/data APIs and process supervisor remain engine independent for a future replacement.
 
@@ -24,5 +24,7 @@ IEngineInstallationManager preserves pinned offline acquisition, sealed Program 
 MainViewModel presents localized strategy choices and service cards, separates busy connection operations from cancellable tracked diagnostics, and discards stale generations after strategy/session changes. Status events fetch the controller’s current state rather than applying stale queued notifications. Shutdown awaits cancellation/owned cleanup. Profile migration preserves user files and preferences while excluding unsupported engine IDs/changed argument arrays. Unreadable settings remain intact.
 
 ServiceProbeService concurrently checks three fixed web endpoints with bounded DNS/TCP/authenticated TLS/HTTP stages. ServiceAvailabilityPolicy classifies web evidence only. QUIC/STUN/playback/login/gateway/voice/native Telegram messaging remain Unknown. Both Home and Diagnostics state this scope; detailed data/logs are collapsed. StrategyTestRunner remains explicit/manual, disconnects before and after each test and records local provider/revision/input evidence. No automatic strategy swapping or universal effectiveness is implied.
+
+StartupPresentation handles only view lifetime: a localized splash follows setup progress, reveals the main owner window and closes after a short transition. It never gates readiness on website probes or adds minimum dwell. Cancelling startup closes the main owner and awaits its model cleanup. Motion is a view-only attached behavior; animations do not affect engine/diagnostic state. Vector flag/native-language choices map to preserved ISO codes; new/missing/unsupported language settings fall back to Russian. The legacy advanced preference is inert; production composition never enables internal tools. See UI_V0.7.md.
 
 The entire app currently requests elevation as before; a privileged broker with an unelevated UI remains future work. The offline installer contains normal protected runtime files, licences and corresponding source packages. Release signing is optional and requires real credentials. See PRODUCT_V0.6.md, FLOWSEAL_REVIEW.md and WINDOWS_ACCEPTANCE.md for detailed behavior and acceptance limits.
