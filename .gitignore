@@ -2,6 +2,8 @@
 **/obj/
 dist/
 .vs/
+TestResults/
+*.trx
 *.user
 engine/*.exe
 engine/*.dll

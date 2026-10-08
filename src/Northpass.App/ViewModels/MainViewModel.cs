@@ -1,0 +1,283 @@
+using System.Collections.ObjectModel;
+using System.Windows.Threading;
+using Northpass.Desktop;
+using Northpass.Engine;
+using Northpass.Models;
+using Northpass.Services;
+
+namespace Northpass.ViewModels;
+
+public sealed class MainViewModel : ObservableObject, IAsyncDisposable
+{
+    private readonly EngineController _controller;
+    private readonly EngineRegistry _registry;
+    private readonly SettingsStore _settingsStore;
+    private readonly ProfileStore _profileStore;
+    private readonly DiagnosticsService _diagnostics;
+    private readonly UpdateChecker _updates;
+    private readonly IDesktopServices _desktop;
+    private readonly Dispatcher _dispatcher;
+    private CancellationTokenSource _lifetime = new();
+    private AppSettings _settings = new();
+    private bool _loading = true, _settingsReadable = true, _busy, _refreshing, _disposed, _shuttingDown;
+    private bool _appliedAutoStart;
+    private StrategyProfile? _selectedProfile;
+    private string _enginePath = "", _language = "en", _url = "https://example.com/", _result = "", _log = "";
+    private bool _tray = true, _autoStart, _recover, _checkUpdates;
+    private EngineStatus _status = new(EngineState.Disconnected);
+    private ReachabilityResult? _reachability;
+    private int _pageIndex;
+    private readonly List<AsyncRelayCommand> _commands = new();
+
+    public MainViewModel(EngineController controller, EngineRegistry registry, SettingsStore settingsStore,
+        ProfileStore profileStore, DiagnosticsService diagnostics, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher)
+    {
+        (_controller, _registry, _settingsStore, _profileStore, _diagnostics, _updates, _desktop, _dispatcher) =
+            (controller, registry, settingsStore, profileStore, diagnostics, updates, desktop, dispatcher);
+        _controller.LogReceived += EngineLog;
+        _controller.StatusChanged += EngineStatusChanged;
+        ConnectCommand = Command(ToggleAsync, () => SelectedProfile is not null);
+        BrowseCommand = Command(() => { EnginePath = _desktop.PickEngine(_registry.Find(SelectedProfile?.Engine ?? "") ?? _registry.Available.First()) ?? EnginePath; return Task.CompletedTask; }, () => CanConfigure);
+        ValidateCommand = Command(ValidateAsync, () => SelectedProfile is not null);
+        RefreshProfilesCommand = Command(() => { ReloadProfiles(); return Task.CompletedTask; }, () => CanConfigure);
+        NewProfileCommand = Command(() => EditProfile(null), () => CanConfigure);
+        EditProfileCommand = Command(() => EditProfile(SelectedProfile), () => CanConfigure && SelectedProfile is not null);
+        ImportCommand = Command(ImportAsync, () => CanConfigure);
+        ExportCommand = Command(ExportAsync, () => SelectedProfile is not null);
+        TestCommand = Command(TestAsync);
+        SaveSettingsCommand = Command(SaveSettingsAsync, () => CanConfigure);
+        CheckUpdatesCommand = Command(CheckUpdatesAsync);
+        ExportLogsCommand = Command(ExportLogsAsync);
+        ClearLogsCommand = new(() => LogText = "");
+    }
+
+    private AsyncRelayCommand Command(Func<Task> action, Func<bool>? condition = null)
+    {
+        var command = new AsyncRelayCommand(async () =>
+        {
+            Busy = true;
+            try { await action(); }
+            finally { Busy = false; }
+        }, Fail, () => !_disposed && !_shuttingDown && !Busy && (condition?.Invoke() ?? true));
+        _commands.Add(command);
+        return command;
+    }
+
+    public ObservableCollection<StrategyProfile> Profiles { get; } = new();
+    public string[] Languages { get; } = ["en", "ru", "az"];
+    public UiStrings Strings => new(Language);
+    public int PageIndex { get => _pageIndex; set => Set(ref _pageIndex, value); }
+    public string ProfilesDirectory => _profileStore.DirectoryPath;
+    public StrategyProfile? SelectedProfile
+    {
+        get => _selectedProfile;
+        set
+        {
+            if (!Set(ref _selectedProfile, value)) return;
+            Changed(nameof(CurrentEngine)); Changed(nameof(ProfileDescription));
+            _reachability = null; Changed(nameof(Reachability));
+            if (!_loading) PersistSelection();
+            RefreshCommands();
+        }
+    }
+    public string EnginePath { get => _enginePath; set => Set(ref _enginePath, value); }
+    public string DiagnosticUrl { get => _url; set => Set(ref _url, value); }
+    public string Language
+    {
+        get => _language;
+        set
+        {
+            if (!Set(ref _language, value)) return;
+            Changed(nameof(Strings)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(Reachability));
+        }
+    }
+    public bool MinimizeToTray { get => _tray; set => Set(ref _tray, value); }
+    public bool StartWithWindows { get => _autoStart; set => Set(ref _autoStart, value); }
+    public bool AutoRecover { get => _recover; set => Set(ref _recover, value); }
+    public bool CheckForUpdates { get => _checkUpdates; set => Set(ref _checkUpdates, value); }
+    public bool Busy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanConfigure)); RefreshCommands(); } } }
+    public bool SessionOpen => _status.State is EngineState.Active or EngineState.Connecting or EngineState.Stopping || _status.ProcessId is not null;
+    public bool CanConfigure => !SessionOpen && !Busy;
+    public string ConnectText => Strings[SessionOpen ? "Disconnect" : "Connect"];
+    public string StatusText => Strings[_status.State.ToString()];
+    public string StatusColor => _status.State switch { EngineState.Active => "#9DC5B1", EngineState.Error => "#DC998D", EngineState.Connecting or EngineState.Stopping => "#D2BE8F", _ => "#949EAA" };
+    public string CurrentEngine => _registry.Find(SelectedProfile?.Engine ?? "")?.Name ?? "Unavailable";
+    public string ProfileDescription => SelectedProfile?.Description ?? "Select or import a strategy.";
+    public string SessionDuration => _status.State == EngineState.Active && _status.StartedAt is { } start
+        ? (DateTimeOffset.UtcNow - start).ToString(@"hh\:mm\:ss") : "00:00:00";
+    public string Reachability => _reachability is null ? Strings["Unverified"] :
+        $"{Strings[_reachability.Reachable ? "Reachable" : "Unreachable"]} · {_reachability.Duration.TotalMilliseconds:F0} ms";
+    public string ResultText { get => _result; private set => Set(ref _result, value); }
+    public string LogText { get => _log; private set => Set(ref _log, value); }
+    public AsyncRelayCommand ConnectCommand { get; }
+    public AsyncRelayCommand BrowseCommand { get; }
+    public AsyncRelayCommand ValidateCommand { get; }
+    public AsyncRelayCommand RefreshProfilesCommand { get; }
+    public AsyncRelayCommand NewProfileCommand { get; }
+    public AsyncRelayCommand EditProfileCommand { get; }
+    public AsyncRelayCommand ImportCommand { get; }
+    public AsyncRelayCommand ExportCommand { get; }
+    public AsyncRelayCommand TestCommand { get; }
+    public AsyncRelayCommand SaveSettingsCommand { get; }
+    public AsyncRelayCommand CheckUpdatesCommand { get; }
+    public AsyncRelayCommand ExportLogsCommand { get; }
+    public RelayCommand ClearLogsCommand { get; }
+
+    public async Task InitializeAsync(string? discoveredEngine)
+    {
+        try { _settings = _settingsStore.Load(); }
+        catch (Exception ex) { _settingsReadable = false; Fail(new IOException("Settings are unreadable and will not be overwritten. Restore settings.json before saving. " + ex.Message)); }
+        EnginePath = string.IsNullOrWhiteSpace(_settings.EnginePath) ? discoveredEngine ?? "" : _settings.EnginePath;
+        Language = Languages.Contains(_settings.Language) ? _settings.Language : "en";
+        DiagnosticUrl = _settings.DiagnosticUrl;
+        MinimizeToTray = _settings.MinimizeToTray;
+        StartWithWindows = _appliedAutoStart = _settings.StartWithWindows;
+        AutoRecover = _settings.AutoRecover;
+        CheckForUpdates = _settings.CheckForUpdates;
+        _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
+        ReloadProfiles();
+        _loading = false;
+        Log("Northpass 0.2. Engine process state and website reachability are reported separately.");
+        if (CheckForUpdates)
+        {
+            try { await CheckUpdatesAsync(); }
+            catch (Exception ex) { Fail(ex); }
+        }
+    }
+
+    private void ReloadProfiles(string? selectId = null)
+    {
+        string? id = selectId ?? SelectedProfile?.Id ?? _settings.SelectedProfileId;
+        var result = _profileStore.Load();
+        foreach (string error in result.Errors) Log("Profile error: " + error);
+        Profiles.Clear();
+        foreach (var profile in result.Profiles) Profiles.Add(profile);
+        SelectedProfile = Profiles.FirstOrDefault(p => p.Id == id) ?? Profiles.FirstOrDefault();
+    }
+
+    private EngineConfiguration Configuration() => new(EnginePath.Trim(),
+        SelectedProfile ?? throw new InvalidOperationException("Select a strategy first."));
+
+    private async Task ToggleAsync()
+    {
+        if (SessionOpen) { await _controller.DisconnectAsync(_lifetime.Token); return; }
+        var configuration = Configuration();
+        var validation = await _controller.ValidateAsync(configuration, _lifetime.Token);
+        ResultText = validation.Summary;
+        if (!validation.IsValid) throw new InvalidOperationException(validation.Summary);
+        if (!_desktop.ConfirmTrust("Start the selected executable and profile with administrator rights?\n\nUse only an official trusted engine bundle. Lua files are executable code and can access your computer. Imported profiles are not sandboxed.\n\n" + configuration.ExecutablePath + "\n" + configuration.Profile.SourcePath)) return;
+        PersistSelection();
+        _reachability = null; Changed(nameof(Reachability));
+        await _controller.ConnectAsync(configuration, AutoRecover, _lifetime.Token);
+    }
+
+    private async Task ValidateAsync()
+    {
+        ResultText = (await _controller.ValidateAsync(Configuration(), _lifetime.Token)).Summary;
+        Log(ResultText);
+    }
+    private Task EditProfile(StrategyProfile? original)
+    {
+        var profile = _desktop.EditProfile(_profileStore, original);
+        if (profile is not null) ReloadProfiles(profile.Id);
+        return Task.CompletedTask;
+    }
+    private Task ImportAsync()
+    {
+        string? file = _desktop.PickProfile();
+        if (file is null) return Task.CompletedTask;
+        if (!_desktop.ConfirmTrust("Import this profile? It will not run now. Review all arguments and referenced Lua files before connecting. Duplicate Ids will not overwrite existing profiles.")) return Task.CompletedTask;
+        var profile = _profileStore.Import(file);
+        ReloadProfiles(profile.Id);
+        Log("Profile imported. Copy referenced assets separately and verify their paths before connecting.");
+        return Task.CompletedTask;
+    }
+    private Task ExportAsync()
+    {
+        var profile = SelectedProfile ?? throw new InvalidOperationException("No profile selected.");
+        string? path = _desktop.PickExport(profile.Id, "json");
+        if (path is not null) { _profileStore.Export(profile, path); Log("Profile exported: " + path); }
+        return Task.CompletedTask;
+    }
+    private async Task TestAsync()
+    {
+        _reachability = await _diagnostics.TestAsync(DiagnosticUrl, _lifetime.Token);
+        Changed(nameof(Reachability));
+        ResultText = $"{_reachability.Url} · {Reachability}\n{_reachability.Detail}";
+        Log(ResultText);
+    }
+    private void PersistSelection()
+    {
+        if (!_settingsReadable) { Log("Settings are unreadable; selection was not persisted."); return; }
+        _settings.EnginePath = EnginePath.Trim();
+        _settings.SelectedProfileId = SelectedProfile?.Id ?? "";
+        try { _settingsStore.Save(_settings); }
+        catch (Exception ex) { Fail(ex); }
+    }
+    private async Task SaveSettingsAsync()
+    {
+        if (!_settingsReadable) throw new IOException("Restore settings.json before saving; the corrupt file has been preserved.");
+        if (StartWithWindows != _appliedAutoStart)
+        {
+            await _desktop.SetAutoStartAsync(StartWithWindows);
+            _appliedAutoStart = StartWithWindows;
+        }
+        _settings.EnginePath = EnginePath.Trim();
+        _settings.SelectedProfileId = SelectedProfile?.Id ?? "";
+        _settings.Language = Language;
+        _settings.DiagnosticUrl = DiagnosticUrl;
+        _settings.MinimizeToTray = MinimizeToTray;
+        _settings.StartWithWindows = StartWithWindows;
+        _settings.AutoRecover = AutoRecover;
+        _settings.CheckForUpdates = CheckForUpdates;
+        _settingsStore.Save(_settings);
+        ResultText = "Settings saved.";
+        Log(ResultText);
+    }
+    private async Task CheckUpdatesAsync() { ResultText = await _updates.CheckAsync(_lifetime.Token); Log(ResultText); }
+    private Task ExportLogsAsync()
+    {
+        string? path = _desktop.PickExport("Northpass-diagnostics-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"), "txt");
+        if (path is not null) { File.WriteAllText(path, LogText); Log("Diagnostics exported. Review paths and hostnames before sharing."); }
+        return Task.CompletedTask;
+    }
+    private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); }
+    public void Fail(Exception ex) { ResultText = ex.Message; Log("Error: " + ex.Message); }
+    public void Log(string text)
+    {
+        LogText += $"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}";
+        if (LogText.Length > 200000) LogText = LogText[^150000..];
+    }
+    private void EngineLog(string text) => _dispatcher.BeginInvoke(() => { if (!_disposed) Log(text); });
+    private void EngineStatusChanged(EngineStatus status) => _dispatcher.BeginInvoke(() => { if (!_disposed) ApplyStatus(status); });
+    private void ApplyStatus(EngineStatus status)
+    {
+        if (_status.State != status.State) { _reachability = null; Changed(nameof(Reachability)); }
+        _status = status;
+        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(ConnectText), nameof(SessionDuration) }) Changed(name);
+        if (status.Error is not null) ResultText = status.Error;
+        RefreshCommands();
+    }
+    public async Task RefreshAsync()
+    {
+        if (_disposed || _shuttingDown || _refreshing) return;
+        _refreshing = true;
+        try { ApplyStatus(await _controller.GetStatusAsync(_lifetime.Token)); }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Fail(ex); }
+        finally { _refreshing = false; }
+    }
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _shuttingDown = true;
+        RefreshCommands();
+        _lifetime.Cancel();
+        try { await _controller.DisposeAsync(); }
+        catch { _lifetime.Dispose(); _lifetime = new(); _shuttingDown = false; RefreshCommands(); throw; }
+        _controller.LogReceived -= EngineLog;
+        _controller.StatusChanged -= EngineStatusChanged;
+        _disposed = true;
+        _lifetime.Dispose();
+    }
+}

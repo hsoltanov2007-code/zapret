@@ -1,0 +1,38 @@
+name: Build and test
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.425
+      - run: dotnet restore tests/Northpass.Tests/Northpass.Tests.csproj --locked-mode
+      - run: dotnet test tests/Northpass.Tests/Northpass.Tests.csproj -c Release --no-restore --logger trx --results-directory TestResults
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-test-results
+          path: TestResults
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.425
+      - shell: pwsh
+        run: ./scripts/test.ps1
+      - shell: pwsh
+        run: ./scripts/build.ps1 -Installer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Northpass-win-x64
+          path: dist/
