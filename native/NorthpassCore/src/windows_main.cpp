@@ -89,9 +89,11 @@ private: HANDLE stop_; std::thread worker_;
 };
 int run(const Options& options) {
     auto locks = verify_runtime(executable_path());
-    Divert divert(executable_path().parent_path() / L"WinDivert.dll");
     // Check-only validates protected bytes and API availability; no driver/filter is opened.
-    if (options.check) { std::cout << "NORTHPASS_CHECK protocol=1 mode=" << (options.loopback ? "loopback" : "idle") << '\n'; return 0; }
+    if (options.check) {
+        Divert checked(executable_path().parent_path() / L"WinDivert.dll");
+        std::cout << "NORTHPASS_CHECK protocol=1 mode=" << (options.loopback ? "loopback" : "idle") << '\n'; return 0;
+    }
     auto parent = parent_handle(options.parent_pid);
     Handle singleton(CreateMutexW(nullptr, FALSE, L"Global\\Northpass.Native.v0.1"));
     if (!singleton.get()) throw std::runtime_error(windows_error("Native ownership mutex", GetLastError()));
@@ -101,6 +103,9 @@ int run(const Options& options) {
     Handle stop(CreateEventW(nullptr, TRUE, FALSE, nullptr)), ready(CreateEventW(nullptr, TRUE, FALSE, nullptr));
     if (!stop.get() || !ready.get()) throw std::runtime_error("Cancellation event initialization failed.");
     Control control(stop.get());
+    // Declared after ownership: driver/DLL close before the singleton is released,
+    // including exceptional exits. Another direct session cannot overlap teardown.
+    Divert divert(executable_path().parent_path() / L"WinDivert.dll");
     const auto filter = options.filter();
     divert.handle = divert.open(filter.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
     if (divert.handle == INVALID_HANDLE_VALUE) throw std::runtime_error(windows_error("Scoped driver initialization", GetLastError()));
@@ -167,7 +172,10 @@ int run(const Options& options) {
         if (observation_error) std::rethrow_exception(observation_error);
         if (Clock::now() - last_report >= std::chrono::seconds(1)) { report(); last_report = Clock::now(); }
     }
-    report(); std::cout << "NORTHPASS_STOPPED protocol=1\n" << std::flush;
+    report();
+    if (!divert.close(divert.handle)) throw std::runtime_error(windows_error("Driver handle cleanup", GetLastError()));
+    divert.handle = INVALID_HANDLE_VALUE;
+    std::cout << "NORTHPASS_STOPPED protocol=1\n" << std::flush;
     return 0;
 }
 }

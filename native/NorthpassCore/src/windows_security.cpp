@@ -41,7 +41,7 @@ void acl(const std::filesystem::path& path, bool parent = false) {
         if (header->AceFlags & INHERIT_ONLY_ACE) continue;
         if (header->AceType == ACCESS_ALLOWED_ACE_TYPE) {
             auto* ace = static_cast<ACCESS_ALLOWED_ACE*>(raw);
-            if ((ace->Mask & write) && !trusted(&ace->SidStart, parent)) throw std::runtime_error("Untrusted write access to runtime files.");
+            if ((ace->Mask & write) && !trusted(&ace->SidStart, parent)) throw std::runtime_error("Runtime ACL is unsafe: untrusted write access to runtime files.");
         } else if (header->AceType != ACCESS_DENIED_ACE_TYPE) throw std::runtime_error("Unsupported runtime ACL; refusing uncertain permissions.");
     }
 }
