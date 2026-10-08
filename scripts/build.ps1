@@ -5,8 +5,9 @@ Push-Location $root
 try {
     $project = Join-Path $root 'src\Northpass.App\Northpass.App.csproj'
     $output = Join-Path $root 'dist\Northpass'
-    Write-Host 'Publishing Northpass 0.4 for Windows x64...'
-    dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o $output
+    if (Test-Path $output) { Remove-Item $output -Recurse -Force }
+    Write-Host 'Publishing Northpass 0.5 for Windows x64...'
+    dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
     Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'CHANGELOG.md') $output -Force
     $docsOutput = Join-Path $output 'docs'
@@ -46,5 +47,5 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Installer build failed: $LASTEXITCODE" }
     }
     Write-Host "Completed: $output\Northpass.exe"
-    Write-Host 'Reviewed Zapret2 offline payload and third-party sources are bundled. Clean-machine Windows acceptance is required before release.'
+    Write-Host 'Reviewed Flowseal and optional Zapret2 offline payloads and third-party sources are bundled. Clean-machine Windows acceptance is required before release.'
 } finally { Pop-Location }

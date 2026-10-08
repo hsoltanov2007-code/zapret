@@ -55,6 +55,26 @@
             <Button Content="{Binding Strings[Validate]}" Command="{Binding ValidateCommand}" HorizontalAlignment="Left"/>
             <TextBlock Text="{Binding ResultText}" Margin="0,12,0,0"/>
           </StackPanel></Border>
+          <Border Style="{StaticResource Card}" Visibility="{Binding FlowsealSelected, Converter={StaticResource VisibleWhenTrue}}"><StackPanel IsEnabled="{Binding CanConfigure}">
+            <TextBlock Text="{Binding Strings[GamePorts]}" Style="{StaticResource Muted}"/>
+            <TextBlock Text="{Binding Strings[GamePortsNote]}" Style="{StaticResource Muted}" Margin="0,8,0,12"/>
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><TextBox Text="{Binding GameTcpPorts, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="TCP ports" Margin="0,0,12,0"/><TextBox Grid.Column="1" Text="{Binding GameUdpPorts, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="UDP ports"/></Grid>
+            <TextBlock Text="{Binding Strings[DataLists]}" FontWeight="SemiBold" Margin="0,20,0,8"/>
+            <TextBlock Text="{Binding Strings[DataListNote]}" Style="{StaticResource Muted}" Margin="0,0,0,12"/>
+            <WrapPanel><ComboBox ItemsSource="{Binding ListKinds}" SelectedItem="{Binding ImportListKind}" Width="120" Margin="0,0,12,12"/><Button Content="{Binding Strings[Import]}" Command="{Binding ImportListCommand}"/></WrapPanel>
+            <TextBlock Text="{Binding Strings[GeneralHosts]}" Style="{StaticResource Muted}"/><ComboBox ItemsSource="{Binding HostLists}" SelectedValue="{Binding GeneralListId}" SelectedValuePath="Id" DisplayMemberPath="Name" Margin="0,8,0,12"/>
+            <TextBlock Text="{Binding Strings[ExcludedHosts]}" Style="{StaticResource Muted}"/><ComboBox ItemsSource="{Binding HostLists}" SelectedValue="{Binding ExcludedHostsId}" SelectedValuePath="Id" DisplayMemberPath="Name" Margin="0,8,0,12"/>
+            <TextBlock Text="{Binding Strings[ExcludedIps]}" Style="{StaticResource Muted}"/><ComboBox ItemsSource="{Binding IpLists}" SelectedValue="{Binding ExcludedIpsId}" SelectedValuePath="Id" DisplayMemberPath="Name" Margin="0,8,0,12"/>
+            <TextBlock Text="{Binding Strings[AllIps]}" Style="{StaticResource Muted}"/><ComboBox ItemsSource="{Binding IpLists}" SelectedValue="{Binding AllIpsId}" SelectedValuePath="Id" DisplayMemberPath="Name" Margin="0,8,0,12"/>
+            <Button Content="{Binding Strings[SaveInputs]}" Command="{Binding SaveInputsCommand}" HorizontalAlignment="Left"/>
+          </StackPanel></Border>
+          <Border Style="{StaticResource Card}"><StackPanel>
+            <TextBlock Text="{Binding Strings[Provider]}" Style="{StaticResource Muted}"/>
+            <TextBox Text="{Binding ProviderLabel, UpdateSourceTrigger=PropertyChanged}" MaxLength="120" Margin="0,8,0,12"/>
+            <WrapPanel><Button Content="{Binding Strings[GuidedTest]}" Command="{Binding TestStrategyCommand}"/><Button Content="{Binding Strings[Cancel]}" Command="{Binding CancelTestCommand}"/><Button Content="{Binding Strings[NextStrategy]}" Command="{Binding NextStrategyCommand}"/></WrapPanel>
+            <TextBlock Text="{Binding ServiceResults}" Margin="0,12,0,12"/>
+            <WrapPanel><Button Content="{Binding Strings[PlaybackPassed]}" Command="{Binding ReportPlaybackPassedCommand}"/><Button Content="{Binding Strings[PlaybackFailed]}" Command="{Binding ReportPlaybackFailedCommand}"/><Button Content="{Binding Strings[VoicePassed]}" Command="{Binding ReportVoicePassedCommand}"/><Button Content="{Binding Strings[VoiceFailed]}" Command="{Binding ReportVoiceFailedCommand}"/></WrapPanel>
+          </StackPanel></Border>
           <TextBlock Text="{Binding Strings[ProfileNote]}" Style="{StaticResource Muted}" Margin="0,0,0,12"/>
           <TextBox Text="{Binding ProfilesDirectory, Mode=OneWay}" IsReadOnly="True"/>
         </StackPanel></ScrollViewer>
@@ -65,8 +85,8 @@
           <StackPanel Grid.Row="1">
             <TextBlock Text="{Binding Strings[TestUrl]}" Style="{StaticResource Muted}"/>
             <TextBox Text="{Binding DiagnosticUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,12"/>
-            <WrapPanel><Button Content="{Binding Strings[Test]}" Command="{Binding TestCommand}"/><Button Content="{Binding Strings[ExportLogs]}" Command="{Binding ExportLogsCommand}"/><Button Content="{Binding Strings[ClearLogs]}" Command="{Binding ClearLogsCommand}"/></WrapPanel>
-            <TextBlock Text="{Binding ResultText}" Margin="0,8,0,16"/>
+            <WrapPanel><Button Content="{Binding Strings[ServiceChecks]}" Command="{Binding ServiceProbesCommand}"/><Button Content="{Binding Strings[Test]}" Command="{Binding TestCommand}"/><Button Content="{Binding Strings[ExportLogs]}" Command="{Binding ExportLogsCommand}"/><Button Content="{Binding Strings[ClearLogs]}" Command="{Binding ClearLogsCommand}"/></WrapPanel>
+            <TextBlock Text="{Binding ServiceResults}" Margin="0,8,0,8"/><TextBlock Text="{Binding ResultText}" Margin="0,8,0,16"/>
           </StackPanel>
           <TextBox Grid.Row="2" x:Name="LogBox" Text="{Binding LogText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="LogBox_TextChanged"/>
         </Grid>
@@ -98,6 +118,6 @@
         </StackPanel></ScrollViewer>
       </TabItem>
     </TabControl>
-    <TextBlock Grid.Row="2" Text="Northpass 0.4" Style="{StaticResource Muted}" FontSize="10" Margin="190,20,0,0"/>
+    <TextBlock Grid.Row="2" Text="Northpass 0.5" Style="{StaticResource Muted}" FontSize="10" Margin="190,20,0,0"/>
   </Grid>
 </Window>

@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Northpass.Desktop;
 using Northpass.Engine;
 using Northpass.Engine.Zapret2;
+using Northpass.Engine.Zapret1;
 using Northpass.Models;
 using Northpass.Services;
 using Northpass.ViewModels;
@@ -128,6 +129,26 @@ public sealed class WindowSmokeTests
                         Assert.Equal("Ready", next.EngineSetupText);
                         Assert.True(next.ShowAdvancedTools);
                         await next.DisposeAsync();
+                        stage = "v0.5 default and upgrade selection fixtures";
+                        registry.Register(Zapret1Engine.Metadata, () => new SessionFixture(Zapret1Engine.Metadata));
+                        var flowseal = new FakeInstallation("zapret1");
+                        store.Save(new() { SelectedProfileId = "zapret2-reviewed-example", Language = "az", AutoRecover = true, MinimizeToTray = false });
+                        var upgrade = new MainViewModel(new EngineController(registry), registry, store, profiles,
+                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation, [flowseal]);
+                        await upgrade.InitializeAsync(null);
+                        Assert.Equal("zapret2-reviewed-example", upgrade.SelectedProfile?.Id);
+                        Assert.Equal("az", upgrade.Language); Assert.True(upgrade.AutoRecover); Assert.False(upgrade.MinimizeToTray);
+                        Assert.Equal(0, flowseal.Setups); await upgrade.DisposeAsync();
+                        var freshStore = new SettingsStore(Path.Combine(temporary, "fresh"));
+                        var fresh = new MainViewModel(new EngineController(registry), registry, freshStore, profiles,
+                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation, [flowseal]);
+                        await fresh.InitializeAsync(null);
+                        Assert.Equal("flowseal-general", fresh.SelectedProfile?.Id); Assert.True(fresh.ManagedEngine);
+                        Assert.Equal(1, flowseal.Setups); Assert.Equal("Ready", fresh.StatusText);
+                        fresh.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+                        Assert.True(fresh.SessionOpen); Assert.Contains("has not been verified", fresh.ConnectionNote);
+                        await fresh.DisposeAsync();
                     }
                     catch (Exception ex) { failure = ex; }
                     finally
@@ -167,7 +188,7 @@ public sealed class WindowSmokeTests
         var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(window);
         var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
-        using var file = File.Create(Path.Combine(output, "northpass-v0.4-" + language + ".png")); png.Save(file);
+        using var file = File.Create(Path.Combine(output, "northpass-v0.5-" + language + ".png")); png.Save(file);
         if (language == "en")
         {
             // Small CI annotation preview complements the full-resolution artifact,
@@ -197,10 +218,10 @@ public sealed class WindowSmokeTests
         public StrategyProfile? EditProfile(ProfileStore store, StrategyProfile? original) => throw new InvalidOperationException("Unexpected dialog.");
         public Task SetAutoStartAsync(bool enabled) => throw new InvalidOperationException("Unexpected autostart change.");
     }
-    private sealed class SessionFixture : IDpiEngine
+    private sealed class SessionFixture(EngineDescriptor? metadata = null) : IDpiEngine
     {
         private EngineStatus _status = new(EngineState.Disconnected);
-        public EngineDescriptor Descriptor => Zapret2Engine.Metadata;
+        public EngineDescriptor Descriptor => metadata ?? Zapret2Engine.Metadata;
         public event Action<string>? LogReceived;
         public event Action<EngineStatus>? StatusChanged;
         public Task StartAsync(EngineConfiguration configuration, CancellationToken token = default)
@@ -219,16 +240,16 @@ public sealed class WindowSmokeTests
         public async ValueTask DisposeAsync() => await StopAsync();
     }
     // UI flow fixture only. Real executable/ACL checks are in EngineInstallationWindowsTests.
-    private sealed class FakeInstallation : IEngineInstallationManager
+    private sealed class FakeInstallation(string engineId = "zapret2") : IEngineInstallationManager
     {
         public int Setups;
         private InstalledEngine? _engine;
-        public string EngineId => "zapret2";
+        public string EngineId => engineId;
         public Task<InstalledEngine?> DetectAsync(CancellationToken token = default) => Task.FromResult(_engine);
         public Task<InstalledEngine> EnsureInstalledAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default)
         {
             if (_engine is not null) return Task.FromResult(_engine);
-            Setups++; _engine = new("zapret2", new string('a', 40), "test", "C:\\protected\\winws2.exe");
+            Setups++; _engine = new(engineId, new string('a', 40), "test", "C:\\protected\\winws2.exe");
             progress?.Report(new("Ready", 1, 1)); return Task.FromResult(_engine);
         }
         public Task<EngineUpdateStatus> CheckForUpdatesAsync(CancellationToken token = default) => throw new NotSupportedException();

@@ -1,5 +1,5 @@
 ; Compile with Inno Setup 6 after scripts/build.ps1. Reviewed offline engine payload is bundled.
-#define AppVersion "0.4.0"
+#define AppVersion "0.5.0"
 [Setup]
 AppId={{292E32E3-4A84-4F03-B41E-64F5B3C05E96}
 AppName=Northpass

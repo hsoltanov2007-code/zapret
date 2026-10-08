@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../Northpass.Engine.Abstractions/Northpass.Engine.Abstractions.csproj" /></ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../engine/catalog/flowseal.json" LogicalName="Northpass.Flowseal.TrustedManifest" />
+    <EmbeddedResource Include="../../engine/flowseal/strategies.json" LogicalName="Northpass.Flowseal.Strategies" />
+    <EmbeddedResource Include="../../engine/catalog/flowseal-previous/*.json" LogicalName="Northpass.Flowseal.Previous.%(Filename)" />
+  </ItemGroup>
+</Project>

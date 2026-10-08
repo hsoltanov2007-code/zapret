@@ -1,0 +1,123 @@
+{
+  "engineId": "zapret1",
+  "revision": "865da4f4c3659523bf79bc6edf0446e7d7969614",
+  "version": "72.9",
+  "sourceRevision": "c849e55ef0f1c244206f5a05ff7b1ab41a3824ee",
+  "executable": "bin/winws.exe",
+  "archiveUrl": "https://codeload.github.com/Flowseal/zapret-discord-youtube/zip/865da4f4c3659523bf79bc6edf0446e7d7969614",
+  "archiveSha256": "972926e48df550da238981aa6a57ba260208acb92a96c9c9d796ea03e0ef86e6",
+  "archiveSize": 1641392,
+  "archivePrefix": "zapret-discord-youtube-865da4f4c3659523bf79bc6edf0446e7d7969614/",
+  "offlineSha256": "537df2e8382313aa44e410b80a2d7691431f872d1e8ad51e96aa43ca61b57f33",
+  "offlineSize": 3310911,
+  "components": [
+    {
+      "sourcePath": "bin/winws.exe",
+      "path": "bin/winws.exe",
+      "size": 203776,
+      "sha256": "affb4f69d2ea302a7abccd5325d81826e140ddae014f1e070bc4a6c0dd555188"
+    },
+    {
+      "sourcePath": "bin/cygwin1.dll",
+      "path": "bin/cygwin1.dll",
+      "size": 2954293,
+      "sha256": "103104a52e5293ce418944725df19e2bf81ad9269b9a120d71d39028e821499b"
+    },
+    {
+      "sourcePath": "bin/WinDivert.dll",
+      "path": "bin/WinDivert.dll",
+      "size": 47616,
+      "sha256": "c1e060ee19444a259b2162f8af0f3fe8c4428a1c6f694dce20de194ac8d7d9a2"
+    },
+    {
+      "sourcePath": "bin/WinDivert64.sys",
+      "path": "bin/WinDivert64.sys",
+      "size": 94144,
+      "sha256": "8da085332782708d8767bcace5327a6ec7283c17cfb85e40b03cd2323a90ddc2"
+    },
+    {
+      "sourcePath": "bin/ACTIVE_DISCORD_UDP.bin",
+      "path": "bin/ACTIVE_DISCORD_UDP.bin",
+      "size": 1200,
+      "sha256": "2fe18b3bd20807d36704d0b072092ee49ae84edca907a4420ab9a0f0f28fddcf"
+    },
+    {
+      "sourcePath": "bin/ACTIVE_GAME_UDP.bin",
+      "path": "bin/ACTIVE_GAME_UDP.bin",
+      "size": 1250,
+      "sha256": "e065870cb0d13152e6132807bbf42218a9e7cd8d96f5602b61674cc540f3a56e"
+    },
+    {
+      "sourcePath": "bin/quic_initial_www_google_com.bin",
+      "path": "bin/quic_initial_www_google_com.bin",
+      "size": 1200,
+      "sha256": "f4589c57749f956bb30538197a521d7005f8b0a8723b4707e72405e51ddac50a"
+    },
+    {
+      "sourcePath": "bin/stun.bin",
+      "path": "bin/stun.bin",
+      "size": 100,
+      "sha256": "9cd5469309780ca56c0bd97266524a48c7ee529d02c3179cfecb20b260a59641"
+    },
+    {
+      "sourcePath": "bin/stun2.bin",
+      "path": "bin/stun2.bin",
+      "size": 120,
+      "sha256": "b7c2497496039c541f7337ac8536813f0a1cf52363ab2faa5213b7816d458813"
+    },
+    {
+      "sourcePath": "bin/tls_clienthello_4pda_to.bin",
+      "path": "bin/tls_clienthello_4pda_to.bin",
+      "size": 284,
+      "sha256": "eefeaf09dde8d69b1f176212541f63c68b314a33a335eced99a8a29f17254da8"
+    },
+    {
+      "sourcePath": "bin/tls_clienthello_max_ru.bin",
+      "path": "bin/tls_clienthello_max_ru.bin",
+      "size": 664,
+      "sha256": "4ee0870abe0a0128600b0095189987ba1d210dae8bf963bc725aff49cf922624"
+    },
+    {
+      "sourcePath": "bin/tls_clienthello_www_google_com.bin",
+      "path": "bin/tls_clienthello_www_google_com.bin",
+      "size": 681,
+      "sha256": "936c2bee4cfb80aa3c426b2dcbcc834b3fbcd1adb17172959dc569c73a14275c"
+    },
+    {
+      "sourcePath": "lists/ipset-all.txt",
+      "path": "lists/ipset-all.txt",
+      "size": 18,
+      "sha256": "19123a22bf1108815c07bda3cda8df282b30bd63e4939949928969c0fd195873"
+    },
+    {
+      "sourcePath": "lists/ipset-exclude.txt",
+      "path": "lists/ipset-exclude.txt",
+      "size": 135,
+      "sha256": "96c03954012765ce4ab03b9c30f29ab1ca1b698c6752224d03828e6d182eb0fc"
+    },
+    {
+      "sourcePath": "lists/list-exclude.txt",
+      "path": "lists/list-exclude.txt",
+      "size": 1716,
+      "sha256": "c5eaabb284d9e5c11340454c0d11776f8b62f519e4d71e41254f757de7bbc0d0"
+    },
+    {
+      "sourcePath": "lists/list-general.txt",
+      "path": "lists/list-general.txt",
+      "size": 1067,
+      "sha256": "9ff3ae9e4bf0edbcf8fecb1bba7aac951aace2036cdb732ec3ef65dfc6db443b"
+    },
+    {
+      "sourcePath": "lists/list-google.txt",
+      "path": "lists/list-google.txt",
+      "size": 453,
+      "sha256": "4104b8f5119f76a3642e3176987bbcf817d98daa4899a7ecf9ee2c254958e33b"
+    },
+    {
+      "sourcePath": ".service/version.txt",
+      "path": "metadata/flowseal-version.txt",
+      "size": 6,
+      "sha256": "cd84b52f86059d3a7d19e3ebccb1831e787346c2260bfc77f7a69485c0224bbb"
+    }
+  ]
+}

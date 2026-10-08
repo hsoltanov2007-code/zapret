@@ -35,6 +35,8 @@ public static class ProfileValidation
     public static StrategyProfile Copy(StrategyProfile profile) => new()
     {
         Id = profile.Id, Name = profile.Name, Description = profile.Description,
-        Engine = profile.Engine, Arguments = profile.Arguments.ToList(), SourcePath = profile.SourcePath
+        Engine = profile.Engine, Arguments = profile.Arguments.ToList(), SourcePath = profile.SourcePath,
+        StrategyId = profile.StrategyId, GameTcpPorts = profile.GameTcpPorts, GameUdpPorts = profile.GameUdpPorts,
+        ListBindings = profile.ListBindings is null ? null! : new(profile.ListBindings, StringComparer.Ordinal)
     };
 }
