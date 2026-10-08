@@ -5,7 +5,7 @@ namespace Northpass.Engine.Zapret2;
 
 public static partial class Zapret2ConfigurationValidator
 {
-    public const string ReviewedSourceCommit = "a1adf7b868e65c8a77aab608c8bbd9ec8b30a256";
+    public const string ReviewedSourceCommit = Zapret2Catalog.ReviewedSourceCommit;
     public static readonly string[] RequiredFiles = ["cygwin1.dll", "WinDivert.dll", "WinDivert64.sys"];
     private static readonly HashSet<string> FileOptions = new(StringComparer.Ordinal)
         { "--hostlist", "--hostlist-exclude", "--ipset", "--ipset-exclude" };

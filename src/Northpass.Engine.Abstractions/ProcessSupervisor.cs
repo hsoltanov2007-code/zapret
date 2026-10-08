@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Collections.Concurrent;
 using Northpass.Models;
 
 namespace Northpass.Engine;
@@ -44,12 +45,18 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             token.ThrowIfCancellationRequested();
             if (!process.Start()) throw new InvalidOperationException("The engine process did not start.");
             _process = process;
-            var output = PumpAsync(process.StandardOutput, "");
-            var error = PumpAsync(process.StandardError, "[stderr] ");
-            _ = ObserveExitAsync(process, output, error);
+            SetStatus(new(EngineState.Connecting, process.Id));
+            var recent = new ConcurrentQueue<string>();
+            var output = PumpAsync(process.StandardOutput, "", recent);
+            var error = PumpAsync(process.StandardError, "[stderr] ", recent);
+            _ = ObserveExitAsync(process, output, error, recent);
             // Catch immediate argument/dependency failures, without claiming interception is verified.
             await Task.Delay(300, token);
-            if (process.HasExited) throw new InvalidOperationException($"Engine exited during startup (code {process.ExitCode}). See diagnostics.");
+            if (process.HasExited)
+            {
+                await Task.WhenAll(output, error);
+                throw new InvalidOperationException($"Engine exited during startup (code {process.ExitCode}). " + string.Join("\n", recent));
+            }
             SetStatus(new(EngineState.Active, process.Id, DateTimeOffset.UtcNow));
             LogReceived?.Invoke($"Engine process started (PID {process.Id}). Website reachability is unverified.");
         }
@@ -58,7 +65,12 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             if (_process == process)
             {
                 // Keep ownership until cleanup succeeds, even on cancelled startup.
-                await TerminateAsync(process);
+                try { await TerminateAsync(process); }
+                catch (Exception cleanup)
+                {
+                    SetStatus(new(EngineState.Error, process.Id, Error: "Engine startup failed and cleanup needs retry: " + cleanup.Message));
+                    throw;
+                }
                 _process = null;
             }
             process.Dispose();
@@ -67,18 +79,22 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         }
     }
 
-    private async Task PumpAsync(StreamReader reader, string prefix)
+    private async Task PumpAsync(StreamReader reader, string prefix, ConcurrentQueue<string> recent)
     {
         try
         {
             while (await reader.ReadLineAsync() is { } line)
-                LogReceived?.Invoke(prefix + (line.Length > 16384 ? line[..16384] + "…" : line));
+            {
+                string text = prefix + (line.Length > 16384 ? line[..16384] + "…" : line);
+                recent.Enqueue(text); while (recent.Count > 8) recent.TryDequeue(out _);
+                LogReceived?.Invoke(text);
+            }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
         { /* Owned process has closed its pipes. */ }
     }
 
-    private async Task ObserveExitAsync(Process process, Task output, Task error)
+    private async Task ObserveExitAsync(Process process, Task output, Task error, ConcurrentQueue<string> recent)
     {
         try
         {
@@ -92,7 +108,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 _process = null;
                 process.Dispose();
                 LogReceived?.Invoke($"Engine exited unexpectedly (code {code}).");
-                SetStatus(new(EngineState.Error, ExitCode: code, Error: $"Engine exited (code {code})."));
+                SetStatus(new(EngineState.Error, ExitCode: code, Error: $"Engine exited (code {code}). " + string.Join("\n", recent)));
             }
             finally { _gate.Release(); }
         }

@@ -5,6 +5,7 @@ using Northpass.Desktop;
 using Northpass.Engine;
 using Northpass.Engine.Zapret2;
 using Northpass.Services;
+using Northpass.Services.Installation;
 using Northpass.ViewModels;
 
 namespace Northpass;
@@ -27,17 +28,27 @@ public partial class App : Application
                 Shutdown(); return;
             }
             var registry = new EngineRegistry();
-            registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine());
+
             var settings = new SettingsStore(SettingsStore.DefaultFolder);
             var profiles = new ProfileStore(System.IO.Path.Combine(settings.Folder, "profiles"));
             _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15) };
+            using var manifestStream = Zapret2Catalog.OpenTrustedManifest();
+            var previous = new List<EngineManifest>();
+            foreach (var stream in Zapret2Catalog.OpenPreviousTrustedManifests())
+                using (stream) previous.Add(EngineManifest.Parse(stream));
+            var installation = new EngineInstallationManager(WindowsInstallationSecurity.DefaultRoot,
+                _http, new WindowsInstallationSecurity(), EngineManifest.Parse(manifestStream),
+                previous: previous,
+                offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "zapret2-offline.zip"),
+                probe: Zapret2Engine.VerifyInstalledVersionAsync);
+            registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine(installation));
             var model = new MainViewModel(new EngineController(registry), registry, settings, profiles,
-                new DiagnosticsService(_http), new UpdateChecker(_http), new DesktopServices(), Dispatcher);
+                new DiagnosticsService(_http), new UpdateChecker(_http), new DesktopServices(), Dispatcher, installation);
             var window = new MainWindow(model);
             MainWindow = window;
             window.Show();
             if (e.Args.Contains("--tray")) { window.WindowState = WindowState.Minimized; window.Hide(); }
-            await model.InitializeAsync(Zapret2Engine.Discover(AppContext.BaseDirectory));
+            await model.InitializeAsync(null);
         }
         catch (Exception ex)
         {

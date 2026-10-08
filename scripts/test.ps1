@@ -1,4 +1,7 @@
+# Run from an Administrator PowerShell session: protected ACL tests require elevation.
 $ErrorActionPreference = 'Stop'
+python (Join-Path $PSScriptRoot 'prepare-engine.py')
+if ($LASTEXITCODE -ne 0) { throw 'Verified engine acquisition failed.' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Push-Location $root
 try {

@@ -41,7 +41,7 @@ public sealed class DiagnosticsTests
         Assert.False(result.Reachable); Assert.Null(result.HttpStatus);
     }
     [Theory]
-    [InlineData("v0.3.0", "Update available")]
+    [InlineData("v0.4.0", "Update available")]
     [InlineData("v0.2.0", "Latest published release")]
     public async Task UpdateCheckUsesMetadataOnly(string tag, string expected)
     {

@@ -1,5 +1,4 @@
-Сюда можно распаковать официальный Windows bundle Zapret2.
-В интерфейсе укажите полный путь к winws2.exe.
-Оставьте рядом с ним WinDivert DLL/SYS, cygwin1.dll, Lua и файлы стратегий,
-которые требуются именно выбранному вами профилю.
-Никакие бинарники третьих сторон в этом архиве не распространяются.
+Northpass v0.3 installs the reviewed Zapret2 x64 engine automatically after consent.
+Do not place executable files here or locate a bundle manually.
+Trusted catalog: engine/catalog/zapret2.json. Offline payload: scripts/prepare-engine.py.
+Protected runtime installation: %ProgramFiles%\Northpass-Zapret2\<reviewed-revision>.

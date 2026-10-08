@@ -17,6 +17,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly UpdateChecker _updates;
     private readonly IDesktopServices _desktop;
     private readonly Dispatcher _dispatcher;
+    private readonly IEngineInstallationManager? _installation;
+    private string _setupPhase = "SetupRequired", _engineRevision = "";
+    private double _setupProgress;
+    private Task? _setupTask;
     private CancellationTokenSource _lifetime = new();
     private AppSettings _settings = new();
     private bool _loading = true, _settingsReadable = true, _busy, _refreshing, _disposed, _shuttingDown;
@@ -30,14 +34,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly List<AsyncRelayCommand> _commands = new();
 
     public MainViewModel(EngineController controller, EngineRegistry registry, SettingsStore settingsStore,
-        ProfileStore profileStore, DiagnosticsService diagnostics, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher)
+        ProfileStore profileStore, DiagnosticsService diagnostics, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher, IEngineInstallationManager? installation = null)
     {
         (_controller, _registry, _settingsStore, _profileStore, _diagnostics, _updates, _desktop, _dispatcher) =
             (controller, registry, settingsStore, profileStore, diagnostics, updates, desktop, dispatcher);
+        _installation = installation;
+        SetupEngineCommand = Command(SetupEngineAsync, () => CanConfigure);
+        UpdateEngineCommand = Command(UpdateEngineAsync, () => CanConfigure);
+        RollbackEngineCommand = Command(RollbackEngineAsync, () => CanConfigure);
         _controller.LogReceived += EngineLog;
         _controller.StatusChanged += EngineStatusChanged;
         ConnectCommand = Command(ToggleAsync, () => SelectedProfile is not null);
-        BrowseCommand = Command(() => { EnginePath = _desktop.PickEngine(_registry.Find(SelectedProfile?.Engine ?? "") ?? _registry.Available.First()) ?? EnginePath; return Task.CompletedTask; }, () => CanConfigure);
+        BrowseCommand = Command(() => { EnginePath = _desktop.PickEngine(_registry.Find(SelectedProfile?.Engine ?? "") ?? _registry.Available.First()) ?? EnginePath; return Task.CompletedTask; }, () => CanConfigure && !ManagedEngine);
         ValidateCommand = Command(ValidateAsync, () => SelectedProfile is not null);
         RefreshProfilesCommand = Command(() => { ReloadProfiles(); return Task.CompletedTask; }, () => CanConfigure);
         NewProfileCommand = Command(() => EditProfile(null), () => CanConfigure);
@@ -74,13 +82,21 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         set
         {
             if (!Set(ref _selectedProfile, value)) return;
-            Changed(nameof(CurrentEngine)); Changed(nameof(ProfileDescription));
+            Changed(nameof(CurrentEngine)); Changed(nameof(ProfileDescription)); Changed(nameof(ManagedEngine)); Changed(nameof(CanChooseEngine));
             _reachability = null; Changed(nameof(Reachability));
             if (!_loading) PersistSelection();
             RefreshCommands();
         }
     }
     public string EnginePath { get => _enginePath; set => Set(ref _enginePath, value); }
+    public bool ManagedEngine => _installation is not null && SelectedProfile?.Engine == _installation.EngineId;
+    public bool CanChooseEngine => CanConfigure && !ManagedEngine;
+    public string EngineSetupText => Strings[_setupPhase];
+    public double EngineSetupProgress { get => _setupProgress; private set => Set(ref _setupProgress, value); }
+    public string EngineRevision { get => _engineRevision; private set => Set(ref _engineRevision, value); }
+    public AsyncRelayCommand SetupEngineCommand { get; }
+    public AsyncRelayCommand UpdateEngineCommand { get; }
+    public AsyncRelayCommand RollbackEngineCommand { get; }
     public string DiagnosticUrl { get => _url; set => Set(ref _url, value); }
     public string Language
     {
@@ -88,14 +104,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         set
         {
             if (!Set(ref _language, value)) return;
-            Changed(nameof(Strings)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(Reachability));
+            Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(Reachability));
         }
     }
     public bool MinimizeToTray { get => _tray; set => Set(ref _tray, value); }
     public bool StartWithWindows { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool AutoRecover { get => _recover; set => Set(ref _recover, value); }
     public bool CheckForUpdates { get => _checkUpdates; set => Set(ref _checkUpdates, value); }
-    public bool Busy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanConfigure)); RefreshCommands(); } } }
+    public bool Busy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanConfigure)); Changed(nameof(CanChooseEngine)); RefreshCommands(); } } }
     public bool SessionOpen => _status.State is EngineState.Active or EngineState.Connecting or EngineState.Stopping || _status.ProcessId is not null;
     public bool CanConfigure => !SessionOpen && !Busy;
     public string ConnectText => Strings[SessionOpen ? "Disconnect" : "Connect"];
@@ -125,24 +141,39 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     public async Task InitializeAsync(string? discoveredEngine)
     {
-        try { _settings = _settingsStore.Load(); }
-        catch (Exception ex) { _settingsReadable = false; Fail(new IOException("Settings are unreadable and will not be overwritten. Restore settings.json before saving. " + ex.Message)); }
-        EnginePath = string.IsNullOrWhiteSpace(_settings.EnginePath) ? discoveredEngine ?? "" : _settings.EnginePath;
-        Language = Languages.Contains(_settings.Language) ? _settings.Language : "en";
-        DiagnosticUrl = _settings.DiagnosticUrl;
-        MinimizeToTray = _settings.MinimizeToTray;
-        StartWithWindows = _appliedAutoStart = _settings.StartWithWindows;
-        AutoRecover = _settings.AutoRecover;
-        CheckForUpdates = _settings.CheckForUpdates;
-        _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
-        ReloadProfiles();
-        _loading = false;
-        Log("Northpass 0.2. Engine process state and website reachability are reported separately.");
-        if (CheckForUpdates)
+        Busy = true;
+        try
         {
-            try { await CheckUpdatesAsync(); }
-            catch (Exception ex) { Fail(ex); }
+            try { _settings = _settingsStore.Load(); }
+            catch (Exception ex) { _settingsReadable = false; Fail(new IOException("Settings are unreadable and will not be overwritten. Restore settings.json before saving. " + ex.Message)); }
+            EnginePath = string.IsNullOrWhiteSpace(_settings.EnginePath) ? discoveredEngine ?? "" : _settings.EnginePath;
+            Language = Languages.Contains(_settings.Language) ? _settings.Language : "en";
+            DiagnosticUrl = _settings.DiagnosticUrl;
+            MinimizeToTray = _settings.MinimizeToTray;
+            StartWithWindows = _appliedAutoStart = _settings.StartWithWindows;
+            AutoRecover = _settings.AutoRecover;
+            CheckForUpdates = _settings.CheckForUpdates;
+            _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
+            ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? "zapret2-reviewed-example" : null);
+            _loading = false;
+            Log("Northpass 0.3. Engine process state and website reachability are reported separately.");
+            if (_installation is not null)
+            {
+                try
+                {
+                    var installed = await _installation.DetectAsync(_lifetime.Token);
+                    if (installed is not null && _settings.EngineSetupConsent) ApplyInstalled(installed);
+                    else await SetupEngineAsync();
+                }
+                catch (Exception ex) { SetSetupPhase("SetupFailed"); Fail(ex); }
+            }
+            if (CheckForUpdates)
+            {
+                try { await CheckUpdatesAsync(); }
+                catch (Exception ex) { Fail(ex); }
+            }
         }
+        finally { Busy = false; }
     }
 
     private void ReloadProfiles(string? selectId = null)
@@ -161,16 +192,67 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task ToggleAsync()
     {
         if (SessionOpen) { await _controller.DisconnectAsync(_lifetime.Token); return; }
+        await _controller.GetStatusAsync(_lifetime.Token);
+        if (ManagedEngine && !await EnsureEngineAsync()) return;
         var configuration = Configuration();
         var validation = await _controller.ValidateAsync(configuration, _lifetime.Token);
         ResultText = validation.Summary;
         if (!validation.IsValid) throw new InvalidOperationException(validation.Summary);
-        if (!_desktop.ConfirmTrust("Start the selected executable and profile with administrator rights?\n\nUse only an official trusted engine bundle. Lua files are executable code and can access your computer. Imported profiles are not sandboxed.\n\n" + configuration.ExecutablePath + "\n" + configuration.Profile.SourcePath)) return;
+        if (!ManagedEngine && !_desktop.ConfirmTrust("Start the selected executable and profile with administrator rights?\n\nUse only an official trusted engine bundle. Lua files are executable code and can access your computer. Imported profiles are not sandboxed.\n\n" + configuration.ExecutablePath + "\n" + configuration.Profile.SourcePath)) return;
         PersistSelection();
         _reachability = null; Changed(nameof(Reachability));
         await _controller.ConnectAsync(configuration, AutoRecover, _lifetime.Token);
     }
 
+    private void SetSetupPhase(string phase) { _setupPhase = phase; Changed(nameof(EngineSetupText)); }
+    private IProgress<InstallationProgress> SetupProgress() => new Progress<InstallationProgress>(p =>
+    {
+        if (!_disposed && !_shuttingDown) { SetSetupPhase(p.Phase); EngineSetupProgress = p.Percent; }
+    });
+    private void ApplyInstalled(InstalledEngine engine)
+    {
+        EnginePath = engine.ExecutablePath; EngineRevision = engine.Version + " · " + engine.Revision;
+        SetSetupPhase("Ready"); EngineSetupProgress = 100;
+        PersistSelection();
+    }
+    private async Task<bool> EnsureEngineAsync()
+    {
+        if (_installation is null) return true;
+        if (!_settingsReadable) throw new IOException("Restore readable settings before consenting to engine setup.");
+        if (!_settings.EngineSetupConsent)
+        {
+            if (!_desktop.ConfirmTrust(Strings["EngineConsent"])) { SetSetupPhase("SetupRequired"); return false; }
+            _settings.EngineSetupConsent = true;
+            _settingsStore.Save(_settings);
+        }
+        try
+        {
+            var task = _installation.EnsureInstalledAsync(SetupProgress(), _lifetime.Token);
+            _setupTask = task;
+            ApplyInstalled(await task);
+            return true;
+        }
+        catch { SetSetupPhase("SetupFailed"); throw; }
+        finally { _setupTask = null; }
+    }
+    private async Task SetupEngineAsync() { await EnsureEngineAsync(); }
+    private async Task UpdateEngineAsync()
+    {
+        if (_installation is null) return;
+        var update = await _installation.CheckForUpdatesAsync(_lifetime.Token);
+        ResultText = update.Detail;
+        if (!update.CanUpdate || !_desktop.ConfirmTrust(Strings["EngineUpdateConsent"])) return;
+        var task = _installation.UpdateAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
+        try { ApplyInstalled(await task); }
+        finally { _setupTask = null; }
+    }
+    private async Task RollbackEngineAsync()
+    {
+        if (_installation is null || !_desktop.ConfirmTrust(Strings["EngineRollbackConsent"])) return;
+        var task = _installation.RollbackAsync(_lifetime.Token); _setupTask = task;
+        try { ApplyInstalled(await task); }
+        finally { _setupTask = null; }
+    }
     private async Task ValidateAsync()
     {
         ResultText = (await _controller.ValidateAsync(Configuration(), _lifetime.Token)).Summary;
@@ -234,7 +316,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         ResultText = "Settings saved.";
         Log(ResultText);
     }
-    private async Task CheckUpdatesAsync() { ResultText = await _updates.CheckAsync(_lifetime.Token); Log(ResultText); }
+    private async Task CheckUpdatesAsync()
+    {
+        ResultText = await _updates.CheckAsync(_lifetime.Token);
+        if (_installation is not null) ResultText += "\n" + (await _installation.CheckForUpdatesAsync(_lifetime.Token)).Detail;
+        Log(ResultText);
+    }
     private Task ExportLogsAsync()
     {
         string? path = _desktop.PickExport("Northpass-diagnostics-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"), "txt");
@@ -254,7 +341,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_status.State != status.State) { _reachability = null; Changed(nameof(Reachability)); }
         _status = status;
-        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(ConnectText), nameof(SessionDuration) }) Changed(name);
+        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(CanChooseEngine), nameof(ConnectText), nameof(SessionDuration) }) Changed(name);
         if (status.Error is not null) ResultText = status.Error;
         RefreshCommands();
     }
@@ -273,6 +360,11 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _shuttingDown = true;
         RefreshCommands();
         _lifetime.Cancel();
+        if (_setupTask is { } setup)
+        {
+            try { await setup; }
+            catch (Exception ex) { Log("Engine setup ended during shutdown: " + ex.Message); }
+        }
         try { await _controller.DisposeAsync(); }
         catch { _lifetime.Dispose(); _lifetime = new(); _shuttingDown = false; RefreshCommands(); throw; }
         _controller.LogReceived -= EngineLog;

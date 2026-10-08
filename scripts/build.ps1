@@ -5,7 +5,7 @@ Push-Location $root
 try {
     $project = Join-Path $root 'src\Northpass.App\Northpass.App.csproj'
     $output = Join-Path $root 'dist\Northpass'
-    Write-Host 'Publishing Northpass 0.2 for Windows x64...'
+    Write-Host 'Publishing Northpass 0.3 for Windows x64...'
     dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
     Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'CHANGELOG.md') $output -Force
@@ -31,6 +31,9 @@ try {
         if ($notices.Count -eq 0) { throw "Runtime license was not found: $($pack.name)" }
         $notices | Copy-Item -Destination $noticeOutput -Force
     }
+    # Every distributable includes the selected reviewed engine plus licences and corresponding sources.
+    python (Join-Path $root 'scripts/prepare-engine.py') --output $output
+    if ($LASTEXITCODE -ne 0) { throw 'Reviewed offline engine packaging failed; installer build is blocked.' }
     Get-ChildItem $output -File -Recurse | Where-Object { $_.Name -ne 'SHA256SUMS.txt' } | ForEach-Object {
         $relative = $_.FullName.Substring($output.Length + 1).Replace('\', '/')
         '{0}  {1}' -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $relative
@@ -43,5 +46,5 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Installer build failed: $LASTEXITCODE" }
     }
     Write-Host "Completed: $output\Northpass.exe"
-    Write-Host 'Zapret2 must be installed separately from the official distribution. Windows runtime acceptance tests are required before release.'
+    Write-Host 'Reviewed Zapret2 offline payload and third-party sources are bundled. Clean-machine Windows acceptance is required before release.'
 } finally { Pop-Location }

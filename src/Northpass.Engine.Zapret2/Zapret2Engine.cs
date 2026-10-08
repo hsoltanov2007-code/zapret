@@ -10,6 +10,9 @@ public sealed class Zapret2Engine : IDpiEngine
     private readonly ProcessSupervisor _process = new();
     private readonly SemaphoreSlim _operations = new(1, 1);
     private bool _disposed;
+    private readonly IEngineInstallationManager? _installation;
+    private IAsyncDisposable? _launchLease;
+    public Zapret2Engine(IEngineInstallationManager? installation = null) => _installation = installation;
     public EngineDescriptor Descriptor => Metadata;
     private event Action<string>? _probeLog;
     public event Action<string>? LogReceived
@@ -46,9 +49,16 @@ public sealed class Zapret2Engine : IDpiEngine
             if ((await _process.GetStatusAsync(cancellationToken)).State == EngineState.Active)
                 throw new InvalidOperationException("The engine is already running.");
             var info = await PrepareAsync(configuration, cancellationToken);
-            await ProbeAsync(info, ["--version"], cancellationToken);
-            await ProbeAsync(info, info.ArgumentList.Concat(new[] { "--dry-run" }).ToArray(), cancellationToken);
-            await _process.StartAsync(info, cancellationToken);
+            await ReleaseLeaseAsync();
+            _launchLease = _installation is null ? null : await _installation.AcquireLaunchLeaseAsync(info.FileName, cancellationToken);
+            try
+            {
+                ValidateManagedAssets(configuration, info);
+                await ProbeAsync(info, ["--version"], cancellationToken);
+                await ProbeAsync(info, info.ArgumentList.Concat(new[] { "--dry-run" }).ToArray(), cancellationToken);
+                await _process.StartAsync(info, cancellationToken);
+            }
+            catch { if ((await _process.GetStatusAsync()).ProcessId is null) await ReleaseLeaseAsync(); throw; }
         }
         finally { _operations.Release(); }
     }
@@ -58,6 +68,8 @@ public sealed class Zapret2Engine : IDpiEngine
     {
         var info = new ProcessStartInfo(template.FileName) { WorkingDirectory = template.WorkingDirectory,
             UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        info.Environment.Clear();
+        foreach (var variable in template.Environment) info.Environment[variable.Key] = variable.Value;
         foreach (string argument in arguments) info.ArgumentList.Add(argument);
         using var process = Process.Start(info) ?? throw new IOException("Could not run engine preflight.");
         Task<string> output = process.StandardOutput.ReadToEndAsync(), error = process.StandardError.ReadToEndAsync();
@@ -77,7 +89,7 @@ public sealed class Zapret2Engine : IDpiEngine
     public async Task StopAsync(CancellationToken cancellationToken = default)
     {
         await _operations.WaitAsync(cancellationToken);
-        try { await _process.StopAsync(cancellationToken); }
+        try { await _process.StopAsync(cancellationToken); await ReleaseLeaseAsync(); }
         finally { _operations.Release(); }
     }
     public async Task RestartAsync(EngineConfiguration configuration, CancellationToken cancellationToken = default)
@@ -88,17 +100,70 @@ public sealed class Zapret2Engine : IDpiEngine
             ObjectDisposedException.ThrowIf(_disposed, this);
             var info = await PrepareAsync(configuration, cancellationToken);
             await _process.StopAsync(cancellationToken);
-            await ProbeAsync(info, info.ArgumentList.Concat(new[] { "--dry-run" }).ToArray(), cancellationToken);
-            await _process.StartAsync(info, cancellationToken);
+            await ReleaseLeaseAsync();
+            _launchLease = _installation is null ? null : await _installation.AcquireLaunchLeaseAsync(info.FileName, cancellationToken);
+            try
+            {
+                ValidateManagedAssets(configuration, info);
+                await ProbeAsync(info, ["--version"], cancellationToken);
+                await ProbeAsync(info, info.ArgumentList.Concat(new[] { "--dry-run" }).ToArray(), cancellationToken);
+                await _process.StartAsync(info, cancellationToken);
+            }
+            catch { if ((await _process.GetStatusAsync()).ProcessId is null) await ReleaseLeaseAsync(); throw; }
         }
         finally { _operations.Release(); }
     }
-    public Task<EngineStatus> GetStatusAsync(CancellationToken cancellationToken = default) => _process.GetStatusAsync(cancellationToken);
+    public async Task<EngineStatus> GetStatusAsync(CancellationToken cancellationToken = default)
+    {
+        await _operations.WaitAsync(cancellationToken);
+        try
+        {
+            var status = await _process.GetStatusAsync(cancellationToken);
+            if (status.ProcessId is null && status.State is EngineState.Error or EngineState.Disconnected) await ReleaseLeaseAsync();
+            return status;
+        }
+        finally { _operations.Release(); }
+    }
     public async ValueTask DisposeAsync()
     {
         await _operations.WaitAsync();
-        try { if (_disposed) return; await _process.DisposeAsync(); _disposed = true; }
+        try { if (_disposed) return; await _process.DisposeAsync(); await ReleaseLeaseAsync(); _disposed = true; }
         finally { _operations.Release(); }
+    }
+    private async Task ReleaseLeaseAsync()
+    {
+        if (_launchLease is not null) { await _launchLease.DisposeAsync(); _launchLease = null; }
+    }
+    private void ValidateManagedAssets(EngineConfiguration configuration, ProcessStartInfo info)
+    {
+        if (_installation is null) return;
+        foreach (string argument in info.ArgumentList)
+        {
+            if (!argument.StartsWith("--lua-init=@", StringComparison.Ordinal)) continue;
+            string file = Path.GetFullPath(argument[12..], info.WorkingDirectory);
+            string relative = Path.GetRelativePath(info.WorkingDirectory, file);
+            if (relative.StartsWith("..") || Path.IsPathRooted(relative) || !file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Managed engine Lua must come from the verified protected engine installation. Imported Lua cannot run elevated.");
+        }
+        // Prevent environment-based DLL/Lua substitution. The executable and working directory are protected.
+        info.Environment["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        foreach (string variable in new[] { "LUA_PATH", "LUA_CPATH", "LUA_INIT", "LUA_PATH_5_1", "LUA_CPATH_5_1", "CYGWIN" }) info.Environment.Remove(variable);
+    }
+    public static async Task VerifyInstalledVersionAsync(InstalledEngine engine, CancellationToken token)
+    {
+        var info = new ProcessStartInfo(engine.ExecutablePath) { WorkingDirectory = Path.GetDirectoryName(engine.ExecutablePath)!,
+            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        info.ArgumentList.Add("--version");
+        info.Environment["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
+        foreach (string variable in new[] { "LUA_PATH", "LUA_CPATH", "LUA_INIT", "CYGWIN" }) info.Environment.Remove(variable);
+        using var process = Process.Start(info) ?? throw new IOException("Engine version probe could not start.");
+        var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        try { await process.WaitForExitAsync(timeout.Token); }
+        catch { if (!process.HasExited) process.Kill(true); await process.WaitForExitAsync(); throw; }
+        string text = await output + await error;
+        if (process.ExitCode != 0 || !text.Contains("github version v" + engine.Version + " (" + engine.SourceRevision + ")", StringComparison.Ordinal))
+            throw new InvalidDataException("Engine version does not match the reviewed manifest, or its runtime could not initialize. " + text);
     }
     public static string? Discover(string applicationDirectory)
     {

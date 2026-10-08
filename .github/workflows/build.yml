@@ -45,7 +45,12 @@ jobs:
           if (!$summary) { throw 'Portable runner did not confirm nonzero completed tests.' }
           Write-Host "::notice title=Windows portable test result::$summary"
       - shell: pwsh
-        name: Windows WPF smoke test
+        name: Acquire pinned offline engine and corresponding sources
+        run: |
+          python ./scripts/prepare-engine.py
+          if ($LASTEXITCODE -ne 0) { throw 'Verified engine acquisition failed.' }
+      - shell: pwsh
+        name: Windows WPF and engine installation tests
         run: |
           dotnet restore tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj --locked-mode
           if ($LASTEXITCODE -ne 0) { throw 'Windows test restore failed.' }
@@ -54,12 +59,16 @@ jobs:
           $output | Write-Output
           if ($result -ne 0) {
             $message = ($output | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
-            Write-Host "::error title=Windows smoke test failed::$message"
+            Write-Host "::error title=Windows integration tests failed::$message"
             exit $result
           }
           $summary = $output | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
           if (!$summary) { throw 'Windows runner did not confirm nonzero completed tests.' }
-          Write-Host "::notice title=Windows WPF test result::$summary"
+          Write-Host "::notice title=Windows integration test result::$summary"
+          Get-ChildItem TestResults/engine-*.txt | ForEach-Object {
+            $evidence = (Get-Content $_.FullName -Raw).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::notice title=$($_.BaseName)::$evidence"
+          }
       - shell: pwsh
         run: ./scripts/build.ps1 -Installer
       - uses: actions/upload-artifact@v4
@@ -70,4 +79,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Northpass-win-x64
-          path: dist/
+          path: |
+            dist/Northpass/
+            dist/installer/

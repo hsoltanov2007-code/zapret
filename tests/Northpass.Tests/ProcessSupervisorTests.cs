@@ -66,7 +66,8 @@ public sealed class ProcessSupervisorTests
     public async Task ImmediateExitIsFailureAndCanBeFollowedByHealthyStart()
     {
         await using var supervisor = new ProcessSupervisor();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => supervisor.StartAsync(Child("exit")));
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(() => supervisor.StartAsync(Child("exit")));
+        Assert.Contains("fixture startup error", failure.Message);
         Assert.Equal(EngineState.Error, (await supervisor.GetStatusAsync()).State);
         await supervisor.StartAsync(Child()); Assert.Equal(EngineState.Active, (await supervisor.GetStatusAsync()).State);
     }

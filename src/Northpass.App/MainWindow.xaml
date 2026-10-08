@@ -11,7 +11,7 @@
         <Border Width="42" Height="42" Background="#CCD9D2" CornerRadius="12" Margin="0,0,14,0"><Viewbox Margin="11"><Path Data="M0,20 L0,0 L5,0 L15,14 L15,0 L20,0 L20,20 L15,20 L5,6 L5,20 Z" Fill="#19231F"/></Viewbox></Border>
         <StackPanel><TextBlock Text="NORTHPASS" FontSize="24" FontWeight="Bold"/><TextBlock Text="WINDOWS · ENGINE CONTROL" Style="{StaticResource Muted}" FontSize="10"/></StackPanel>
       </StackPanel>
-      <TextBlock Text="0.2 / DEVELOPMENT" HorizontalAlignment="Right" Foreground="#8291A3" FontSize="11" Margin="0,12,0,0"/>
+      <TextBlock Text="0.3 / DEVELOPMENT" HorizontalAlignment="Right" Foreground="#8291A3" FontSize="11" Margin="0,12,0,0"/>
     </Grid>
     <TabControl x:Name="NavigationTabs" Grid.Row="1" SelectedIndex="{Binding PageIndex}">
       <TabItem Header="{Binding Strings[Dashboard]}">
@@ -32,6 +32,13 @@
                 <StackPanel Grid.Column="1"><TextBlock Text="{Binding Strings[Session]}" Style="{StaticResource Muted}"/><TextBlock Text="{Binding SessionDuration}" FontSize="19" Margin="0,6,0,20"/><TextBlock Text="{Binding Strings[Reachability]}" Style="{StaticResource Muted}"/><TextBlock Text="{Binding Reachability}" FontSize="17" Margin="0,8,0,0"/></StackPanel>
               </Grid>
             </Border>
+            <Border Style="{StaticResource Card}"><StackPanel>
+              <TextBlock Text="{Binding Strings[EngineSetup]}" Style="{StaticResource Muted}"/>
+              <TextBlock Text="{Binding EngineSetupText}" Margin="0,8,0,8"/>
+              <ProgressBar Minimum="0" Maximum="100" Value="{Binding EngineSetupProgress}" Height="8"/>
+              <TextBlock Text="{Binding EngineRevision}" Style="{StaticResource Muted}" FontSize="11" Margin="0,8,0,12"/>
+              <Button Content="{Binding Strings[SetupEngine]}" Command="{Binding SetupEngineCommand}" HorizontalAlignment="Left"/>
+            </StackPanel></Border>
             <TextBlock Text="{Binding ProfileDescription}" Style="{StaticResource Muted}" Margin="0,0,0,16"/>
             <TextBlock Text="{Binding ResultText}" Foreground="#B5C6D7"/>
           </StackPanel>
@@ -48,7 +55,7 @@
           </StackPanel></Border>
           <Border Style="{StaticResource Card}"><StackPanel>
             <TextBlock Text="{Binding Strings[EnginePath]}" Style="{StaticResource Muted}"/>
-            <Grid Margin="0,12,0,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding EnginePath, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding CanConfigure}"/><Button Grid.Column="1" Content="{Binding Strings[Browse]}" Command="{Binding BrowseCommand}" Margin="12,0,0,0"/></Grid>
+            <Grid Margin="0,12,0,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding EnginePath, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="True"/><Button Grid.Column="1" Content="{Binding Strings[Browse]}" Command="{Binding BrowseCommand}" IsEnabled="{Binding CanChooseEngine}" Margin="12,0,0,0"/></Grid>
             <Button Content="{Binding Strings[Validate]}" Command="{Binding ValidateCommand}" HorizontalAlignment="Left"/>
             <TextBlock Text="{Binding ResultText}" Margin="0,12,0,0"/>
           </StackPanel></Border>
@@ -80,6 +87,7 @@
             <CheckBox Content="{Binding Strings[Updates]}" IsChecked="{Binding CheckForUpdates}"/>
             <Button Content="{Binding Strings[Save]}" Command="{Binding SaveSettingsCommand}" HorizontalAlignment="Left"/>
           </StackPanel></Border>
+          <WrapPanel><Button Content="{Binding Strings[UpdateEngine]}" Command="{Binding UpdateEngineCommand}"/><Button Content="{Binding Strings[RollbackEngine]}" Command="{Binding RollbackEngineCommand}"/></WrapPanel>
           <Button Content="{Binding Strings[CheckUpdates]}" Command="{Binding CheckUpdatesCommand}" HorizontalAlignment="Left"/>
           <TextBlock Text="{Binding ResultText}" Margin="0,10,0,20"/>
           <TextBlock Text="{Binding Strings[Privacy]}" Style="{StaticResource Muted}"/>
