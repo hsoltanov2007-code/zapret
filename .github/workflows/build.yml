@@ -65,16 +65,21 @@ jobs:
           $summary = $output | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
           if (!$summary) { throw 'Windows runner did not confirm nonzero completed tests.' }
           Write-Host "::notice title=Windows integration test result::$summary"
-          $preview = Get-Content TestResults/ui-preview.txt -Raw
-          # GitHub annotation messages are truncated at 4096 characters.
-          for ($offset = 0; $offset -lt $preview.Length; $offset += 3000) {
-            $part = $preview.Substring($offset, [Math]::Min(3000, $preview.Length - $offset))
-            $index = [int]($offset / 3000)
-            Write-Host "::notice title=Northpass UI preview $index::$part"
-          }
           Get-ChildItem TestResults/engine-*.txt | ForEach-Object {
             $evidence = (Get-Content $_.FullName -Raw).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Host "::notice title=$($_.BaseName)::$evidence"
+          }
+      - shell: pwsh
+        name: Publish bounded UI review preview
+        run: |
+          $preview = Get-Content TestResults/ui-preview.txt -Raw
+          # GitHub allows ten notices per step, each at most 4096 characters.
+          # Full-resolution EN/RU/AZ images are always in windows-test-results.
+          if ($preview.Length -gt 40000) { throw 'UI annotation preview exceeds its bounded size.' }
+          for ($offset = 0; $offset -lt $preview.Length; $offset += 4000) {
+            $part = $preview.Substring($offset, [Math]::Min(4000, $preview.Length - $offset))
+            $index = [int]($offset / 4000)
+            Write-Host "::notice title=Northpass UI preview $index::$part"
           }
       - shell: pwsh
         run: ./scripts/build.ps1 -Installer
