@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
-// A harmless, real child-process fixture. This is not Zapret2 or a Windows driver.
+// A harmless, real child-process fixture. This is not the production engine or a Windows driver.
 string mode = args.FirstOrDefault() ?? "wait";
 if (mode == "exit") { Console.Error.WriteLine("fixture startup error"); return 17; }
 Console.WriteLine("fixture ready");

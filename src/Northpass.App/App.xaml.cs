@@ -3,7 +3,6 @@ using System.Net.Http;
 using System.Security.Principal;
 using Northpass.Desktop;
 using Northpass.Engine;
-using Northpass.Engine.Zapret2;
 using Northpass.Engine.Zapret1;
 using Northpass.Services;
 using Northpass.Services.Installation;
@@ -33,16 +32,6 @@ public partial class App : Application
             var settings = new SettingsStore(SettingsStore.DefaultFolder);
             var profiles = new ProfileStore(System.IO.Path.Combine(settings.Folder, "profiles"));
             _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(15) };
-            using var manifestStream = Zapret2Catalog.OpenTrustedManifest();
-            var previous = new List<EngineManifest>();
-            foreach (var stream in Zapret2Catalog.OpenPreviousTrustedManifests())
-                using (stream) previous.Add(EngineManifest.Parse(stream));
-            var installation = new EngineInstallationManager(WindowsInstallationSecurity.DefaultRoot,
-                _http, new WindowsInstallationSecurity(), EngineManifest.Parse(manifestStream),
-                previous: previous,
-                offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "zapret2-offline.zip"),
-                probe: Zapret2Engine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
-            registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine(installation));
             var dataLists = new DataListStore(Path.Combine(settings.Folder, "lists"));
             var data = new ProtectedEngineDataProvider(dataLists,
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-StrategyData"), new WindowsInstallationSecurity());
@@ -59,21 +48,18 @@ public partial class App : Application
             // offline composition without opening a window or intercepting traffic.
             if (e.Args.Contains("--installation-check"))
             {
-                foreach (var manager in new[] { flowseal, installation })
-                {
-                    var installed = await manager.EnsureInstalledAsync();
-                    if (await manager.DetectAsync() != installed) throw new IOException("Installation verification failed.");
-                }
+                var installed = await flowseal.EnsureInstalledAsync();
+                if (await flowseal.DetectAsync() != installed) throw new IOException("Installation verification failed.");
                 Shutdown(0); return;
             }
-            var model = new MainViewModel(new EngineController(registry), registry, settings, profiles,
-                new DiagnosticsService(_http), new UpdateChecker(_http), new DesktopServices(), Dispatcher, installation, [flowseal], dataLists,
-                new ServiceProbeService(new NetworkServiceProbeTransport()), new StrategyTestRecordStore(Path.Combine(settings.Folder, "strategy-tests")));
+            var model = new MainViewModel(new EngineController(registry), settings, profiles,
+                new UpdateChecker(_http), new DesktopServices(), Dispatcher, flowseal,
+                new ServiceProbeService(new NetworkServiceProbeTransport()), dataLists, new StrategyTestRecordStore(Path.Combine(settings.Folder, "strategy-tests")));
             var window = new MainWindow(model);
             MainWindow = window;
             window.Show();
             if (e.Args.Contains("--tray")) { window.WindowState = WindowState.Minimized; window.Hide(); }
-            await model.InitializeAsync(null);
+            await model.InitializeAsync();
         }
         catch (Exception ex)
         {

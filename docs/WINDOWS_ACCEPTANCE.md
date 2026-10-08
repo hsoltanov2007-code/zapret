@@ -34,3 +34,10 @@ Record Windows build, physical ISP/provider, connection type, chosen reviewed st
 8. Run signed release candidates as an ordinary interactive user: actual UAC, clean Windows 10/11 machines, high DPI/keyboard accessibility, tray/autostart, install/upgrade/uninstall and privacy review of exported logs. CI artifacts are unsigned development builds.
 
 Use Advanced → Test selected strategy for bounded local evidence; test concludes disconnected. Connect that same configuration separately for real video/voice work, then record user-reported outcomes explicitly. Keep reported playback/voice separate from automated stage checks. None of these real Russian ISP results have been established by Linux cross-compilation or Windows CI.
+
+
+## v0.6 product acceptance
+
+Upgrade a v0.5 app with either a valid Flowseal selection or an old selection. Verify the former survives and the latter migrates to the starter; preserve language/tray/recovery/autostart/advanced settings and user files. Confirm no legacy payload/assembly or engine picker is installed. Select all five strategies from Home while disconnected and confirm switching is disabled during an owned session.
+
+Verify Home/About/Diagnostics in EN/RU/AZ, the original logo at 16–256 px and high DPI, normal branded update messages and the separate legal/source viewer. Built-in website checks must contact only their fixed endpoints at launch/connect/disconnect or explicit refresh, show Unknown after changes/cancellation, and never infer availability from the owned process. Compare real Telegram web availability with actual signed-in browser and native messaging separately; native Telegram transport is not tested or guaranteed by the web card. Re-test YouTube video, Discord gateway/voice, multiple Russian ISPs, IPv4/IPv6 and UDP/QUIC. All such provider outcomes remain unverified unless performed on those networks.

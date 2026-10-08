@@ -11,17 +11,6 @@ namespace Northpass.Desktop;
 public sealed class DesktopServices : IDesktopServices
 {
     private static Window Owner => System.Windows.Application.Current.MainWindow;
-    public string? PickEngine(EngineDescriptor descriptor)
-    {
-        var dialog = new OpenFileDialog { Title = "Select " + descriptor.Name,
-            Filter = $"{descriptor.ExecutableName}|{descriptor.ExecutableName}", CheckFileExists = true };
-        return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
-    }
-    public string? PickProfile()
-    {
-        var dialog = new OpenFileDialog { Title = "Import strategy", Filter = "JSON profiles|*.json", CheckFileExists = true };
-        return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
-    }
     public string? PickDataList()
     {
         var dialog = new OpenFileDialog { Title = "Northpass", Filter = "Data lists (*.txt)|*.txt", CheckFileExists = true };
@@ -33,12 +22,6 @@ public sealed class DesktopServices : IDesktopServices
         return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
     }
     public bool ConfirmTrust(string message) => ProductDialog.Show(Owner, (Owner.DataContext as MainViewModel)?.Strings ?? new UiStrings("en"), message);
-    public StrategyProfile? EditProfile(ProfileStore store, StrategyProfile? original)
-    {
-        var model = new ProfileEditorViewModel(store, original);
-        var window = new ProfileEditorWindow(model) { Owner = Owner };
-        return window.ShowDialog() == true ? model.SavedProfile : null;
-    }
     public async Task SetAutoStartAsync(bool enabled)
     {
         string executable = Environment.ProcessPath ?? throw new InvalidOperationException("Cannot determine the app executable.");

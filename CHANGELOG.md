@@ -1,3 +1,12 @@
+# Northpass v0.6
+
+- Removes the old adapter/catalog/profiles/payload and all executable/engine switching UI. Retains one reviewed offline Flowseal-derived module with protected lifecycle and replaceable interfaces.
+- Moves localized strategy selection to Home, with status, Connect/Disconnect and three service cards.
+- Adds automatic YouTube/Discord/Telegram web checks, honest Available/Limited/Unavailable/Unknown classification, stale-result cancellation, detailed local logs and no manual URL entry.
+- Rebrands About around Northpass/support/updates with a separate legal/source section; preserves required full notices and sources.
+- Adds an original monochrome route logo and seven-size app/tray/installer icon.
+- Preserves valid existing Flowseal selection/preferences, safely migrates unsupported selections and narrows in-place cleanup to old product files.
+
 # Northpass v0.5
 
 - Reviewed pinned Flowseal 1.10.3 / winws v72.9 adapter, five typed strategies, offline verified payload and corresponding sources/licences. No BAT execution or global network/security changes.

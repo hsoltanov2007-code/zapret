@@ -1,37 +1,37 @@
-# Northpass 0.5
+# Northpass 0.6
 
-Northpass is a Windows 10/11 x64 desktop application with a dark interface and automatic internal component preparation.
+Northpass is a Windows 10/11 x64 desktop application with a premium black interface, reviewed offline components and EN/RU/AZ localization.
 
-Download **Northpass-0.5.0-win-x64-setup.exe**, install, launch, then click **Connect**. This single installer includes the self-contained .NET application, reviewed network components, licences and corresponding third-party sources. No engine download, file selection or archive extraction is required. Windows may ask for administrator approval; Northpass never disables Windows security.
+Install **Northpass-0.6.0-win-x64-setup.exe**, launch, choose an included strategy on Home, and click **Connect**. This one installer includes the self-contained .NET runtime, network module, licences and corresponding third-party sources. No component download or file selection is needed. Windows may request administrator approval; Northpass never disables Windows security.
 
-On first launch, Northpass verifies and prepares the included components. Later launches verify and reuse them. Home shows preparation and connection state without implementation details. Settings includes **Repair installation** and an optional **Show advanced tools** switch. Diagnostics retains detailed errors and logs; About provides full licences, notices and source-package access. EN/RU/AZ cover the consumer interface and custom confirmation dialogs.
+Home shows status, the selected strategy, Connect / Disconnect and a quick view of YouTube, Discord and Telegram web access. Built-in DNS, TCP, authenticated TLS and HTTPS checks run automatically after initial preparation and connection changes; **Check again** refreshes them. They do not block Connect. Changing a strategy requires disconnection and clears old diagnostic results. Detailed stage outcomes, addresses and logs are available in Diagnostics → Details & local logs. No URL entry is required.
 
-**Connection started means the owned network process is running, not that blocked websites are accessible.** Home states that access is unverified. Diagnostics separates YouTube/Discord DNS, TCP, TLS and HTTPS outcomes. QUIC, STUN, media playback, login, gateway and voice remain untested. Advanced tools offer manual reviewed-strategy selection, data-only list imports and guided tests with local evidence; no automatic strategy swapping occurs. The included configuration is available automatically, but effectiveness varies by provider; automatic provider-specific strategy discovery is not implemented.
+**Available means the checked website passed all four stages, not that video, calls, messaging or a DPI bypass works.** Limited means partial web access; Unavailable means DNS/TCP failed; Unknown means no current evidence. A running process alone never changes a service card to Available. Telegram checks its web endpoint, not its native client protocol. Other IP families, media/CDN, login/gateway, QUIC/STUN and voice still require real-world testing.
+
+Settings keeps advanced tools off by default. About focuses on Northpass, support and optional application updates; full attribution, licences and source access are separate under **Licenses & legal**. The original route logo is in `branding/` and appears in the title, About, app/tray and installer icons.
+
+## One reviewed engine
+
+v0.6 removes the old Zapret2 adapter, catalog, bundled profiles, installer payload, executable picker and engine switching. Only the pinned Flowseal-derived Zapret1 module is registered. Five reviewed typed strategies preserve argument ordering, repeated options and YouTube/Discord/voice filters without running BAT files or upstream service scripts. The protected install, integrity verification, safe extraction, data-list snapshots, repair/rollback and owned-child lifecycle remain intact. `IDpiEngine` and installer/data interfaces remain replaceable internally.
+
+Valid Flowseal selections/preferences survive upgrades. Unsupported old selections migrate to the included starter while existing user files are retained. The installer removes only known legacy product files from an in-place app upgrade; it does not terminate external programs or delete protected shared drivers. Read [v0.6 behavior and migration](docs/PRODUCT_V0.6.md), [reviewed input](docs/FLOWSEAL_REVIEW.md), [architecture](docs/ARCHITECTURE.md) and [security](docs/ENGINE_INSTALLATION.md).
 
 ## Development and builds
 
-Use .NET SDK 8.0.425. On Windows, install Python 3.10+ and Inno Setup 6.3+:
+Use .NET SDK 8.0.425, Python 3.10+ and Inno Setup 6.3+ on Windows:
 
 ```powershell
-# Administrator PowerShell for development/runtime integration checks
+# Administrator PowerShell for actual Windows integration
 ./scripts/test.ps1
 ./scripts/run-dev.ps1
 ./scripts/build.ps1 -Installer
 ./scripts/test-installer.ps1
 ```
 
-The build produces `dist/Northpass/` and the single installer in `dist/installer/`. GitHub Actions uploads the installer separately as **Northpass-0.5.0-installer**, the application folder as **Northpass-win-x64**, and Windows results including EN/RU/AZ screenshots. GitHub wraps CI artifacts in ZIP containers; the installer artifact contains one EXE. Release signing and a public release download are separate publishing steps. CI does not publish or merge automatically.
+Output: `dist/Northpass/` and `dist/installer/Northpass-0.6.0-win-x64-setup.exe`. GitHub Actions uploads the app, **Northpass-0.6.0-installer**, and Windows evidence/EN/RU/AZ Home/About screenshots. GitHub wraps artifacts in ZIPs; the installer artifact contains one EXE. Installed runtime files are ordinary protected files, not a promised single-file runtime. CI does not merge or publish releases automatically.
 
-For Linux cloud development, run `bash scripts/setup-cloud.sh`, activate `/workspace/.northpass-tools/env.sh`, and use the portable test suite. Linux cross-compilation cannot validate WPF, Windows elevation, drivers or the installer. See [development instructions](docs/DEVELOPMENT.md) and [Windows acceptance](docs/WINDOWS_ACCEPTANCE.md).
+Linux cloud development: `bash scripts/setup-cloud.sh`, `source /workspace/.northpass-tools/env.sh`, then run portable tests and cross-compile. Linux cannot run WPF, Windows drivers, ACL/elevation or installer acceptance. See [development instructions](docs/DEVELOPMENT.md).
 
-## Internal architecture and security
+The whole application currently runs elevated; development artifacts are unsigned unless release signing is explicitly configured. Website/controller outcomes in unit/UI tests are labelled fixtures. Windows integration runs the real reviewed PE for version/parser and a no-traffic driver session, and actually executes the installer and published bootstrap/uninstaller. These do not certify Russian ISP bypass or clean consumer-machine/UAC compatibility. Follow [Windows/ISP acceptance](docs/WINDOWS_ACCEPTANCE.md).
 
-`IDpiEngine`, its registry and `IEngineInstallationManager` remain replaceable. New installs use **Flowseal/zapret-discord-youtube 1.10.3**, pinned at `865da4f4c3659523bf79bc6edf0446e7d7969614`, through an independent Zapret1 adapter (`winws.exe` v72.9). Five immutable typed strategies cover the reviewed YouTube, Discord and Discord voice filters; Northpass never executes upstream BAT files or service scripts. Valid existing selections/preferences survive upgrades. The previous Zapret2 adapter remains available in Advanced.
-
-Both modules and their sources/notices are bundled. Build-time acquisition verifies pinned archives/components, statically compares typed definitions against reviewed strategy bytes, and generates deterministic payloads. The installed application requires these offline payloads; missing or modified bytes fail closed. See [Flowseal provenance and strategy review](docs/FLOWSEAL_REVIEW.md). The installer is one EXE; its protected installed application has normal runtime files and is not promised to be a literal single-file runtime.
-
-Installed components live in protected Program Files, with verified hashes, owners and explicit ACLs, safe extraction and rejection of links/extra DLLs. Every launch/recovery validates configuration, acquires immutable-file leases, probes the actual version/parser and owns the child until termination. Updates/rollback remain limited to compiled reviewed manifests; the present catalog has one revision and therefore no invented update or rollback target. [Installation security](docs/ENGINE_INSTALLATION.md) describes the trust boundary and [architecture](docs/ARCHITECTURE.md) explains the replacement interfaces.
-
-The whole app currently runs elevated. Artifacts are unsigned development builds. CI exercises real Windows rendering, component/version/parser checks, no-traffic driver initialization, silent installer execution and published bootstrap/reuse/failure/uninstall. It does not prove ISP bypass, normal-user UAC interaction, interactive tray/autostart behavior or clean consumer-machine compatibility. Installed engine revisions and user preferences remain on uninstall so shared loaded drivers and user data are not deleted.
-
-Full third-party terms and copyright notices are retained in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), `docs/licenses/`, and About → Licenses. Offline distribution includes corresponding sources and exact self-contained runtime notices. The starter ZIP is preserved. No Northpass source licence has been invented; the owner must select one before a public source release.
+Full legal terms are retained in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and About → Licenses & legal. No licence has been invented for original Northpass code; the owner must select one before a public source release. Historical source/licence records remain in Git; unused legacy components are excluded from the v0.6 product.

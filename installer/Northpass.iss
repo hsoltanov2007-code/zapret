@@ -1,5 +1,5 @@
 ; Compile with Inno Setup 6 after scripts/build.ps1. Reviewed offline engine payload is bundled.
-#define AppVersion "0.5.0"
+#define AppVersion "0.6.0"
 [Setup]
 AppId={{292E32E3-4A84-4F03-B41E-64F5B3C05E96}
 AppName=Northpass
@@ -22,6 +22,13 @@ DisableProgramGroupPage=yes
 DisableDirPage=yes
 WizardStyle=modern
 SetupLogging=yes
+[InstallDelete]
+; Narrow known v0.5 product files only. Keep user preferences and old protected drivers untouched.
+Type: files; Name: "{app}\Northpass.Engine.Zapret2.dll"
+Type: files; Name: "{app}\engine-payload\zapret2-offline.zip"
+Type: files; Name: "{app}\profiles\zapret2-reviewed-example.json"
+Type: files; Name: "{app}\profiles\example-template.json"
+Type: files; Name: "{app}\docs\third-party-source\zapret2-1.0.5.2-source.zip"
 [Files]
 Source: "..\dist\Northpass\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
