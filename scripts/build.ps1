@@ -21,7 +21,7 @@ try {
     $project = Join-Path $root 'src\Northpass.App\Northpass.App.csproj'
     $output = Join-Path $root 'dist\Northpass'
     if (Test-Path $output) { Remove-Item $output -Recurse -Force }
-    Write-Host 'Publishing Northpass 0.5 for Windows x64...'
+    Write-Host 'Publishing Northpass 0.6 for Windows x64...'
     dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
     Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'CHANGELOG.md') $output -Force
@@ -62,8 +62,8 @@ try {
         if (!(Test-Path $iscc)) { throw 'Install Inno Setup 6 from https://jrsoftware.org/isinfo.php, then rerun with -Installer.' }
         & $iscc (Join-Path $root 'installer\Northpass.iss')
         if ($LASTEXITCODE -ne 0) { throw "Installer build failed: $LASTEXITCODE" }
-        Sign-NorthpassFile (Join-Path $root 'dist/installer/Northpass-0.5.0-win-x64-setup.exe')
+        Sign-NorthpassFile (Join-Path $root 'dist/installer/Northpass-0.6.0-win-x64-setup.exe')
     }
     Write-Host "Completed: $output\Northpass.exe"
-    Write-Host 'Reviewed Flowseal and optional Zapret2 offline payloads and third-party sources are bundled. Clean-machine Windows acceptance is required before release.'
+    Write-Host 'Reviewed Flowseal offline payload and third-party sources are bundled. Clean-machine Windows acceptance is required before release.'
 } finally { Pop-Location }

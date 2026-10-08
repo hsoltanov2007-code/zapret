@@ -1,4 +1,4 @@
-# Northpass v0.5 Flowseal review
+# Northpass Flowseal review (retained in v0.6)
 
 Review date: 2026-10-08. This records provenance and selected strategy translation, not a complete security audit of upstream native code or proof of effectiveness on an ISP.
 
@@ -30,7 +30,7 @@ The upstream disabled game-filter setting is **12** for TCP and UDP, preserved a
 
 ## Installation and lifecycle
 
-A separate Zapret1 adapter implements IDpiEngine; the engine-neutral controller, installer contracts and future native adapter remain intact. New installs choose `flowseal-general`; upgrades keep existing selected profiles (including valid Zapret2 configurations). Both reviewed payloads are in the one-file installer. Each engine has its own Program Files root and embedded catalog. Missing bundled bytes fail closed without a download fallback. Optional updates/rollback accept only reviewed embedded manifests; no previous Flowseal revision is invented.
+A separate Zapret1 adapter implements IDpiEngine; the engine-neutral controller, installer contracts and future native adapter remain intact. New installs choose `flowseal-general`; v0.6 retains valid Flowseal profiles, and migrates unsupported old selections while preserving their files/preferences. Only the Flowseal payload is bundled; the old adapter/catalog/payload is removed. The module has a protected Program Files root and embedded catalog. Missing bundled bytes fail closed without a download fallback. Optional updates/rollback accept only reviewed embedded manifests; no previous Flowseal revision is invented.
 
 Before capture, detect any external winws/winws2 process and instruct the user to close it through its own controls. No collision process is killed. Recheck immediately before launch; a cross-product process can still race this check, so the native driver's duplicate-filter checks stay enabled. Only Northpass's owned child is stopped.
 
@@ -38,8 +38,8 @@ User text lists are UTF-8 .txt only, bounded to 1 MiB/20,000 entries, with domai
 
 ## Evidence and limits
 
-Portable tests use explicit fixtures for website outcomes and controller timing. Windows CI uses the actual reviewed PE for version and all five parser probes and the actual WinDivert lifecycle with `filter=false`; that filter captures no traffic. The installed published app is checked for offline preparation, all 36 components across both modules, reuse, missing-component rejection, restoration and actual silent uninstall. WPF checks render EN/RU/AZ and verify the main flow has no engine terminology. CI output must distinguish driver initialization from a security-policy block.
+Portable tests use explicit fixtures for website outcomes and controller timing. Windows CI uses the actual reviewed PE for version and all five parser probes and the actual WinDivert lifecycle with `filter=false`; that filter captures no traffic. The installed published app is checked for offline preparation, all 18 Flowseal components, reuse, missing-component rejection, restoration and actual silent uninstall. WPF checks render EN/RU/AZ and verify the main flow has no engine terminology. CI output must distinguish driver initialization from a security-policy block.
 
 Guided testing stops the prior session, tests one manually selected configuration without recovery/automatic strategy swapping, records provider label, reviewed strategy/revision, engine state, stage results and bounded logs, then disconnects even on error/cancellation. Records are local, can contain hosts/paths/provider labels, and must be reviewed before sharing. A user can separately record their own playback/voice observation; those fields are never automatic proof.
 
-YouTube/Discord checks use DNS, TCP 443, authenticated TLS and HTTP status on one resolved address; other IP families, streaming/login/WebSocket gateway, QUIC, STUN and two-way voice remain Unknown. A successful website probe or running engine does not imply a successful DPI bypass. See WINDOWS_ACCEPTANCE.md for real Russian ISP checks. Signing, real normal-user UAC, clean-machine behavior and ISP verification are release acceptance work, not implied by portable tests.
+YouTube/Discord/Telegram web checks use DNS, TCP 443, authenticated TLS and HTTP status on one resolved address; other IP families, streaming/login/WebSocket gateway, QUIC, STUN and two-way voice remain Unknown. A successful website probe or running engine does not imply a successful DPI bypass. See WINDOWS_ACCEPTANCE.md for real Russian ISP checks. Signing, real normal-user UAC, clean-machine behavior and ISP verification are release acceptance work, not implied by portable tests.

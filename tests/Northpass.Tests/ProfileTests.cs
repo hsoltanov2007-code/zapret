@@ -56,7 +56,7 @@ public sealed class ProfileTests
     {
         var profile = ProfileValidation.Parse("{\"Id\":\"safe\",\"Name\":\"Safe\",\"ExecutablePath\":\"cmd.exe\",\"SourcePath\":\"outside.json\",\"Arguments\":[]}");
         Assert.Equal("", profile.SourcePath);
-        Assert.Equal("zapret2", profile.Engine);
+        Assert.Equal("zapret1", profile.Engine);
     }
     [Fact]
     public void DuplicateIdInDifferentlyNamedFileCannotBeImported()
@@ -90,7 +90,7 @@ public sealed class ProfileTests
     {
         using var temporary = new TemporaryDirectory();
         var store = new SettingsStore(temporary.Path);
-        store.Save(new() { SelectedProfileId = "test", Language = "az", EnginePath = "C:\\engine\\winws2.exe", AutoRecover = true });
+        store.Save(new() { SelectedProfileId = "test", Language = "az", EnginePath = "C:\\engine\\winws.exe", AutoRecover = true });
         var loaded = store.Load();
         Assert.Equal("test", loaded.SelectedProfileId); Assert.Equal("az", loaded.Language); Assert.True(loaded.AutoRecover);
         string path = System.IO.Path.Combine(temporary.Path, "settings.json");

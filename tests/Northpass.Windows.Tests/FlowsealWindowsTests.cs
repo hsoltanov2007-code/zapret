@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using Northpass.Desktop;
 using Northpass.Engine.Zapret1;
 using Northpass.Engine;
@@ -67,6 +69,16 @@ public sealed class FlowsealWindowsTests
                 Assert.Contains("command line parameters verified", text);
             }
             Assert.Empty(Directory.GetDirectories(dataRoot));
+            var runtime = new FileInfo(Path.Combine(root, manifest.Revision, "bin/cygwin1.dll"));
+            var unsafeAcl = runtime.GetAccessControl();
+            unsafeAcl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Write, AccessControlType.Allow));
+            runtime.SetAccessControl(unsafeAcl);
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => manager.DetectAsync());
+            security.ProtectFile(runtime.FullName);
+            string extra = Path.Combine(runtime.DirectoryName!, "ole32.dll");
+            File.Copy(runtime.FullName, extra); security.ProtectFile(extra);
+            await Assert.ThrowsAsync<InvalidDataException>(() => manager.DetectAsync()); File.Delete(extra);
+            Assert.Equal(installed, await manager.DetectAsync());
             Evidence(repo, "engine-flowseal-parser", "Real reviewed winws.exe v72.9 source c849e55 from Flowseal 865da4f installed/reused offline. All five typed strategies passed the actual Windows PE parser with all reviewed rules/files. Protected ACLs, component hashes and data-file locks passed. No ISP, QUIC, STUN or voice check was performed.");
             var logs = new ConcurrentQueue<string>();
             await using var engine = new Zapret1Engine(manager, provider, noTrafficCapture: true);

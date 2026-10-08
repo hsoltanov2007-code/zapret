@@ -1,44 +1,28 @@
-# Northpass v0.5 architecture
+# Northpass v0.6 architecture
 
-The v0.1 starter was a single `net8.0-windows` WPF project with synchronous `IEngineAdapter` calls and engine-specific code in `MainWindow.xaml.cs`. v0.2 preserves its WPF/.NET/JSON design, profile schema and administrator manifest while replacing that coupling with asynchronous engine-independent services.
+Northpass.App composes one reviewed Flowseal-derived Zapret1 adapter and installer. The view model has no executable picker, engine selection or raw-URL diagnostic flow. Only reviewed canonical profiles reach Home. The product layer references the compiled catalog; the controller, registry, installation/data APIs and process supervisor remain engine independent for a future replacement.
 
 ```mermaid
 flowchart TD
-  App[Northpass.App composition root] --> VM[MVVM view models]
-  App --> Registry[EngineRegistry factory registration]
-  VM --> Services[EngineController / profile and settings services]
-  Services --> API[IDpiEngine]
-  Registry --> Zapret[Zapret2Engine]
-  API --> Zapret
-  Zapret --> Process[ProcessSupervisor]
-  Process --> External[External winws2 process]
-  VM --> InstallAPI[IEngineInstallationManager]
-  InstallAPI --> Installer[Verified EngineInstallationManager]
-  Installer --> ACL[WindowsInstallationSecurity]
-  Installer --> Catalog[Embedded reviewed catalog / pinned source archive]
-  Zapret --> InstallAPI
-  Native[Future C++ adapter: not registered] -.-> API
+  App[Northpass composition] --> VM[Home / Diagnostics / Settings / About]
+  VM --> Controller[EngineController]
+  Controller --> API[IDpiEngine]
+  API --> Adapter[Reviewed Flowseal adapter]
+  Adapter --> Process[Owned ProcessSupervisor]
+  Adapter --> Install[IEngineInstallationManager]
+  Install --> Verify[Hashes / safe extraction / Windows ACLs / file leases]
+  Adapter --> Data[IEngineDataProvider protected snapshots]
+  VM --> Probes[Built-in service probes]
+  Probes --> Cards[Independent web outcomes]
+  Future[Future native adapter] -.-> API
 ```
 
-`IDpiEngine` exposes `StartAsync`, `StopAsync`, `RestartAsync`, `GetStatusAsync`, and `ValidateConfigurationAsync`, with cancellation, log/status events and async disposal. Register a new factory in `App.xaml.cs` and implement the same contract to replace Zapret2. `EngineController` accepts the registry through constructor injection; the UI never instantiates an engine. A native implementation should encapsulate P/Invoke/IPC internally.
+IDpiEngine exposes asynchronous start/stop/restart/status/validation and log/status events. The controller copies profiles, serializes lifecycle, stops only owned children and limits optional recovery to three attempts. The adapter accepts compiled ordered strategy arguments, typed numeric ports and validated data-only list bindings. Full PE/version/parser and protected-file checks precede capture. No BAT execution, external-code imports, global network/security mutation or external process killing occurs.
 
-`ProcessSupervisor` serializes lifecycle transitions, owns one process, uses `ProcessStartInfo.ArgumentList` without a shell, drains both output streams, catches immediate startup exit and reports subsequent exit codes. Stop kills the owned process tree and waits up to five seconds. A failed stop retains ownership so it can be retried; the app remains open if cleanup fails. Restart cannot overlap another start. A status monitor observes real process liveness. This does not validate packet interception or successful bypass.
+IEngineInstallationManager preserves pinned offline acquisition, sealed Program Files roots, cross-process locks, safe extraction, per-file integrity verification, transactional activation, explicit repair and reviewed-manifest update/rollback. IEngineDataProvider leases verified per-session snapshots until the owned child terminates. Process collisions fail with guidance. A shared loaded signed driver may remain until Windows unloads it; Northpass never deletes its global service.
 
-`Zapret2Engine` verifies Windows x64 before starting, checks file/profile configuration, logs the actual binary's `--version`, performs documented `--dry-run`, then launches interception. Probes and interception operations are serialized. The option-name/arity table is reviewed metadata for a pinned upstream revision; unknown/abbreviated options are rejected. The actual engine parser still decides validity of option values. Profiles cannot select an executable, run a shell or configure detached operation. Managed Lua must come from the verified protected installation. Bundled component preparation is automatic as part of installing Northpass; imported strategies still need review. File leases and the installation lock remain owned until the child stops.
+MainViewModel presents localized strategy choices and service cards, separates busy connection operations from cancellable tracked diagnostics, and discards stale generations after strategy/session changes. Status events fetch the controller’s current state rather than applying stale queued notifications. Shutdown awaits cancellation/owned cleanup. Profile migration preserves user files and preferences while excluding unsupported engine IDs/changed argument arrays. Unreadable settings remain intact.
 
-`EngineController` copies the profile before launch so edits cannot mutate a live configuration. The UI requires disconnection before changing profiles. Recovery uses the copied configuration, a two-second delay and a budget of three attempts for the session. Explicit disconnect/exit cancels recovery. There is no automatic strategy search.
+ServiceProbeService concurrently checks three fixed web endpoints with bounded DNS/TCP/authenticated TLS/HTTP stages. ServiceAvailabilityPolicy classifies web evidence only. QUIC/STUN/playback/login/gateway/voice/native Telegram messaging remain Unknown. Both Home and Diagnostics state this scope; detailed data/logs are collapsed. StrategyTestRunner remains explicit/manual, disconnects before and after each test and records local provider/revision/input evidence. No automatic strategy swapping or universal effectiveness is implied.
 
-`ProfileStore` reads every JSON file independently, reports malformed and duplicate profiles, rejects unsafe IDs and protects existing imports. Writes replace files atomically. Relative engine references resolve against the engine working directory; placeholders resolve against the engine or saved profile directory. Import/export does not copy assets. Bundled profiles seed the writable user directory without replacing existing files. Unreadable settings are preserved and exposed as errors rather than silently overwritten.
-
-`MainViewModel` contains commands, page data, busy state and session/diagnostic display. It receives services through its constructor and marshals background events through the WPF dispatcher. `MainWindow` code behind handles only window/tray lifetime and log scrolling. The application uses a per-user mutex to avoid multiple UI instances; Zapret2's own duplicate-filter check is kept enabled.
-
-Diagnostics performs an explicitly requested HTTPS GET, preserves TLS validation, does not follow redirects, has a ten-second timeout, and reports the HTTP response independently from engine status. Application update checking is opt-in metadata retrieval. Production engine setup requires the bundled verified offline payload, without download fallback; optional engine updates are restricted to the embedded catalog. Build-time acquisition uses pinned SHA-256-verified Git archives. Neither feature transmits credentials or telemetry. Locally exported logs can contain file paths, engine output and tested hosts; review before sharing.
-
-The entire UI is elevated as in the starter because the external WinDivert engine requires it. A separate least-privilege Windows service/IPC design is future work. No native adapter, universal strategy or auto-selection success is simulated. The installation contract does not change IDpiEngine and a future native engine can provide its own installer or no installation service. See ENGINE_INSTALLATION.md for transactions and threat boundaries.
-
-The v0.4 presentation separates localized consumer messages from raw diagnostic output. Advanced tools are optional, legal notices live in About, and ProductDialog uses WPF modal ownership/focus. See PRODUCT_V0.4.md.
-
-
-v0.5 adds independent `Northpass.Engine.Zapret1`, a compiled immutable FlowsealCatalog, typed port/list inputs and `IEngineDataProvider` leases. The composition root registers both reviewed modules and chooses a manager by selected engine. Existing engine-neutral APIs remain unchanged. Flowseal accepts only canonical arguments compiled from reviewed definitions; the app cannot execute BAT files. DataListStore validates data-only imports, and ProtectedEngineDataProvider prepares sealed snapshots without modifying the bundle.
-
-ServiceProbeService and StrategyTestRunner are engine independent. DNS/TCP/TLS/HTTPS outcomes and process states are separate records; UDP/QUIC/STUN/playback/voice remain Unknown. Guided testing always stops the old session and the tested session, has bounded logs/local JSON evidence, and never automatically rotates strategies. The current probe targets are YouTube and Discord, with no credentials/cookies/redirects or global network changes. Process collisions fail closed rather than killing another engine. See FLOWSEAL_REVIEW.md.
+The entire app currently requests elevation as before; a privileged broker with an unelevated UI remains future work. The offline installer contains normal protected runtime files, licences and corresponding source packages. Release signing is optional and requires real credentials. See PRODUCT_V0.6.md, FLOWSEAL_REVIEW.md and WINDOWS_ACCEPTANCE.md for detailed behavior and acceptance limits.

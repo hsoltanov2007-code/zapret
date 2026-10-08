@@ -11,17 +11,19 @@ namespace Northpass.ViewModels;
 public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly EngineController _controller;
-    private readonly EngineRegistry _registry;
     private readonly SettingsStore _settingsStore;
     private readonly ProfileStore _profileStore;
-    private readonly DiagnosticsService _diagnostics;
     private readonly UpdateChecker _updates;
     private readonly IDesktopServices _desktop;
     private readonly Dispatcher _dispatcher;
-    private readonly Dictionary<string, IEngineInstallationManager> _installations = new(StringComparer.OrdinalIgnoreCase);
-    private IEngineInstallationManager? _installation => _installations.GetValueOrDefault(SelectedProfile?.Engine ?? "");
+    private readonly IEngineInstallationManager _installation;
+    private CancellationTokenSource? _diagnosticsCancellation;
+    private Task? _diagnosticsTask;
+    private long _diagnosticsEpoch;
+    private bool _diagnosticsRunning;
+    private string _appUpdateKey = "UpdateInfo";
     private readonly DataListStore? _dataLists;
-    private readonly ServiceProbeService? _serviceProbes;
+    private readonly ServiceProbeService _serviceProbes;
     private readonly StrategyTestRecordStore? _testRecords;
     private CancellationTokenSource? _testCancellation;
     private Task? _testTask;
@@ -38,31 +40,31 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private bool _loading = true, _settingsReadable = true, _busy, _refreshing, _disposed, _shuttingDown;
     private bool _appliedAutoStart;
     private StrategyProfile? _selectedProfile;
-    private string _enginePath = "", _language = "en", _url = "https://example.com/", _result = "", _log = "";
+    private string _enginePath = "", _language = "en", _result = "", _log = "";
     private bool _tray = true, _autoStart, _recover, _checkUpdates;
     private EngineStatus _status = new(EngineState.Disconnected);
-    private ReachabilityResult? _reachability;
     private int _pageIndex;
     private bool _showAdvanced, _hasStartedSession;
     private string _messageKey = "Welcome";
     private readonly List<AsyncRelayCommand> _commands = new();
 
-    public MainViewModel(EngineController controller, EngineRegistry registry, SettingsStore settingsStore,
-        ProfileStore profileStore, DiagnosticsService diagnostics, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher, IEngineInstallationManager? installation = null,
-        IEnumerable<IEngineInstallationManager>? additionalInstallations = null, DataListStore? dataLists = null,
-        ServiceProbeService? serviceProbes = null, StrategyTestRecordStore? testRecords = null)
+    public MainViewModel(EngineController controller, SettingsStore settingsStore,
+        ProfileStore profileStore, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher,
+        IEngineInstallationManager installation, ServiceProbeService serviceProbes, DataListStore? dataLists = null,
+        StrategyTestRecordStore? testRecords = null)
     {
-        (_controller, _registry, _settingsStore, _profileStore, _diagnostics, _updates, _desktop, _dispatcher) =
-            (controller, registry, settingsStore, profileStore, diagnostics, updates, desktop, dispatcher);
-        if (installation is not null) _installations.Add(installation.EngineId, installation);
-        foreach (var manager in additionalInstallations ?? []) _installations.Add(manager.EngineId, manager);
-        (_dataLists, _serviceProbes, _testRecords) = (dataLists, serviceProbes, testRecords);
-        ImportListCommand = Command(ImportListAsync, () => CanConfigure && FlowsealSelected && _dataLists is not null);
-        SaveInputsCommand = Command(SaveInputsAsync, () => CanConfigure && FlowsealSelected);
-        ServiceProbesCommand = Command(ServiceProbesAsync, () => _serviceProbes is not null);
+        if (installation.EngineId != "zapret1") throw new ArgumentException("The product requires its reviewed network module.");
+        (_controller, _settingsStore, _profileStore, _updates, _desktop, _dispatcher, _installation, _serviceProbes) =
+            (controller, settingsStore, profileStore, updates, desktop, dispatcher, installation, serviceProbes);
+        (_dataLists, _testRecords) = (dataLists, testRecords);
+        foreach (var target in ServiceProbeService.Targets) ServiceCards.Add(new(target, Language));
+        ImportListCommand = Command(ImportListAsync, () => CanConfigure && _dataLists is not null);
+        SaveInputsCommand = Command(SaveInputsAsync, () => CanConfigure);
+        ServiceProbesCommand = new(RefreshServiceDiagnosticsAsync, ex => Fail(ex), () => !_disposed && !_shuttingDown && !DiagnosticsRunning && !Busy);
+        OpenDiagnosticsCommand = new(() => PageIndex = 2);
         TestStrategyCommand = Command(TestStrategyAsync, () => SelectedProfile is not null && _serviceProbes is not null && _testRecords is not null);
-        NextStrategyCommand = Command(NextStrategyAsync, () => SelectedProfile is not null);
         CancelTestCommand = new(() => _testCancellation?.Cancel(), () => _testCancellation is not null);
+        NextStrategyCommand = Command(NextStrategyAsync, () => SelectedProfile is not null);
         ReportPlaybackPassedCommand = Command(() => ReportManualOutcome(true, ProbeState.Passed), () => _lastTest is not null);
         ReportPlaybackFailedCommand = Command(() => ReportManualOutcome(true, ProbeState.Failed), () => _lastTest is not null);
         ReportVoicePassedCommand = Command(() => ReportManualOutcome(false, ProbeState.Passed), () => _lastTest is not null);
@@ -74,14 +76,9 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _controller.LogReceived += EngineLog;
         _controller.StatusChanged += EngineStatusChanged;
         ConnectCommand = Command(ToggleAsync, () => SelectedProfile is not null);
-        BrowseCommand = Command(() => { EnginePath = _desktop.PickEngine(_registry.Find(SelectedProfile?.Engine ?? "") ?? _registry.Available.First()) ?? EnginePath; return Task.CompletedTask; }, () => CanConfigure && !ManagedEngine);
         ValidateCommand = Command(ValidateAsync, () => SelectedProfile is not null);
         RefreshProfilesCommand = Command(() => { ReloadProfiles(); return Task.CompletedTask; }, () => CanConfigure);
-        NewProfileCommand = Command(() => EditProfile(null), () => CanConfigure);
-        EditProfileCommand = Command(() => EditProfile(SelectedProfile), () => CanConfigure && SelectedProfile is not null);
-        ImportCommand = Command(ImportAsync, () => CanConfigure);
         ExportCommand = Command(ExportAsync, () => SelectedProfile is not null);
-        TestCommand = Command(TestAsync);
         SaveSettingsCommand = Command(SaveSettingsAsync, () => CanConfigure);
         CheckUpdatesCommand = Command(CheckUpdatesAsync);
         ExportLogsCommand = Command(ExportLogsAsync);
@@ -110,7 +107,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         set { if (Set(ref _showAdvanced, value) && !value && PageIndex == 1) PageIndex = 0; }
     }
     public string UserMessage => Strings[_messageKey];
-    public bool Preparing => _installation is not null && _setupPhase is not ("Ready" or "SetupFailed");
+    public bool Preparing => _setupPhase is not ("Ready" or "SetupFailed");
     public string ConnectionNote => Strings[SessionOpen ? "ActiveNote" : "HomeNote"];
     public string ProfilesDirectory => _profileStore.DirectoryPath;
     public StrategyProfile? SelectedProfile
@@ -119,24 +116,20 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         set
         {
             if (SessionOpen && !_loading) throw new InvalidOperationException("Disconnect before selecting another strategy.");
-            string? previousEngine = _selectedProfile?.Engine;
             if (!Set(ref _selectedProfile, value)) return;
             _lastTest = null; ServiceResults = "";
-            if (!_loading && !string.Equals(previousEngine, value?.Engine, StringComparison.OrdinalIgnoreCase))
-            { EnginePath = ""; EngineRevision = ""; SetSetupPhase(_installation is null ? "Ready" : "SetupRequired"); }
+            InvalidateDiagnostics();
+            Changed(nameof(SelectedStrategy));
             GameTcpPorts = value?.GameTcpPorts ?? "12"; GameUdpPorts = value?.GameUdpPorts ?? "12";
             GeneralListId = value?.ListBindings?.GetValueOrDefault("general") ?? "";
             ExcludedHostsId = value?.ListBindings?.GetValueOrDefault("excluded-hosts") ?? "";
             ExcludedIpsId = value?.ListBindings?.GetValueOrDefault("excluded-ips") ?? "";
             AllIpsId = value?.ListBindings?.GetValueOrDefault("all-ips") ?? "";
-            Changed(nameof(FlowsealSelected));
-            Changed(nameof(CurrentEngine)); Changed(nameof(ProfileDescription)); Changed(nameof(ManagedEngine)); Changed(nameof(CanChooseEngine));
-            _reachability = null; Changed(nameof(Reachability));
+            Changed(nameof(ProfileDescription));
             if (!_loading) PersistSelection();
             RefreshCommands();
         }
     }
-    public bool FlowsealSelected => SelectedProfile?.Engine == "zapret1";
     public ObservableCollection<DataListEntry> HostLists { get; } = new();
     public ObservableCollection<DataListEntry> IpLists { get; } = new();
     public DataListKind[] ListKinds { get; } = [DataListKind.Hosts, DataListKind.IpSet];
@@ -159,9 +152,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public AsyncRelayCommand ReportPlaybackFailedCommand { get; }
     public AsyncRelayCommand ReportVoicePassedCommand { get; }
     public AsyncRelayCommand ReportVoiceFailedCommand { get; }
-    public string EnginePath { get => _enginePath; set => Set(ref _enginePath, value); }
-    public bool ManagedEngine => _installation is not null && string.Equals(SelectedProfile?.Engine, _installation.EngineId, StringComparison.OrdinalIgnoreCase);
-    public bool CanChooseEngine => CanConfigure && !ManagedEngine;
+    public string EnginePath { get => _enginePath; private set => Set(ref _enginePath, value); }
     public string EngineSetupText => Strings[_setupPhase];
     public double EngineSetupProgress { get => _setupProgress; private set => Set(ref _setupProgress, value); }
     public string EngineRevision { get => _engineRevision; private set => Set(ref _engineRevision, value); }
@@ -169,77 +160,60 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public AsyncRelayCommand RepairEngineCommand { get; }
     public AsyncRelayCommand UpdateEngineCommand { get; }
     public AsyncRelayCommand RollbackEngineCommand { get; }
-    public string DiagnosticUrl { get => _url; set => Set(ref _url, value); }
     public string Language
     {
         get => _language;
         set
         {
             if (!Set(ref _language, value)) return;
-            Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(Reachability)); Changed(nameof(UserMessage)); Changed(nameof(ConnectionNote));
+            foreach (var card in ServiceCards) card.Localize(value);
+            foreach (var choice in Strategies) choice.Localize(value);
+            Changed(nameof(AppUpdateText)); Changed(nameof(QuickDiagnostics));
+            Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(UserMessage)); Changed(nameof(ConnectionNote));
         }
     }
     public bool MinimizeToTray { get => _tray; set => Set(ref _tray, value); }
     public bool StartWithWindows { get => _autoStart; set => Set(ref _autoStart, value); }
     public bool AutoRecover { get => _recover; set => Set(ref _recover, value); }
     public bool CheckForUpdates { get => _checkUpdates; set => Set(ref _checkUpdates, value); }
-    public bool Busy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanConfigure)); Changed(nameof(CanChooseEngine)); Changed(nameof(StatusText)); RefreshCommands(); } } }
+    public bool Busy { get => _busy; private set { if (Set(ref _busy, value)) { Changed(nameof(CanConfigure)); Changed(nameof(StatusText)); RefreshCommands(); } } }
     public bool SessionOpen => _status.State is EngineState.Active or EngineState.Connecting or EngineState.Stopping || _status.ProcessId is not null;
     public bool CanConfigure => !SessionOpen && !Busy;
     public string ConnectText => Strings[SessionOpen ? "Disconnect" : "Connect"];
     public string StatusText => Preparing || _setupPhase == "SetupFailed" ? EngineSetupText : Strings[_status.State == EngineState.Disconnected && _setupPhase == "Ready" && !_hasStartedSession ? "Ready" : _status.State.ToString()];
     public string StatusColor => _status.State switch { EngineState.Active => "#9DC5B1", EngineState.Error => "#DC998D", EngineState.Connecting or EngineState.Stopping => "#D2BE8F", _ => "#949EAA" };
-    public string CurrentEngine => _registry.Find(SelectedProfile?.Engine ?? "")?.Name ?? "Unavailable";
     public string ProfileDescription => SelectedProfile?.Description ?? "Select or import a strategy.";
     public string SessionDuration => _status.State == EngineState.Active && _status.StartedAt is { } start
         ? (DateTimeOffset.UtcNow - start).ToString(@"hh\:mm\:ss") : "00:00:00";
-    public string Reachability => _reachability is null ? Strings["Unverified"] :
-        $"{Strings[_reachability.Reachable ? "Reachable" : "Unreachable"]} · {_reachability.Duration.TotalMilliseconds:F0} ms";
     public string ResultText { get => _result; private set => Set(ref _result, value); }
     public string LogText { get => _log; private set => Set(ref _log, value); }
     public AsyncRelayCommand ConnectCommand { get; }
-    public AsyncRelayCommand BrowseCommand { get; }
     public AsyncRelayCommand ValidateCommand { get; }
     public AsyncRelayCommand RefreshProfilesCommand { get; }
-    public AsyncRelayCommand NewProfileCommand { get; }
-    public AsyncRelayCommand EditProfileCommand { get; }
-    public AsyncRelayCommand ImportCommand { get; }
     public AsyncRelayCommand ExportCommand { get; }
-    public AsyncRelayCommand TestCommand { get; }
     public AsyncRelayCommand SaveSettingsCommand { get; }
     public AsyncRelayCommand CheckUpdatesCommand { get; }
     public AsyncRelayCommand ExportLogsCommand { get; }
     public RelayCommand ClearLogsCommand { get; }
 
-    public async Task InitializeAsync(string? discoveredEngine)
+    public async Task InitializeAsync()
     {
         Busy = true;
         try
         {
             try { _settings = _settingsStore.Load(); }
             catch (Exception ex) { _settingsReadable = false; Fail(new IOException("Settings are unreadable and will not be overwritten. Restore settings.json before saving. " + ex.Message)); }
-            EnginePath = string.IsNullOrWhiteSpace(_settings.EnginePath) ? discoveredEngine ?? "" : _settings.EnginePath;
             Language = Languages.Contains(_settings.Language) ? _settings.Language : "en";
-            DiagnosticUrl = _settings.DiagnosticUrl;
             MinimizeToTray = _settings.MinimizeToTray;
             StartWithWindows = _appliedAutoStart = _settings.StartWithWindows;
             AutoRecover = _settings.AutoRecover;
             CheckForUpdates = _settings.CheckForUpdates;
             ShowAdvancedTools = _settings.ShowAdvancedTools;
             _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
-            string starter = _registry.Find("zapret1") is not null ? FlowsealCatalog.StarterProfileId : "zapret2-reviewed-example";
-            ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? starter : null);
+            ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? FlowsealCatalog.StarterProfileId : null);
             ReloadLists();
-            // Preserve drafts as files, but do not make upgrades require JSON editing
-            // before the first connection. A valid custom selection is kept.
-            if (ManagedEngine && SelectedProfile?.Arguments.Count == 0 && Profiles.FirstOrDefault(p => p.Id == starter) is { } included)
-            {
-                Log("The selected profile was an empty draft; selected the included configuration without changing the draft.");
-                SelectedProfile = included;
-            }
             _loading = false;
-            Log("Northpass 0.5. Engine process state and website reachability are reported separately.");
-            if (_installation is not null)
+            Log("Northpass 0.6. Engine process state and website reachability are reported separately.");
             {
                 try
                 {
@@ -256,6 +230,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             }
         }
         finally { Busy = false; }
+        BeginDiagnostics();
     }
 
     private void ReloadProfiles(string? selectId = null)
@@ -264,8 +239,24 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         var result = _profileStore.Load();
         foreach (string error in result.Errors) Log("Profile error: " + error);
         Profiles.Clear();
-        foreach (var profile in result.Profiles) Profiles.Add(profile);
-        SelectedProfile = Profiles.FirstOrDefault(p => p.Id == id) ?? Profiles.FirstOrDefault();
+        Strategies.Clear();
+        foreach (var profile in result.Profiles)
+        {
+            var reviewed = FlowsealCatalog.Find(profile.StrategyId ?? "");
+            if (profile.Engine != "zapret1" || reviewed is null || !profile.Arguments.SequenceEqual(FlowsealCatalog.Templates(reviewed)))
+            { Log("Preserved an unsupported/modified profile without exposing it as a product strategy: " + profile.Id); continue; }
+            Profiles.Add(profile);
+        }
+        if (!Profiles.Any(p => p.StrategyId == "general"))
+        {
+            var starter = FlowsealCatalog.Profile(FlowsealCatalog.Find("general")!);
+            if (result.Profiles.Any(p => p.Id == starter.Id) || File.Exists(Path.Combine(_profileStore.DirectoryPath, starter.Id + ".json")))
+                starter.Id = "reviewed-general-" + Guid.NewGuid().ToString("N")[..8];
+            Profiles.Add(_profileStore.Save(starter));
+        }
+        foreach (var profile in Profiles.OrderBy(p => p.StrategyId == "general" ? 0 : 1).ThenBy(p => p.Id)) Strategies.Add(new(profile, Language));
+        SelectedProfile = Profiles.FirstOrDefault(p => p.Id == id) ?? Profiles.First(p => p.StrategyId == "general");
+        if (SelectedProfile.Id != id && !string.IsNullOrEmpty(id)) Log("Selection migrated to an included reviewed configuration; existing files/preferences were preserved.");
     }
 
     private EngineConfiguration Configuration() => new(EnginePath.Trim(),
@@ -273,10 +264,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     private async Task ToggleAsync()
     {
-        if (SessionOpen) { await _controller.DisconnectAsync(_lifetime.Token); return; }
+        await CancelDiagnosticsAsync();
+        if (SessionOpen) { await _controller.DisconnectAsync(_lifetime.Token); ApplyStatus(await _controller.GetStatusAsync(_lifetime.Token)); BeginDiagnostics(); return; }
         // End any pending crash recovery before preparing a manually requested session.
         await _controller.DisconnectAsync(_lifetime.Token);
-        if (ManagedEngine)
         {
             try { if (!await EnsureEngineAsync()) return; }
             catch (Exception ex) { Fail(ex, "InstallationFailed"); return; }
@@ -285,11 +276,9 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         var validation = await _controller.ValidateAsync(configuration, _lifetime.Token);
         ResultText = validation.Summary;
         if (!validation.IsValid) { Fail(new InvalidOperationException(validation.Summary), "ValidationFailed"); return; }
-        if (!ManagedEngine && !_desktop.ConfirmTrust("Start the selected executable and profile with administrator rights?\n\nUse only an official trusted engine bundle. Lua files are executable code and can access your computer. Imported profiles are not sandboxed.\n\n" + configuration.ExecutablePath + "\n" + configuration.Profile.SourcePath)) return;
         PersistSelection();
-        _reachability = null; Changed(nameof(Reachability));
         SetMessage("Welcome");
-        try { await _controller.ConnectAsync(configuration, AutoRecover, _lifetime.Token); }
+        try { await _controller.ConnectAsync(configuration, AutoRecover, _lifetime.Token); ApplyStatus(await _controller.GetStatusAsync(_lifetime.Token)); BeginDiagnostics(); }
         catch (Exception ex) { Fail(ex, "ConnectionFailed"); }
     }
 
@@ -307,7 +296,6 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private async Task<bool> EnsureEngineAsync()
     {
-        if (_installation is null) return true;
         // Installing the bundled module is part of installing Northpass. v0.3's separate
         // component consent remains in settings for backwards compatibility only.
         SetSetupPhase("Extracting");
@@ -328,7 +316,6 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private async Task UpdateEngineAsync()
     {
-        if (_installation is null) return;
         await _controller.DisconnectAsync(_lifetime.Token);
         var update = await _installation.CheckForUpdatesAsync(_lifetime.Token);
         ResultText = update.Detail;
@@ -339,7 +326,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private async Task RepairEngineAsync()
     {
-        if (_installation is null || !_desktop.ConfirmTrust(Strings["EngineRepairConsent"])) return;
+        if (!_desktop.ConfirmTrust(Strings["EngineRepairConsent"])) return;
         await _controller.DisconnectAsync(_lifetime.Token);
         var task = _installation.RepairAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
         try { ApplyInstalled(await task); }
@@ -348,7 +335,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private async Task RollbackEngineAsync()
     {
-        if (_installation is null || !_desktop.ConfirmTrust(Strings["EngineRollbackConsent"])) return;
+        if (!_desktop.ConfirmTrust(Strings["EngineRollbackConsent"])) return;
         await _controller.DisconnectAsync(_lifetime.Token);
         var task = _installation.RollbackAsync(_lifetime.Token); _setupTask = task;
         try { ApplyInstalled(await task); }
@@ -359,35 +346,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         ResultText = (await _controller.ValidateAsync(Configuration(), _lifetime.Token)).Summary;
         Log(ResultText);
     }
-    private Task EditProfile(StrategyProfile? original)
-    {
-        var profile = _desktop.EditProfile(_profileStore, original);
-        if (profile is not null) ReloadProfiles(profile.Id);
-        return Task.CompletedTask;
-    }
-    private Task ImportAsync()
-    {
-        string? file = _desktop.PickProfile();
-        if (file is null) return Task.CompletedTask;
-        if (!_desktop.ConfirmTrust("Import this profile? It will not run now. Review all arguments and referenced Lua files before connecting. Duplicate Ids will not overwrite existing profiles.")) return Task.CompletedTask;
-        var profile = _profileStore.Import(file);
-        ReloadProfiles(profile.Id);
-        Log("Profile imported. Copy referenced assets separately and verify their paths before connecting.");
-        return Task.CompletedTask;
-    }
     private Task ExportAsync()
     {
         var profile = SelectedProfile ?? throw new InvalidOperationException("No profile selected.");
         string? path = _desktop.PickExport(profile.Id, "json");
         if (path is not null) { _profileStore.Export(profile, path); Log("Profile exported: " + path); }
         return Task.CompletedTask;
-    }
-    private async Task TestAsync()
-    {
-        _reachability = await _diagnostics.TestAsync(DiagnosticUrl, _lifetime.Token);
-        Changed(nameof(Reachability));
-        ResultText = $"{_reachability.Url} · {Reachability}\n{_reachability.Detail}";
-        Log(ResultText);
     }
     private void ReloadLists()
     {
@@ -424,14 +388,9 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private string FormatServices(IReadOnlyList<ServiceProbeResult> results) => string.Join("\n\n", results.Select(r =>
         $"{r.Name} · DNS: {Strings[r.Dns.State.ToString()]} · TCP: {Strings[r.Tcp.State.ToString()]} · TLS: {Strings[r.Tls.State.ToString()]} · HTTPS: {Strings[r.Https.State.ToString()]}\n{Strings["ProbeScope"]}"));
-    private async Task ServiceProbesAsync()
-    {
-        var results = await _serviceProbes!.TestAsync(_lifetime.Token);
-        ServiceResults = FormatServices(results);
-        foreach (var result in results) Log(System.Text.Json.JsonSerializer.Serialize(result));
-    }
     private async Task TestStrategyAsync()
     {
+        await CancelDiagnosticsAsync();
         var selected = ProfileValidation.Copy(SelectedProfile!);
         _lastTest = null;
         if (!_desktop.ConfirmTrust(Strings["StrategyTestConsent"])) return;
@@ -440,9 +399,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         var runner = new StrategyTestRunner(_controller, _serviceProbes!, _testRecords!);
         var task = runner.RunAsync(selected, ProviderLabel, async (profile, token) =>
         {
-            if (!_installations.TryGetValue(profile.Engine, out var manager))
-                throw new InvalidOperationException("Guided testing requires a managed, reviewed module.");
-            var installed = await manager.EnsureInstalledAsync(SetupProgress(), token);
+            if (profile.Engine != _installation.EngineId) throw new InvalidOperationException("Unsupported product strategy.");
+            var installed = await _installation.EnsureInstalledAsync(SetupProgress(), token);
             ApplyInstalled(installed);
             return (new EngineConfiguration(installed.ExecutablePath, profile), installed.Revision);
         }, cancel.Token);
@@ -451,12 +409,14 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         {
             _lastTest = await task;
             ServiceResults = FormatServices(_lastTest.Services);
+            ApplyServiceResults(_lastTest.Services);
             Log("Strategy evidence saved: " + _lastTest.Id + ".json (no provider-wide or voice conclusion)");
         }
         finally { _testTask = null; _testCancellation = null; CancelTestCommand.Refresh(); }
     }
     private async Task NextStrategyAsync()
     {
+        await CancelDiagnosticsAsync();
         await _controller.DisconnectAsync(_lifetime.Token);
         // This is an explicit user action; it never connects or chooses based on probe results.
         ApplyStatus(await _controller.GetStatusAsync(_lifetime.Token));
@@ -472,6 +432,75 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _lastTest = playback ? _lastTest! with { UserReportedPlayback = outcome } : _lastTest! with { UserReportedVoice = outcome };
         _testRecords!.Save(_lastTest); Log("User-reported observation saved separately from automated checks.");
         return Task.CompletedTask;
+    }
+    public ObservableCollection<StrategyChoice> Strategies { get; } = new();
+    public StrategyChoice? SelectedStrategy
+    {
+        get => Strategies.FirstOrDefault(choice => ReferenceEquals(choice.Profile, SelectedProfile));
+        set { if (value is not null && Strategies.Contains(value)) SelectedProfile = value.Profile; }
+    }
+    public ObservableCollection<ServiceDiagnosticCard> ServiceCards { get; } = new();
+    public RelayCommand OpenDiagnosticsCommand { get; }
+    public string AppUpdateText => Strings[_appUpdateKey];
+    public string QuickDiagnostics => Strings[DiagnosticsRunning ? "CheckingServices" : "DiagnosticsSummary"];
+    public bool DiagnosticsRunning
+    {
+        get => _diagnosticsRunning;
+        private set { if (Set(ref _diagnosticsRunning, value)) { Changed(nameof(QuickDiagnostics)); ServiceProbesCommand.Refresh(); } }
+    }
+    private void InvalidateDiagnostics()
+    {
+        _diagnosticsEpoch++; _diagnosticsCancellation?.Cancel();
+        foreach (var card in ServiceCards) card.Apply(null);
+        ServiceResults = "";
+    }
+    private async Task CancelDiagnosticsAsync()
+    {
+        InvalidateDiagnostics();
+        if (_diagnosticsTask is { } task) await task;
+    }
+    private void BeginDiagnostics()
+    {
+        if (!_disposed && !_shuttingDown && _setupPhase == "Ready" && !DiagnosticsRunning)
+            _ = RefreshServiceDiagnosticsAsync(); // The task is tracked and exceptions handled below.
+    }
+    public async Task RefreshServiceDiagnosticsAsync()
+    {
+        if (_disposed || _shuttingDown || DiagnosticsRunning) return;
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _diagnosticsCancellation = cancel;
+        long epoch = _diagnosticsEpoch;
+        DiagnosticsRunning = true;
+        foreach (var card in ServiceCards) card.Apply(null);
+        var task = RunDiagnosticsAsync(epoch, cancel.Token); _diagnosticsTask = task;
+        try { await task; }
+        finally
+        {
+            _diagnosticsTask = null; _diagnosticsCancellation = null; DiagnosticsRunning = false;
+            if (epoch != _diagnosticsEpoch && CanConfigure) BeginDiagnostics();
+        }
+    }
+    private async Task RunDiagnosticsAsync(long epoch, CancellationToken token)
+    {
+        try
+        {
+            var snapshot = await _controller.GetStatusAsync(token);
+            var results = await _serviceProbes.TestAsync(token);
+            var current = await _controller.GetStatusAsync(token);
+            if (epoch != _diagnosticsEpoch || snapshot.State != current.State || snapshot.ProcessId != current.ProcessId) return;
+            ApplyServiceResults(results);
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { Log("Service diagnostics failed: " + ex.Message); }
+    }
+    private void ApplyServiceResults(IReadOnlyList<ServiceProbeResult> results)
+    {
+        foreach (var result in results)
+        {
+            ServiceCards.Single(card => card.Id == result.Id).Apply(result);
+            Log(System.Text.Json.JsonSerializer.Serialize(result));
+        }
+        ServiceResults = FormatServices(results);
     }
     private void PersistSelection()
     {
@@ -493,7 +522,6 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _settings.SelectedProfileId = SelectedProfile?.Id ?? "";
         _settings.Language = Language;
         _settings.ShowAdvancedTools = ShowAdvancedTools;
-        _settings.DiagnosticUrl = DiagnosticUrl;
         _settings.MinimizeToTray = MinimizeToTray;
         _settings.StartWithWindows = StartWithWindows;
         _settings.AutoRecover = AutoRecover;
@@ -505,9 +533,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private async Task CheckUpdatesAsync()
     {
-        ResultText = await _updates.CheckAsync(_lifetime.Token);
-        if (_installation is not null) ResultText += "\n" + (await _installation.CheckForUpdatesAsync(_lifetime.Token)).Detail;
-        Log(ResultText);
+        var result = await _updates.CheckAsync(_lifetime.Token);
+        _appUpdateKey = result.State.ToString(); Changed(nameof(AppUpdateText));
+        ResultText = result.Detail; Log(ResultText);
+        Log((await _installation.CheckForUpdatesAsync(_lifetime.Token)).Detail);
     }
     private Task ExportLogsAsync()
     {
@@ -515,7 +544,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (path is not null) { File.WriteAllText(path, LogText); Log("Diagnostics exported. Review paths and hostnames before sharing."); }
         return Task.CompletedTask;
     }
-    private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); CancelTestCommand.Refresh(); }
+    private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); CancelTestCommand.Refresh(); ServiceProbesCommand.Refresh(); }
     private void SetMessage(string key) { _messageKey = key; Changed(nameof(UserMessage)); }
     public void Fail(Exception ex, string messageKey = "ActionFailed")
     {
@@ -535,13 +564,13 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (LogText.Length > 200000) LogText = LogText[^150000..];
     }
     private void EngineLog(string text) => _dispatcher.BeginInvoke(() => { if (!_disposed) Log(text); });
-    private void EngineStatusChanged(EngineStatus status) => _dispatcher.BeginInvoke(() => { if (!_disposed) ApplyStatus(status); });
+    private void EngineStatusChanged(EngineStatus status) => _dispatcher.BeginInvoke(new Action(async () => { if (!_disposed && !_shuttingDown) await RefreshAsync(); }));
     private void ApplyStatus(EngineStatus status)
     {
-        if (_status.State != status.State) { _reachability = null; Changed(nameof(Reachability)); }
+        if (_status.State != status.State || _status.ProcessId != status.ProcessId) InvalidateDiagnostics();
         _status = status;
         if (status.State == EngineState.Active) _hasStartedSession = true;
-        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(CanChooseEngine), nameof(ConnectText), nameof(SessionDuration), nameof(ConnectionNote) }) Changed(name);
+        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(ConnectText), nameof(SessionDuration), nameof(ConnectionNote) }) Changed(name);
         if (status.Error is not null) Fail(new IOException(status.Error), "ConnectionFailed");
         RefreshCommands();
     }
@@ -560,6 +589,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _shuttingDown = true;
         RefreshCommands();
         _lifetime.Cancel();
+        await CancelDiagnosticsAsync();
         if (_testTask is { } test)
         { try { await test; } catch (Exception ex) { Log("Strategy test ended during shutdown: " + ex.Message); } }
         if (_setupTask is { } setup)

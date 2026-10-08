@@ -5,7 +5,6 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using Northpass.Desktop;
 using Northpass.Engine;
-using Northpass.Engine.Zapret2;
 using Northpass.Engine.Zapret1;
 using Northpass.Models;
 using Northpass.Services;
@@ -17,7 +16,7 @@ namespace Northpass.Windows.Tests;
 public sealed class WindowSmokeTests
 {
     // Real WPF window on a Windows STA thread. Session state uses an explicit fake;
-    // real PE/driver/ownership checks live in EngineInstallationWindowsTests.
+    // real PE/driver/ownership checks live in FlowsealWindowsTests.
     [Fact]
     public async Task ConsumerWindowPreparesAutomaticallyAndKeepsAccessStatusHonest()
     {
@@ -39,29 +38,41 @@ public sealed class WindowSmokeTests
                     var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                     try
                     {
-                        var registry = new EngineRegistry(); registry.Register(Zapret2Engine.Metadata, () => new SessionFixture());
+                        var registry = new EngineRegistry(); registry.Register(Zapret1Engine.Metadata, () => new SessionFixture());
                         var profiles = new ProfileStore(Path.Combine(temporary, "profiles"));
                         profiles.Save(new() { Id = "draft", Name = "Draft", Engine = "ZAPRET2", Arguments = [] });
                         using var http = new HttpClient();
                         var desktop = new SetupConsent(); var installation = new FakeInstallation();
                         var store = new SettingsStore(temporary);
                         store.Save(new() { SelectedProfileId = "draft" });
-                        var model = new MainViewModel(new EngineController(registry), registry, store, profiles,
-                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
+                        var model = new MainViewModel(new EngineController(registry), store, profiles,
+                            new UpdateChecker(http), desktop, app.Dispatcher, installation, new ServiceProbeService(new ProbeFixture()));
                         window = new MainWindow(model); app.MainWindow = window;
                         window.Closed += (_, _) => closed.TrySetResult();
                         stage = "automatic bundled setup";
-                        await model.InitializeAsync(null);
+                        await model.InitializeAsync();
                         stage = "window layout";
                         window.Show(); window.UpdateLayout();
                         Assert.True(window.IsVisible);
                         Assert.Equal("Ready", model.StatusText);
                         Assert.Equal("Ready", model.EngineSetupText);
                         Assert.Equal(0, desktop.Consents); Assert.Equal(1, installation.Setups);
-                        Assert.False(store.Load().EngineSetupConsent); Assert.False(model.CanChooseEngine);
-                        Assert.True(model.ManagedEngine);
-                        Assert.Equal("zapret2-reviewed-example", model.SelectedProfile?.Id);
+                        Assert.False(store.Load().EngineSetupConsent);
+                        Assert.Equal("flowseal-general", model.SelectedProfile?.Id);
                         Assert.Empty(profiles.Load().Profiles.Single(profile => profile.Id == "draft").Arguments);
+                        Assert.All(model.Profiles, profile => Assert.Equal("zapret1", profile.Engine));
+                        var selector = Assert.IsType<ComboBox>(window.FindName("HomeStrategySelector"));
+                        Assert.True(selector.IsVisible); Assert.True(selector.IsEnabled);
+                        Assert.Equal(5, selector.Items.Count);
+                        Assert.Equal(3, model.ServiceCards.Count);
+                        Assert.Equal(new[] { "youtube", "discord", "telegram" }, model.ServiceCards.Select(card => card.Id));
+                        Assert.Equal(ServiceAvailability.Available, model.ServiceCards[0].Availability);
+                        Assert.Equal(ServiceAvailability.Limited, model.ServiceCards[1].Availability);
+                        Assert.Equal(ServiceAvailability.Unavailable, model.ServiceCards[2].Availability);
+                        Assert.DoesNotContain(model.Strategies, strategy => strategy.Label.Contains("Flowseal"));
+                        selector.SelectedItem = model.Strategies.Single(choice => choice.Profile.StrategyId == "alt");
+                        Assert.Equal("flowseal-alt", store.Load().SelectedProfileId);
+                        Assert.Contains("Alternate", model.SelectedStrategy!.Label);
                         var tabs = Assert.IsType<TabControl>(window.FindName("NavigationTabs"));
                         Assert.Equal(5, tabs.Items.Count);
                         Assert.False(model.ShowAdvancedTools);
@@ -72,6 +83,9 @@ public sealed class WindowSmokeTests
                             AssertConsumerText(window);
                             Screenshot(window, language);
                             tabs.SelectedIndex = 3; window.UpdateLayout(); AssertConsumerText(window);
+                            tabs.SelectedIndex = 2; window.UpdateLayout(); AssertConsumerText(window);
+                            tabs.SelectedIndex = 4; window.UpdateLayout(); AssertConsumerText(window);
+                            Screenshot(window, language + "-about");
                         }
                         model.Language = "en";
                         model.Fail(new IOException("SHA-256 mismatch: Zapret2 WinDivert64.sys at C:\\protected"));
@@ -95,10 +109,12 @@ public sealed class WindowSmokeTests
                         Assert.Equal("Connection started", model.StatusText);
                         Assert.Contains("has not been verified", model.ConnectionNote);
                         window.UpdateLayout(); AssertConsumerText(window);
+                        Assert.False(selector.IsEnabled);
                         model.ConnectCommand.Execute(null);
                         await app.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
                         Assert.False(model.SessionOpen); Assert.Equal("Disconnected", model.StatusText);
-                        Assert.Equal(0, desktop.Consents);
+                        Assert.Equal(0, desktop.Consents); Assert.True(selector.IsEnabled);
+                        Assert.Equal(ServiceAvailability.Available, model.ServiceCards[0].Availability);
                         stage = "custom modal accept and cancel";
                         foreach (bool accept in new[] { false, true })
                         {
@@ -114,7 +130,7 @@ public sealed class WindowSmokeTests
                         var licenses = new LicensesWindow(model.Strings) { Owner = window };
                         licenses.Loaded += (_, _) => licenses.Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            Assert.Contains("Zapret2", ((TextBox)licenses.FindName("LicenseText")).Text);
+                            Assert.Contains("Flowseal", ((TextBox)licenses.FindName("LicenseText")).Text);
                             licenses.Close();
                         }));
                         licenses.ShowDialog();
@@ -122,33 +138,38 @@ public sealed class WindowSmokeTests
                         window.Close(); await closed.Task;
                         Assert.False(window.IsVisible);
                         stage = "subsequent launch reuse";
-                        var next = new MainViewModel(new EngineController(registry), registry, store, profiles,
-                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
-                        await next.InitializeAsync(null);
+                        var next = new MainViewModel(new EngineController(registry), store, profiles,
+                            new UpdateChecker(http), desktop, app.Dispatcher, installation, new ServiceProbeService(new ProbeFixture()));
+                        await next.InitializeAsync();
                         Assert.Equal(0, desktop.Consents); Assert.Equal(1, installation.Setups);
                         Assert.Equal("Ready", next.EngineSetupText);
                         Assert.True(next.ShowAdvancedTools);
                         await next.DisposeAsync();
-                        stage = "v0.5 default and upgrade selection fixtures";
-                        registry.Register(Zapret1Engine.Metadata, () => new SessionFixture(Zapret1Engine.Metadata));
-                        var flowseal = new FakeInstallation("zapret1");
-                        store.Save(new() { SelectedProfileId = "zapret2-reviewed-example", Language = "az", AutoRecover = true, MinimizeToTray = false });
-                        var upgrade = new MainViewModel(new EngineController(registry), registry, store, profiles,
-                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation, [flowseal]);
-                        await upgrade.InitializeAsync(null);
-                        Assert.Equal("zapret2-reviewed-example", upgrade.SelectedProfile?.Id);
+                        stage = "v0.6 legacy selection migration and preference preservation";
+                        store.Save(new() { SelectedProfileId = "draft", Language = "az", AutoRecover = true, MinimizeToTray = false });
+                        var upgrade = new MainViewModel(new EngineController(registry), store, profiles,
+                            new UpdateChecker(http), desktop, app.Dispatcher, installation, new ServiceProbeService(new ProbeFixture()));
+                        await upgrade.InitializeAsync();
+                        Assert.Equal("flowseal-general", upgrade.SelectedProfile?.Id);
                         Assert.Equal("az", upgrade.Language); Assert.True(upgrade.AutoRecover); Assert.False(upgrade.MinimizeToTray);
-                        Assert.Equal(0, flowseal.Setups); await upgrade.DisposeAsync();
-                        var freshStore = new SettingsStore(Path.Combine(temporary, "fresh"));
-                        var fresh = new MainViewModel(new EngineController(registry), registry, freshStore, profiles,
-                            new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation, [flowseal]);
-                        await fresh.InitializeAsync(null);
-                        Assert.Equal("flowseal-general", fresh.SelectedProfile?.Id); Assert.True(fresh.ManagedEngine);
-                        Assert.Equal(1, flowseal.Setups); Assert.Equal("Ready", fresh.StatusText);
-                        fresh.ConnectCommand.Execute(null);
+                        Assert.Equal(1, installation.Setups); await upgrade.DisposeAsync();
+                        stage = "valid existing Flowseal selection";
+                        store.Save(new() { SelectedProfileId = "flowseal-alt2" });
+                        var retained = new MainViewModel(new EngineController(registry), store, profiles,
+                            new UpdateChecker(http), desktop, app.Dispatcher, installation, new ServiceProbeService(new ProbeFixture()));
+                        await retained.InitializeAsync(); Assert.Equal("flowseal-alt2", retained.SelectedProfile?.Id);
+                        await retained.DisposeAsync();
+                        stage = "stale diagnostic cancellation and shutdown";
+                        var delayed = new DelayedProbeFixture();
+                        var cancellationModel = new MainViewModel(new EngineController(registry), store, profiles,
+                            new UpdateChecker(http), desktop, app.Dispatcher, installation, new ServiceProbeService(delayed));
+                        await cancellationModel.InitializeAsync(); Assert.True(cancellationModel.DiagnosticsRunning);
+                        cancellationModel.SelectedStrategy = cancellationModel.Strategies.Single(choice => choice.Profile.StrategyId == "general");
                         await app.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
-                        Assert.True(fresh.SessionOpen); Assert.Contains("has not been verified", fresh.ConnectionNote);
-                        await fresh.DisposeAsync();
+                        Assert.All(cancellationModel.ServiceCards, card => Assert.Equal(ServiceAvailability.Unknown, card.Availability));
+                        await cancellationModel.DisposeAsync(); Assert.False(cancellationModel.DiagnosticsRunning);
+                        Assert.True(delayed.Cancellations > 0);
+
                     }
                     catch (Exception ex) { failure = ex; }
                     finally
@@ -188,12 +209,12 @@ public sealed class WindowSmokeTests
         var bitmap = new RenderTargetBitmap((int)window.ActualWidth, (int)window.ActualHeight, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(window);
         var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
-        using var file = File.Create(Path.Combine(output, "northpass-v0.5-" + language + ".png")); png.Save(file);
+        using var file = File.Create(Path.Combine(output, "northpass-v0.6-" + language + ".png")); png.Save(file);
         if (language == "en")
         {
             // Small CI annotation preview complements the full-resolution artifact,
             // allowing visual review even where artifact-storage hosts are blocked.
-            int width = 640, height = (int)(window.ActualHeight * width / window.ActualWidth);
+            int width = 560, height = (int)(window.ActualHeight * width / window.ActualWidth);
             var visual = new DrawingVisual();
             using (var drawing = visual.RenderOpen()) drawing.DrawImage(bitmap, new Rect(0, 0, width, height));
             var preview = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); preview.Render(visual);
@@ -208,20 +229,39 @@ public sealed class WindowSmokeTests
         while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Northpass.sln"))) directory = directory.Parent;
         return directory?.FullName ?? throw new DirectoryNotFoundException("Repository not found.");
     }
+    private sealed class ProbeFixture : IServiceProbeTransport
+    {
+        public Task<ServiceProbeResult> ProbeAsync(ServiceProbeTarget target, CancellationToken token)
+        {
+            var passed = new ProbeObservation(ProbeState.Passed, "fixture only");
+            var failed = new ProbeObservation(ProbeState.Failed, "fixture only");
+            var unknown = new ProbeObservation(ProbeState.Unknown, "not tested");
+            return Task.FromResult(new ServiceProbeResult(target.Id, target.Name, target.HttpsUrl.Host, ["203.0.113.1"], "203.0.113.1",
+                passed, target.Id == "telegram" ? failed : passed, passed, target.Id == "discord" ? failed : passed,
+                unknown, unknown, unknown, unknown, unknown, unknown));
+        }
+    }
+    private sealed class DelayedProbeFixture : IServiceProbeTransport
+    {
+        public int Cancellations;
+        public async Task<ServiceProbeResult> ProbeAsync(ServiceProbeTarget target, CancellationToken token)
+        {
+            try { await Task.Delay(Timeout.Infinite, token); }
+            catch (OperationCanceledException) { Interlocked.Increment(ref Cancellations); throw; }
+            throw new InvalidOperationException("Cancelled fixture must not produce results.");
+        }
+    }
     private sealed class SetupConsent : IDesktopServices
     {
         public int Consents;
-        public string? PickEngine(EngineDescriptor descriptor) => throw new InvalidOperationException("Unexpected dialog.");
-        public string? PickProfile() => throw new InvalidOperationException("Unexpected dialog.");
         public string? PickExport(string name, string extension) => throw new InvalidOperationException("Unexpected dialog.");
         public bool ConfirmTrust(string message) { Consents++; throw new InvalidOperationException("Automatic preparation must not prompt for component consent."); }
-        public StrategyProfile? EditProfile(ProfileStore store, StrategyProfile? original) => throw new InvalidOperationException("Unexpected dialog.");
         public Task SetAutoStartAsync(bool enabled) => throw new InvalidOperationException("Unexpected autostart change.");
     }
     private sealed class SessionFixture(EngineDescriptor? metadata = null) : IDpiEngine
     {
         private EngineStatus _status = new(EngineState.Disconnected);
-        public EngineDescriptor Descriptor => metadata ?? Zapret2Engine.Metadata;
+        public EngineDescriptor Descriptor => metadata ?? Zapret1Engine.Metadata;
         public event Action<string>? LogReceived;
         public event Action<EngineStatus>? StatusChanged;
         public Task StartAsync(EngineConfiguration configuration, CancellationToken token = default)
@@ -239,8 +279,8 @@ public sealed class WindowSmokeTests
             => Task.FromResult(ValidationResult.Valid);
         public async ValueTask DisposeAsync() => await StopAsync();
     }
-    // UI flow fixture only. Real executable/ACL checks are in EngineInstallationWindowsTests.
-    private sealed class FakeInstallation(string engineId = "zapret2") : IEngineInstallationManager
+    // UI flow fixture only. Real executable/ACL checks are in FlowsealWindowsTests.
+    private sealed class FakeInstallation(string engineId = "zapret1") : IEngineInstallationManager
     {
         public int Setups;
         private InstalledEngine? _engine;
@@ -249,7 +289,7 @@ public sealed class WindowSmokeTests
         public Task<InstalledEngine> EnsureInstalledAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default)
         {
             if (_engine is not null) return Task.FromResult(_engine);
-            Setups++; _engine = new(engineId, new string('a', 40), "test", "C:\\protected\\winws2.exe");
+            Setups++; _engine = new(engineId, new string('a', 40), "test", "C:\\protected\\winws.exe");
             progress?.Report(new("Ready", 1, 1)); return Task.FromResult(_engine);
         }
         public Task<EngineUpdateStatus> CheckForUpdatesAsync(CancellationToken token = default) => throw new NotSupportedException();

@@ -10,7 +10,7 @@
     <Grid.RowDefinitions><RowDefinition Height="78"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <Grid>
       <StackPanel Orientation="Horizontal" VerticalAlignment="Top">
-        <Border Width="42" Height="42" Background="#E3E3EB" CornerRadius="12" Margin="0,0,14,0"><Viewbox Margin="11"><Path Data="M0,20 L0,0 L5,0 L15,14 L15,0 L20,0 L20,20 L15,20 L5,6 L5,20 Z" Fill="#16161C"/></Viewbox></Border>
+        <Border Width="42" Height="42" Background="#E3E3EB" CornerRadius="12" Margin="0,0,14,0"><Image Source="{StaticResource NorthpassMark}" Margin="4" AutomationProperties.Name="Northpass logo"/></Border>
         <StackPanel><TextBlock Text="NORTHPASS" FontSize="24" FontWeight="Bold"/><TextBlock Text="{Binding Strings[Tagline]}" Style="{StaticResource Muted}" FontSize="10"/></StackPanel>
       </StackPanel>
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" shell:WindowChrome.IsHitTestVisibleInChrome="True">
@@ -23,19 +23,23 @@
       <TabItem Header="{Binding Strings[Dashboard]}">
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <StackPanel Margin="0,0,12,0">
-            <TextBlock Text="{Binding Strings[Hero]}" FontSize="42" FontWeight="SemiBold" LineHeight="52" Margin="0,0,0,24"/>
-            <Border Style="{StaticResource Card}" Padding="36,28">
+            <TextBlock Text="{Binding Strings[Hero]}" FontSize="30" FontWeight="SemiBold" LineHeight="37" Margin="0,0,0,18"/>
+            <Border Style="{StaticResource Card}" Padding="26,22">
               <StackPanel>
-                <Grid Margin="0,0,0,24"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Grid Margin="0,0,0,20"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                   <StackPanel Orientation="Horizontal"><Ellipse Width="8" Height="8" Fill="{Binding StatusColor}" Margin="0,0,10,0"/><TextBlock Text="{Binding StatusText}" FontSize="17" FontWeight="SemiBold"/></StackPanel>
                   <TextBlock Grid.Column="1" Text="{Binding SessionDuration}" Style="{StaticResource Muted}" VerticalAlignment="Center"/>
                 </Grid>
-                <Border Width="94" Height="94" CornerRadius="47" Background="#222229" HorizontalAlignment="Center" Margin="0,8,0,26"><TextBlock Text="&#xE705;" FontFamily="Segoe MDL2 Assets" FontSize="36" Foreground="#DADAE4" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
-                <Button Content="{Binding ConnectText}" Command="{Binding ConnectCommand}" Background="#E3E3EB" Foreground="#141419" FontSize="18" FontWeight="SemiBold" Padding="40,17" HorizontalAlignment="Stretch" Margin="0,0,0,16"/>
-                <TextBlock Text="{Binding ConnectionNote}" Style="{StaticResource Muted}" TextAlignment="Center"/>
-                <StackPanel Visibility="{Binding Preparing, Converter={StaticResource VisibleWhenTrue}}" Margin="0,20,0,0"><TextBlock Text="{Binding EngineSetupText}" Style="{StaticResource Muted}" Margin="0,0,0,8"/><ProgressBar Minimum="0" Maximum="100" Value="{Binding EngineSetupProgress, Mode=OneWay}" Height="4"/></StackPanel>
+                <TextBlock Text="{Binding Strings[Strategy]}" Style="{StaticResource Muted}" FontSize="12"/>
+                <ComboBox x:Name="HomeStrategySelector" ItemsSource="{Binding Strategies}" SelectedItem="{Binding SelectedStrategy}" DisplayMemberPath="Label" IsEnabled="{Binding CanConfigure}" ToolTip="{Binding Strings[StrategyHint]}" AutomationProperties.Name="{Binding Strings[Strategy]}" Margin="0,8,0,16"/>
+                <Button Content="{Binding ConnectText}" Command="{Binding ConnectCommand}" Background="#E3E3EB" Foreground="#141419" FontSize="17" FontWeight="SemiBold" Padding="32,14" HorizontalAlignment="Stretch" Margin="0,0,0,12"/>
+                <TextBlock Text="{Binding ConnectionNote}" Style="{StaticResource Muted}" FontSize="12" TextAlignment="Center"/>
+                <StackPanel Visibility="{Binding Preparing, Converter={StaticResource VisibleWhenTrue}}" Margin="0,16,0,0"><TextBlock Text="{Binding EngineSetupText}" Style="{StaticResource Muted}" Margin="0,0,0,8"/><ProgressBar Minimum="0" Maximum="100" Value="{Binding EngineSetupProgress, Mode=OneWay}" Height="4"/></StackPanel>
               </StackPanel>
             </Border>
+            <Grid Margin="0,0,0,12"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="{Binding QuickDiagnostics}" Style="{StaticResource Muted}" VerticalAlignment="Center"/><Button Grid.Column="1" Content="{Binding Strings[CheckServices]}" Command="{Binding ServiceProbesCommand}" Padding="12,7" FontSize="12" Margin="8,0,0,0"/></Grid>
+            <ItemsControl ItemsSource="{Binding ServiceCards}" ItemTemplate="{StaticResource QuickServiceCard}" Margin="0,0,0,12"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>
+            <TextBlock Text="{Binding Strings[DiagnosticsScope]}" Style="{StaticResource Muted}" FontSize="11" Margin="0,0,0,12"/>
             <TextBlock Text="{Binding UserMessage}" Style="{StaticResource Muted}" TextAlignment="Center" Margin="10,0,10,0"/>
           </StackPanel>
         </ScrollViewer>
@@ -44,18 +48,11 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,0">
           <TextBlock Text="{Binding Strings[Strategies]}" Style="{StaticResource Heading}"/><TextBlock Text="{Binding Strings[AdvancedNote]}" Style="{StaticResource Muted}" Margin="0,0,0,24"/>
           <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="{Binding Strings[Strategy]}" Style="{StaticResource Muted}"/>
-            <ComboBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding SelectedProfile}" IsEnabled="{Binding CanConfigure}" DisplayMemberPath="Name" Margin="0,12,0,16"/>
-            <TextBlock Text="{Binding ProfileDescription}" Margin="0,0,0,18"/>
-            <WrapPanel><Button Content="{Binding Strings[New]}" Command="{Binding NewProfileCommand}"/><Button Content="{Binding Strings[Edit]}" Command="{Binding EditProfileCommand}"/><Button Content="{Binding Strings[Import]}" Command="{Binding ImportCommand}"/><Button Content="{Binding Strings[Export]}" Command="{Binding ExportCommand}"/><Button Content="{Binding Strings[Refresh]}" Command="{Binding RefreshProfilesCommand}"/></WrapPanel>
+            <TextBlock Text="{Binding ProfileDescription}" Margin="0,0,0,16"/>
+            <WrapPanel><Button Content="{Binding Strings[Validate]}" Command="{Binding ValidateCommand}"/><Button Content="{Binding Strings[Export]}" Command="{Binding ExportCommand}"/><Button Content="{Binding Strings[Refresh]}" Command="{Binding RefreshProfilesCommand}"/></WrapPanel>
+            <TextBlock Text="{Binding ResultText}" Margin="0,8,0,0"/>
           </StackPanel></Border>
-          <Border Style="{StaticResource Card}"><StackPanel>
-            <TextBlock Text="{Binding Strings[EnginePath]}" Style="{StaticResource Muted}"/><TextBlock Text="{Binding CurrentEngine}" Margin="0,8,0,0"/><TextBlock Text="{Binding EngineRevision}" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
-            <Grid Margin="0,12,0,16"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding EnginePath, UpdateSourceTrigger=PropertyChanged}" IsReadOnly="True"/><Button Grid.Column="1" Content="{Binding Strings[Browse]}" Command="{Binding BrowseCommand}" IsEnabled="{Binding CanChooseEngine}" Margin="12,0,0,0"/></Grid>
-            <Button Content="{Binding Strings[Validate]}" Command="{Binding ValidateCommand}" HorizontalAlignment="Left"/>
-            <TextBlock Text="{Binding ResultText}" Margin="0,12,0,0"/>
-          </StackPanel></Border>
-          <Border Style="{StaticResource Card}" Visibility="{Binding FlowsealSelected, Converter={StaticResource VisibleWhenTrue}}"><StackPanel IsEnabled="{Binding CanConfigure}">
+          <Border Style="{StaticResource Card}"><StackPanel IsEnabled="{Binding CanConfigure}">
             <TextBlock Text="{Binding Strings[GamePorts]}" Style="{StaticResource Muted}"/>
             <TextBlock Text="{Binding Strings[GamePortsNote]}" Style="{StaticResource Muted}" Margin="0,8,0,12"/>
             <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions><TextBox Text="{Binding GameTcpPorts, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="TCP ports" Margin="0,0,12,0"/><TextBox Grid.Column="1" Text="{Binding GameUdpPorts, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="UDP ports"/></Grid>
@@ -75,21 +72,24 @@
             <TextBlock Text="{Binding ServiceResults}" Margin="0,12,0,12"/>
             <WrapPanel><Button Content="{Binding Strings[PlaybackPassed]}" Command="{Binding ReportPlaybackPassedCommand}"/><Button Content="{Binding Strings[PlaybackFailed]}" Command="{Binding ReportPlaybackFailedCommand}"/><Button Content="{Binding Strings[VoicePassed]}" Command="{Binding ReportVoicePassedCommand}"/><Button Content="{Binding Strings[VoiceFailed]}" Command="{Binding ReportVoiceFailedCommand}"/></WrapPanel>
           </StackPanel></Border>
-          <TextBlock Text="{Binding Strings[ProfileNote]}" Style="{StaticResource Muted}" Margin="0,0,0,12"/>
           <TextBox Text="{Binding ProfilesDirectory, Mode=OneWay}" IsReadOnly="True"/>
         </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="{Binding Strings[Diagnostics]}">
-        <Grid Margin="0,0,12,0"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,0">
           <TextBlock Text="{Binding Strings[Diagnostics]}" Style="{StaticResource Heading}"/>
-          <StackPanel Grid.Row="1">
-            <TextBlock Text="{Binding Strings[TestUrl]}" Style="{StaticResource Muted}"/>
-            <TextBox Text="{Binding DiagnosticUrl, UpdateSourceTrigger=PropertyChanged}" Margin="0,8,0,12"/>
-            <WrapPanel><Button Content="{Binding Strings[ServiceChecks]}" Command="{Binding ServiceProbesCommand}"/><Button Content="{Binding Strings[Test]}" Command="{Binding TestCommand}"/><Button Content="{Binding Strings[ExportLogs]}" Command="{Binding ExportLogsCommand}"/><Button Content="{Binding Strings[ClearLogs]}" Command="{Binding ClearLogsCommand}"/></WrapPanel>
-            <TextBlock Text="{Binding ServiceResults}" Margin="0,8,0,8"/><TextBlock Text="{Binding ResultText}" Margin="0,8,0,16"/>
-          </StackPanel>
-          <TextBox Grid.Row="2" x:Name="LogBox" Text="{Binding LogText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="LogBox_TextChanged"/>
-        </Grid>
+          <TextBlock Text="{Binding QuickDiagnostics}" Style="{StaticResource Muted}" Margin="0,0,0,16"/>
+          <ItemsControl x:Name="ServiceDiagnosticsCards" ItemsSource="{Binding ServiceCards}" ItemTemplate="{StaticResource QuickServiceCard}" Margin="0,0,0,16"><ItemsControl.ItemsPanel><ItemsPanelTemplate><UniformGrid Columns="3"/></ItemsPanelTemplate></ItemsControl.ItemsPanel></ItemsControl>
+          <TextBlock Text="{Binding Strings[DiagnosticsScope]}" Style="{StaticResource Muted}" Margin="0,0,0,16"/>
+          <Button Content="{Binding Strings[CheckServices]}" Command="{Binding ServiceProbesCommand}" HorizontalAlignment="Left"/>
+          <Expander Header="{Binding Strings[TechnicalDetails]}" Foreground="#D0D0D8" Margin="0,20,0,0">
+            <StackPanel Margin="0,16,0,0"><ItemsControl ItemsSource="{Binding ServiceCards}"><ItemsControl.ItemTemplate><DataTemplate><Border Style="{StaticResource Card}" Padding="18"><StackPanel><TextBlock Text="{Binding Name}" FontWeight="SemiBold" Margin="0,0,0,8"/><TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" FontSize="12"/></StackPanel></Border></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+              <WrapPanel><Button Content="{Binding Strings[ExportLogs]}" Command="{Binding ExportLogsCommand}"/><Button Content="{Binding Strings[ClearLogs]}" Command="{Binding ClearLogsCommand}"/></WrapPanel>
+              <TextBlock Text="{Binding ResultText}" Margin="0,8,0,16"/>
+              <TextBox x:Name="LogBox" Text="{Binding LogText, Mode=OneWay}" Height="260" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas" FontSize="12" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="LogBox_TextChanged"/>
+            </StackPanel>
+          </Expander>
+        </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="{Binding Strings[Settings]}">
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,0">
@@ -107,17 +107,26 @@
           <WrapPanel Visibility="{Binding ShowAdvancedTools, Converter={StaticResource VisibleWhenTrue}}"><Button Content="{Binding Strings[UpdateEngine]}" Command="{Binding UpdateEngineCommand}"/><Button Content="{Binding Strings[RollbackEngine]}" Command="{Binding RollbackEngineCommand}"/></WrapPanel>
           <Button Content="{Binding Strings[CheckUpdates]}" Command="{Binding CheckUpdatesCommand}" HorizontalAlignment="Left" Visibility="{Binding ShowAdvancedTools, Converter={StaticResource VisibleWhenTrue}}"/>
           <TextBlock Text="{Binding UserMessage}" Margin="0,10,0,20"/>
-          <TextBlock Text="{Binding Strings[Privacy]}" Style="{StaticResource Muted}"/>
+          <TextBlock Text="{Binding Strings[AutomaticPrivacy]}" Style="{StaticResource Muted}"/>
         </StackPanel></ScrollViewer>
       </TabItem>
       <TabItem Header="{Binding Strings[About]}">
         <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="0,0,12,0">
-          <TextBlock Text="{Binding Strings[About]}" Style="{StaticResource Heading}"/>
-          <Border Style="{StaticResource Card}"><StackPanel><TextBlock Text="NORTHPASS" FontSize="30" FontWeight="Bold" Margin="0,0,0,20"/><TextBlock Text="{Binding Strings[AboutText]}" Margin="0,0,0,20"/><TextBlock Text="{Binding Strings[Licenses]}" Style="{StaticResource Muted}" Margin="0,0,0,20"/><Button Content="{Binding Strings[ViewLicenses]}" Click="Licenses_Click" HorizontalAlignment="Left"/><TextBlock Text="{Binding Strings[AvailabilityNote]}" Style="{StaticResource Muted}"/></StackPanel></Border>
-          <TextBlock Text="Windows 10/11 x64 · .NET 8 · WPF / MVVM" Style="{StaticResource Muted}"/>
+          <Border Style="{StaticResource Card}"><StackPanel>
+            <Border Width="64" Height="64" Background="#E3E3EB" CornerRadius="18" HorizontalAlignment="Left" Margin="0,0,0,20"><Image Source="{StaticResource NorthpassMark}" Margin="5"/></Border>
+            <TextBlock Text="Northpass" FontSize="34" FontWeight="SemiBold"/><TextBlock Text="0.6.0 · Windows 10/11" Style="{StaticResource Muted}" Margin="0,8,0,20"/>
+            <TextBlock Text="{Binding Strings[AboutProduct]}" Margin="0,0,0,16"/>
+            <TextBlock Text="{Binding Strings[AvailabilityNote]}" Style="{StaticResource Muted}"/>
+          </StackPanel></Border>
+          <Border Style="{StaticResource Card}" Padding="22"><StackPanel>
+            <TextBlock Text="{Binding Strings[SupportTitle]}" FontSize="17" FontWeight="SemiBold" Margin="0,0,0,10"/><TextBlock Text="{Binding Strings[SupportInfo]}" Style="{StaticResource Muted}" Margin="0,0,0,14"/>
+            <Button Content="{Binding Strings[OpenDiagnostics]}" Command="{Binding OpenDiagnosticsCommand}" HorizontalAlignment="Left"/>
+            <TextBlock Text="{Binding AppUpdateText}" Style="{StaticResource Muted}" Margin="0,10,0,14"/><Button Content="{Binding Strings[CheckUpdates]}" Command="{Binding CheckUpdatesCommand}" HorizontalAlignment="Left"/>
+          </StackPanel></Border>
+          <Expander Header="{Binding Strings[Legal]}" Foreground="#B8B8C2" Margin="0,2,0,12"><StackPanel Margin="0,14,0,0"><TextBlock Text="{Binding Strings[LegalInfo]}" Style="{StaticResource Muted}" Margin="0,0,0,12"/><Button Content="{Binding Strings[ViewLicenses]}" Click="Licenses_Click" HorizontalAlignment="Left"/></StackPanel></Expander>
         </StackPanel></ScrollViewer>
       </TabItem>
     </TabControl>
-    <TextBlock Grid.Row="2" Text="Northpass 0.5" Style="{StaticResource Muted}" FontSize="10" Margin="190,20,0,0"/>
+    <TextBlock Grid.Row="2" Text="Northpass 0.6" Style="{StaticResource Muted}" FontSize="10" Margin="190,20,0,0"/>
   </Grid>
 </Window>

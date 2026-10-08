@@ -11,5 +11,4 @@ public sealed class AppSettings
     public bool StartWithWindows { get; set; }
     public bool AutoRecover { get; set; }
     public bool CheckForUpdates { get; set; }
-    public string DiagnosticUrl { get; set; } = "https://example.com/";
 }

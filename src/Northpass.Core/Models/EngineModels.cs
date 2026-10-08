@@ -12,4 +12,3 @@ public sealed record ValidationResult(IReadOnlyList<ValidationIssue> Issues)
     public static ValidationResult Valid { get; } = new(Array.Empty<ValidationIssue>());
 }
 public sealed record EngineDescriptor(string Id, string Name, string ExecutableName);
-public sealed record ReachabilityResult(Uri Url, bool Reachable, int? HttpStatus, TimeSpan Duration, string Detail);

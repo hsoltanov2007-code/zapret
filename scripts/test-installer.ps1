@@ -4,10 +4,9 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $install = Join-Path $env:ProgramFiles ('Northpass-Acceptance-' + [guid]::NewGuid().ToString('N'))
 $results = Join-Path $root 'TestResults'
 New-Item -ItemType Directory -Force $results | Out-Null
-$setup = Join-Path $root 'dist/installer/Northpass-0.5.0-win-x64-setup.exe'
+$setup = Join-Path $root 'dist/installer/Northpass-0.6.0-win-x64-setup.exe'
 $catalogs = @(
-    @{ Name = 'flowseal'; Root = 'Northpass-Flowseal' },
-    @{ Name = 'zapret2'; Root = 'Northpass-Zapret2' }
+    @{ Name = 'flowseal'; Root = 'Northpass-Flowseal' }
 )
 function Invoke-Checked([string]$File, [string[]]$Arguments, [int]$ExpectedExit = 0) {
     $process = Start-Process -FilePath $File -ArgumentList $Arguments -PassThru
@@ -18,12 +17,20 @@ function Invoke-Checked([string]$File, [string[]]$Arguments, [int]$ExpectedExit 
     if ($process.ExitCode -ne $ExpectedExit) { throw "Acceptance exit code $($process.ExitCode), expected ${ExpectedExit}: $File" }
 }
 try {
+    # Inert fixture files exercise actual in-place obsolete-file cleanup.
+    New-Item -ItemType Directory -Force (Join-Path $install 'engine-payload'), (Join-Path $install 'profiles'), (Join-Path $install 'docs/third-party-source') | Out-Null
+    foreach ($obsolete in @('Northpass.Engine.Zapret2.dll', 'engine-payload/zapret2-offline.zip', 'profiles/zapret2-reviewed-example.json', 'profiles/example-template.json', 'docs/third-party-source/zapret2-1.0.5.2-source.zip')) {
+        Set-Content (Join-Path $install $obsolete) 'Legacy product file fixture only; never executable.'
+    }
     Invoke-Checked $setup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"", "/LOG=`"$(Join-Path $results 'installer-install.log')`"")
     $app = Join-Path $install 'Northpass.exe'
     if (!(Test-Path $app)) { throw 'Installer did not install the application.' }
-    if ((Get-Item $app).VersionInfo.ProductVersion -notlike '0.5.0*') { throw 'Installed version is incorrect.' }
-    foreach ($required in @('engine-payload/flowseal-offline.zip', 'engine-payload/zapret2-offline.zip', 'THIRD_PARTY_NOTICES.md', 'docs/third-party-source', 'docs/licenses/dotnet')) {
+    if ((Get-Item $app).VersionInfo.ProductVersion -notlike '0.6.0*') { throw 'Installed version is incorrect.' }
+    foreach ($required in @('engine-payload/flowseal-offline.zip', 'THIRD_PARTY_NOTICES.md', 'docs/third-party-source', 'docs/licenses/dotnet')) {
         if (!(Test-Path (Join-Path $install $required))) { throw "Bundled distribution content is missing: $required" }
+    }
+    foreach ($removed in @('Northpass.Engine.Zapret2.dll', 'engine-payload/zapret2-offline.zip', 'profiles/zapret2-reviewed-example.json', 'profiles/example-template.json', 'docs/third-party-source/zapret2-1.0.5.2-source.zip')) {
+        if (Test-Path (Join-Path $install $removed)) { throw "Legacy product content was installed: $removed" }
     }
     # Product startup and this check share the same mandatory-offline manager and Windows ACL policy.
     Invoke-Checked $app @('--installation-check')
@@ -42,7 +49,7 @@ try {
         Invoke-Checked $app @('--installation-check')
         if ((Get-Item $selection).LastWriteTimeUtc -ne $activated) { throw 'Subsequent launch did not reuse the installed components.' }
         # Missing content must fail closed through the real published entry point.
-        $target = if ($catalog.Name -eq 'flowseal') { 'bin/tls_clienthello_www_google_com.bin' } else { 'lua/zapret-antidpi.lua' }
+        $target = 'bin/tls_clienthello_www_google_com.bin'
         $missing = Join-Path (Join-Path $engineRoot $manifest.revision) $target
         $saved = [IO.File]::ReadAllBytes($missing)
         $acl = Get-Acl $missing
@@ -55,7 +62,7 @@ try {
         }
         Invoke-Checked $app @('--installation-check')
     }
-    $evidence = 'One-file installer installed the self-contained x64 app, payload, licenses and sources. Published app prepared 36 verified protected components across both modules, reused them, rejected a missing component, and verified the restored installation. No traffic interception or ISP bypass test was performed.'
+    $evidence = 'One-file installer installed the self-contained x64 app, sole reviewed payload, licenses and sources; obsolete named fixture files were removed. Published app prepared 18 verified protected components, reused them, rejected a missing component, and verified the restored installation. No traffic interception or ISP bypass test was performed.'
     Set-Content (Join-Path $results 'installer-evidence.txt') $evidence
     Write-Host "::notice title=Installed application acceptance::$evidence"
 } finally {

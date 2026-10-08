@@ -15,6 +15,20 @@ public sealed record ServiceProbeTarget(string Id, string Name, Uri HttpsUrl);
 public sealed record ServiceProbeResult(string Id, string Name, string Host, IReadOnlyList<string> ResolvedAddresses,
     string? ConnectedAddress, ProbeObservation Dns, ProbeObservation Tcp, ProbeObservation Tls, ProbeObservation Https,
     ProbeObservation Quic, ProbeObservation Stun, ProbeObservation MediaPlayback, ProbeObservation Login, ProbeObservation Voice, ProbeObservation Gateway);
+public enum ServiceAvailability { Unknown, Available, Limited, Unavailable }
+public static class ServiceAvailabilityPolicy
+{
+    // These labels describe only the checked web endpoint, never the engine state.
+    public static ServiceAvailability Evaluate(ServiceProbeResult? result)
+    {
+        if (result is null) return ServiceAvailability.Unknown;
+        if (result.Dns.State == ProbeState.Failed || result.Tcp.State == ProbeState.Failed) return ServiceAvailability.Unavailable;
+        var stages = new[] { result.Dns, result.Tcp, result.Tls, result.Https };
+        if (stages.All(stage => stage.State == ProbeState.Passed)) return ServiceAvailability.Available;
+        if (stages.Any(stage => stage.State != ProbeState.Unknown)) return ServiceAvailability.Limited;
+        return ServiceAvailability.Unknown;
+    }
+}
 public interface IServiceProbeTransport
 {
     Task<ServiceProbeResult> ProbeAsync(ServiceProbeTarget target, CancellationToken token);
@@ -24,13 +38,14 @@ public sealed class ServiceProbeService(IServiceProbeTransport transport)
     public static IReadOnlyList<ServiceProbeTarget> Targets { get; } = Array.AsReadOnly(new[]
     {
         new ServiceProbeTarget("youtube", "YouTube", new("https://www.youtube.com/")),
-        new ServiceProbeTarget("discord", "Discord", new("https://discord.com/api/v10/gateway"))
+        new ServiceProbeTarget("discord", "Discord", new("https://discord.com/api/v10/gateway")),
+        new ServiceProbeTarget("telegram", "Telegram", new("https://web.telegram.org/"))
     });
     public async Task<IReadOnlyList<ServiceProbeResult>> TestAsync(CancellationToken token = default)
     {
-        var results = new List<ServiceProbeResult>();
-        foreach (var target in Targets) results.Add(await transport.ProbeAsync(target, token));
-        return results.AsReadOnly();
+        var results = await Task.WhenAll(Targets.Select(target => transport.ProbeAsync(target, token)));
+        token.ThrowIfCancellationRequested();
+        return Array.AsReadOnly(results);
     }
 }
 
@@ -76,7 +91,7 @@ public sealed class NetworkServiceProbeTransport : IServiceProbeTransport
                 }, timeout.Token);
                 tls = new(ProbeState.Passed, "TLS certificate and hostname verified on the connected address.", watch.Elapsed.TotalMilliseconds);
                 stage = "https"; watch.Restart();
-                byte[] request = Encoding.ASCII.GetBytes($"GET {target.HttpsUrl.PathAndQuery} HTTP/1.1\r\nHost: {target.HttpsUrl.Host}\r\nUser-Agent: Northpass/0.5\r\nAccept: */*\r\nConnection: close\r\n\r\n");
+                byte[] request = Encoding.ASCII.GetBytes($"GET {target.HttpsUrl.PathAndQuery} HTTP/1.1\r\nHost: {target.HttpsUrl.Host}\r\nUser-Agent: Northpass/0.6\r\nAccept: */*\r\nConnection: close\r\n\r\n");
                 await stream.WriteAsync(request, timeout.Token);
                 await stream.FlushAsync(timeout.Token);
                 var status = new List<byte>(); byte[] one = new byte[1]; bool completeLine = false;

@@ -44,7 +44,7 @@ def acquire(url, size, digest, cache, supplied=None):
 
 def prepare_catalog(catalog, args):
     manifest = json.loads((ROOT / f"engine/catalog/{catalog}.json").read_text())
-    bundle = acquire(manifest["archiveUrl"], manifest["archiveSize"], manifest["archiveSha256"], args.cache, args.bundle_archive if catalog == "zapret2" else None)
+    bundle = acquire(manifest["archiveUrl"], manifest["archiveSize"], manifest["archiveSha256"], args.cache, None)
     payload_dir = args.output / "engine-payload"
     payload_dir.mkdir(parents=True, exist_ok=True)
     payload = payload_dir / f"{catalog}-offline.zip"
@@ -78,9 +78,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "dist/Northpass")
     parser.add_argument("--cache", type=Path, default=ROOT / "dist/acquisition-cache")
-    parser.add_argument("--bundle-archive", type=Path)
     args = parser.parse_args()
-    for catalog in ("zapret2", "flowseal"):
+    for catalog in ("flowseal",):
         prepare_catalog(catalog, args)
     # Supply corresponding source with the offline binary distribution, not a written offer.
     sources = json.loads((ROOT / "engine/catalog/redistribution-sources.json").read_text())

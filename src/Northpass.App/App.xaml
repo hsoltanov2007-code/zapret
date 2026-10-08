@@ -1,8 +1,15 @@
 <Application x:Class="Northpass.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" ShutdownMode="OnMainWindowClose">
   <Application.Resources>
+    <DrawingImage x:Key="NorthpassMark"><DrawingImage.Drawing><DrawingGroup>
+      <GeometryDrawing Brush="Transparent" Geometry="M0,0 L64,0 64,64 0,64 Z"/>
+      <GeometryDrawing Geometry="M18 18 V46 L46 28 V46 M46 14 V18"><GeometryDrawing.Pen><Pen Brush="#17171B" Thickness="7" StartLineCap="Round" EndLineCap="Round" LineJoin="Round"/></GeometryDrawing.Pen></GeometryDrawing>
+    </DrawingGroup></DrawingImage.Drawing></DrawingImage>
     <BooleanToVisibilityConverter x:Key="VisibleWhenTrue"/>
     <SolidColorBrush x:Key="Surface" Color="#151517"/>
     <SolidColorBrush x:Key="Ink" Color="#F0F0F2"/>
+    <DataTemplate x:Key="QuickServiceCard"><Border Background="#151517" BorderBrush="#28282D" BorderThickness="1" CornerRadius="12" Padding="16" Margin="0,0,10,0"><StackPanel>
+      <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold"/><StackPanel Orientation="Horizontal" Margin="0,10,0,6"><Ellipse Width="6" Height="6" Fill="{Binding Color}" Margin="0,0,7,0"/><TextBlock Text="{Binding Summary}" Foreground="{Binding Color}" FontSize="13"/></StackPanel><TextBlock Text="{Binding Scope}" Foreground="#A3A3AD" FontSize="10"/>
+    </StackPanel></Border></DataTemplate>
     <Style TargetType="Window"><Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI"/><Setter Property="Background" Value="#0C0C0E"/><Setter Property="Foreground" Value="{StaticResource Ink}"/></Style>
     <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/></Style>
     <Style x:Key="Muted" TargetType="TextBlock"><Setter Property="Foreground" Value="#A3A3AD"/><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="FontSize" Value="13"/></Style>

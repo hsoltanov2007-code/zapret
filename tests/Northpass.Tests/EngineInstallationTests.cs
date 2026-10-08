@@ -42,11 +42,11 @@ public sealed class EngineInstallationTests : IDisposable
     private static (EngineManifest Manifest, byte[] Archive) Fixture(char revision = 'a', string content = "test engine")
     {
         byte[] exe = Encoding.UTF8.GetBytes(content), dll = Encoding.UTF8.GetBytes("trusted runtime");
-        byte[] archive = Zip(("engine/winws2.exe", exe, 0), ("engine/runtime.dll", dll, 0));
+        byte[] archive = Zip(("engine/winws.exe", exe, 0), ("engine/runtime.dll", dll, 0));
         string commit = new(revision, 40);
-        return (new("zapret2", commit, "1.0.0", "winws2.exe", "https://codeload.github.com/test/engine/zip/" + commit,
+        return (new("zapret1", commit, "1.0.0", "winws.exe", "https://codeload.github.com/test/engine/zip/" + commit,
             Hash(archive), archive.Length, "", Hash(archive), archive.Length,
-            [new("engine/winws2.exe", "winws2.exe", exe.Length, Hash(exe)), new("engine/runtime.dll", "runtime.dll", dll.Length, Hash(dll))]), archive);
+            [new("engine/winws.exe", "winws.exe", exe.Length, Hash(exe)), new("engine/runtime.dll", "runtime.dll", dll.Length, Hash(dll))]), archive);
     }
     private EngineInstallationManager Manager(HttpClient http, EngineManifest manifest, IEnumerable<EngineManifest>? previous = null,
         string? offline = null, Func<Northpass.Engine.InstalledEngine, CancellationToken, Task>? probe = null)
@@ -57,7 +57,7 @@ public sealed class EngineInstallationTests : IDisposable
     public async Task NestedExecutablePathsAreCanonicalizedBeforeAcquiringTheProtectedLease()
     {
         var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);
-        var manifest = fixture.Manifest with { Executable = "bin/winws2.exe", Components = fixture.Manifest.Components.Select(c => c with { Path = "bin/" + c.Path }).ToArray() };
+        var manifest = fixture.Manifest with { Executable = "bin/winws.exe", Components = fixture.Manifest.Components.Select(c => c with { Path = "bin/" + c.Path }).ToArray() };
         var manager = Manager(http, manifest); var installed = await manager.EnsureInstalledAsync();
         Assert.Equal(Path.GetFullPath(installed.ExecutablePath), installed.ExecutablePath);
         await using var lease = await manager.AcquireLaunchLeaseAsync(installed.ExecutablePath);
@@ -182,7 +182,7 @@ public sealed class EngineInstallationTests : IDisposable
     {
         var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);
         var manager = Manager(http, fixture.Manifest); var engine = await manager.EnsureInstalledAsync();
-        await Assert.ThrowsAsync<InvalidDataException>(() => manager.AcquireLaunchLeaseAsync(Path.Combine(_directory, "winws2.exe")));
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.AcquireLaunchLeaseAsync(Path.Combine(_directory, "winws.exe")));
         await using (var lease = await manager.AcquireLaunchLeaseAsync(engine.ExecutablePath))
             await Assert.ThrowsAsync<IOException>(() => manager.UpdateAsync());
         Assert.Equal(engine, await manager.DetectAsync());
@@ -218,7 +218,7 @@ public sealed class EngineInstallationTests : IDisposable
         await Assert.ThrowsAsync<InvalidDataException>(() => manager.DetectAsync());
         Assert.Equal(engine, await manager.RepairAsync()); Assert.Equal(engine, await manager.DetectAsync());
         var backup = Assert.Single(Directory.EnumerateDirectories(Path.GetDirectoryName(State)!, ".repair-backup-*"));
-        Assert.Equal("corrupt", await File.ReadAllTextAsync(Path.Combine(backup, "winws2.exe")));
+        Assert.Equal("corrupt", await File.ReadAllTextAsync(Path.Combine(backup, "winws.exe")));
         Assert.Equal(2, handler.Requests);
     }
     [Fact]
