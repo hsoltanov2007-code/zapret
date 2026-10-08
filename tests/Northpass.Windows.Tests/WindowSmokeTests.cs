@@ -35,7 +35,7 @@ public sealed class WindowSmokeTests
                     {
                         var registry = new EngineRegistry(); registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine());
                         var profiles = new ProfileStore(Path.Combine(temporary, "profiles"));
-                        profiles.Save(new() { Id = "draft", Name = "Draft", Arguments = [] });
+                        profiles.Save(new() { Id = "draft", Name = "Draft", Engine = "ZAPRET2", Arguments = [] });
                         using var http = new HttpClient();
                         var desktop = new SetupConsent(); var installation = new FakeInstallation();
                         var store = new SettingsStore(temporary);
@@ -52,6 +52,7 @@ public sealed class WindowSmokeTests
                         Assert.Equal("Engine ready", model.EngineSetupText);
                         Assert.Equal(1, desktop.Consents); Assert.Equal(1, installation.Setups);
                         Assert.True(store.Load().EngineSetupConsent); Assert.False(model.CanChooseEngine);
+                        Assert.True(model.ManagedEngine);
                         var tabs = Assert.IsType<TabControl>(window.FindName("NavigationTabs"));
                         Assert.Equal(5, tabs.Items.Count);
                         for (int page = 0; page < tabs.Items.Count; page++) { tabs.SelectedIndex = page; window.UpdateLayout(); }

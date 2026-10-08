@@ -90,7 +90,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         }
     }
     public string EnginePath { get => _enginePath; set => Set(ref _enginePath, value); }
-    public bool ManagedEngine => _installation is not null && SelectedProfile?.Engine == _installation.EngineId;
+    public bool ManagedEngine => _installation is not null && string.Equals(SelectedProfile?.Engine, _installation.EngineId, StringComparison.OrdinalIgnoreCase);
     public bool CanChooseEngine => CanConfigure && !ManagedEngine;
     public string EngineSetupText => Strings[_setupPhase];
     public double EngineSetupProgress { get => _setupProgress; private set => Set(ref _setupProgress, value); }
