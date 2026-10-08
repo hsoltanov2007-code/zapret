@@ -24,7 +24,21 @@ public sealed class Zapret2Engine : IDpiEngine
     public Task<ValidationResult> ValidateConfigurationAsync(EngineConfiguration configuration, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return Task.FromResult(Zapret2ConfigurationValidator.Validate(configuration));
+        var validation = Zapret2ConfigurationValidator.Validate(configuration);
+        if (_installation is not null && validation.IsValid)
+        {
+            var issues = validation.Issues.ToList();
+            string engineDirectory = Path.GetDirectoryName(Path.GetFullPath(configuration.ExecutablePath))!;
+            string profileDirectory = Path.GetDirectoryName(Path.GetFullPath(configuration.Profile.SourcePath))!;
+            foreach (string raw in configuration.Profile.Arguments)
+            {
+                string argument = Zapret2ConfigurationValidator.Expand(raw, engineDirectory, profileDirectory);
+                if (argument.StartsWith("--lua-init=@", StringComparison.Ordinal) && !TrustedLuaPath(argument[12..], engineDirectory))
+                    issues.Add(new("engine.lua-trust", "Managed engine Lua must come from the verified protected engine installation. External Lua is not allowed."));
+            }
+            validation = new(issues);
+        }
+        return Task.FromResult(validation);
     }
     private async Task<ProcessStartInfo> PrepareAsync(EngineConfiguration configuration, CancellationToken token)
     {
@@ -140,14 +154,18 @@ public sealed class Zapret2Engine : IDpiEngine
         foreach (string argument in info.ArgumentList)
         {
             if (!argument.StartsWith("--lua-init=@", StringComparison.Ordinal)) continue;
-            string file = Path.GetFullPath(argument[12..], info.WorkingDirectory);
-            string relative = Path.GetRelativePath(info.WorkingDirectory, file);
-            if (relative.StartsWith("..") || Path.IsPathRooted(relative) || !file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase))
+            if (!TrustedLuaPath(argument[12..], info.WorkingDirectory))
                 throw new InvalidOperationException("Managed engine Lua must come from the verified protected engine installation. Imported Lua cannot run elevated.");
         }
         // Prevent environment-based DLL/Lua substitution. The executable and working directory are protected.
         info.Environment["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
         foreach (string variable in new[] { "LUA_PATH", "LUA_CPATH", "LUA_INIT", "LUA_PATH_5_1", "LUA_CPATH_5_1", "CYGWIN" }) info.Environment.Remove(variable);
+    }
+    private static bool TrustedLuaPath(string path, string directory)
+    {
+        string file = Path.GetFullPath(path, directory);
+        string relative = Path.GetRelativePath(directory, file);
+        return !relative.StartsWith("..") && !Path.IsPathRooted(relative) && file.EndsWith(".lua", StringComparison.OrdinalIgnoreCase);
     }
     public static async Task VerifyInstalledVersionAsync(InstalledEngine engine, CancellationToken token)
     {

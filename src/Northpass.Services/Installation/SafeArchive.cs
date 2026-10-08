@@ -21,8 +21,13 @@ public static class SafeArchive
     public static void NoLinks(string path)
     {
         for (string? current = System.IO.Path.GetFullPath(path); current is not null; current = System.IO.Path.GetDirectoryName(current))
-            if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+        {
+            FileAttributes attributes;
+            try { attributes = File.GetAttributes(current); }
+            catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { continue; }
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
                 throw new IOException("Engine paths cannot contain symbolic links or junctions: " + current);
+        }
     }
 
     public static async Task VerifyFileAsync(string path, long size, string hash, CancellationToken token)

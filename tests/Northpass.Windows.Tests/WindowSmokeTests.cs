@@ -25,6 +25,7 @@ public sealed class WindowSmokeTests
             {
                 var app = new App { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
                 app.InitializeComponent();
+                app.ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
                 // A continuously running dispatcher allows genuine asynchronous UI setup/cleanup.
                 app.Dispatcher.BeginInvoke(new Action(async () =>
                 {
@@ -75,6 +76,8 @@ public sealed class WindowSmokeTests
                         if (window is not null && !closed.Task.IsCompleted) { window.Close(); await closed.Task; }
                         stage = "dispatcher shutdown";
                         app.Shutdown();
+                        // This test starts Dispatcher.Run directly; Application.Run does not own it.
+                        app.Dispatcher.BeginInvokeShutdown(DispatcherPriority.Background);
                     }
                 }));
                 Dispatcher.Run();

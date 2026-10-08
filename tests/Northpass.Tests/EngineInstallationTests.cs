@@ -241,5 +241,16 @@ public sealed class EngineInstallationTests : IDisposable
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => manager.EnsureInstalledAsync(token: cancellation.Token));
         Assert.False(File.Exists(State));
     }
+    [Fact]
+    public void DanglingLinksAndLinkedAncestorsAreRejected()
+    {
+        Directory.CreateDirectory(_directory);
+        string file = Path.Combine(_directory, "dangling");
+        File.CreateSymbolicLink(file, Path.Combine(_directory, "missing"));
+        Assert.Throws<IOException>(() => SafeArchive.NoLinks(file));
+        string outside = Path.Combine(_directory, "outside"); Directory.CreateDirectory(outside);
+        string folder = Path.Combine(_directory, "linked-folder"); Directory.CreateSymbolicLink(folder, outside);
+        Assert.Throws<IOException>(() => SafeArchive.NoLinks(Path.Combine(folder, "future-file")));
+    }
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, true); }
 }
