@@ -1,4 +1,5 @@
 using System.Windows.Controls;
+using System.Windows.Threading;
 using Northpass.Desktop;
 using Northpass.Engine;
 using Northpass.Engine.Zapret2;
@@ -37,7 +38,10 @@ public sealed class WindowSmokeTests
                 for (int page = 0; page < tabs.Items.Count; page++) { tabs.SelectedIndex = page; window.UpdateLayout(); }
                 model.Language = "ru"; Assert.Equal("Главная", model.Strings["Dashboard"]);
                 model.Language = "az"; Assert.Equal("İdarə paneli", model.Strings["Dashboard"]);
+                var frame = new DispatcherFrame();
+                window.Closed += (_, _) => frame.Continue = false;
                 window.Close();
+                Dispatcher.PushFrame(frame);
                 Assert.False(window.IsVisible);
                 complete.TrySetResult();
             }

@@ -29,9 +29,38 @@ jobs:
         with:
           dotnet-version: 8.0.425
       - shell: pwsh
-        run: ./scripts/test.ps1
+        name: Portable tests on Windows
+        run: |
+          dotnet restore tests/Northpass.Tests/Northpass.Tests.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Portable test restore failed.' }
+          $output = dotnet test tests/Northpass.Tests/Northpass.Tests.csproj -c Release --no-restore --logger trx --results-directory TestResults 2>&1
+          $result = $LASTEXITCODE
+          $output | Write-Output
+          if ($result -ne 0) {
+            $message = ($output | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Portable tests failed::$message"
+            exit $result
+          }
+      - shell: pwsh
+        name: Windows WPF smoke test
+        run: |
+          dotnet restore tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Windows test restore failed.' }
+          $output = dotnet test tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj -c Release --no-restore --logger trx --results-directory TestResults 2>&1
+          $result = $LASTEXITCODE
+          $output | Write-Output
+          if ($result -ne 0) {
+            $message = ($output | Out-String).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Host "::error title=Windows smoke test failed::$message"
+            exit $result
+          }
       - shell: pwsh
         run: ./scripts/build.ps1 -Installer
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-test-results
+          path: TestResults
       - uses: actions/upload-artifact@v4
         with:
           name: Northpass-win-x64

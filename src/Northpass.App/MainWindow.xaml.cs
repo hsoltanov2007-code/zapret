@@ -63,6 +63,9 @@ public partial class MainWindow : Window
         if (_closing) return;
         _closing = true;
         _timer.Stop();
+        // Even when cleanup completes synchronously, let WPF finish this cancelled
+        // Closing event before invoking Close again.
+        await Dispatcher.Yield(DispatcherPriority.Background);
         try
         {
             await _model.DisposeAsync();
