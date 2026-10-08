@@ -42,20 +42,20 @@ def acquire(url, size, digest, cache, supplied=None):
     return path
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "dist/Northpass")
-    parser.add_argument("--cache", type=Path, default=ROOT / "dist/acquisition-cache")
-    parser.add_argument("--bundle-archive", type=Path)
-    args = parser.parse_args()
-    manifest = json.loads((ROOT / "engine/catalog/zapret2.json").read_text())
-    bundle = acquire(manifest["archiveUrl"], manifest["archiveSize"], manifest["archiveSha256"], args.cache, args.bundle_archive)
+def prepare_catalog(catalog, args):
+    manifest = json.loads((ROOT / f"engine/catalog/{catalog}.json").read_text())
+    bundle = acquire(manifest["archiveUrl"], manifest["archiveSize"], manifest["archiveSha256"], args.cache, args.bundle_archive if catalog == "zapret2" else None)
     payload_dir = args.output / "engine-payload"
     payload_dir.mkdir(parents=True, exist_ok=True)
-    payload = payload_dir / "zapret2-offline.zip"
+    payload = payload_dir / f"{catalog}-offline.zip"
     temporary = payload.with_suffix(".partial")
     try:
         with zipfile.ZipFile(bundle) as source, zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED) as target:
+            if catalog == "flowseal":
+                from importlib.util import spec_from_file_location, module_from_spec
+                spec = spec_from_file_location("reviewed_flowseal", ROOT / "scripts/verify-flowseal-catalog.py")
+                module = module_from_spec(spec); spec.loader.exec_module(module)
+                module.verify_catalog(source, manifest["archivePrefix"], ROOT)
             names = source.namelist()
             if len(names) != len(set(n.casefold() for n in names)):
                 raise RuntimeError("Duplicate archive paths")
@@ -71,6 +71,17 @@ def main():
         temporary.replace(payload)
     finally:
         temporary.unlink(missing_ok=True)
+    print(f"Verified {catalog} payload: {len(manifest['components'])} x64 components; pinned revision {manifest['revision']}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=ROOT / "dist/Northpass")
+    parser.add_argument("--cache", type=Path, default=ROOT / "dist/acquisition-cache")
+    parser.add_argument("--bundle-archive", type=Path)
+    args = parser.parse_args()
+    for catalog in ("zapret2", "flowseal"):
+        prepare_catalog(catalog, args)
     # Supply corresponding source with the offline binary distribution, not a written offer.
     sources = json.loads((ROOT / "engine/catalog/redistribution-sources.json").read_text())
     source_dir = args.output / "docs/third-party-source"
@@ -80,7 +91,6 @@ def main():
         shutil.copyfile(archive, source_dir / source["name"])
     shutil.copytree(ROOT / "docs/licenses", args.output / "docs/licenses", dirs_exist_ok=True)
     shutil.copyfile(ROOT / "THIRD_PARTY_NOTICES.md", args.output / "THIRD_PARTY_NOTICES.md")
-    print(f"Verified offline payload: {len(manifest['components'])} x64 components; pinned revision {manifest['revision']}")
     print("Corresponding third-party source archives and full notices are included.")
 
 

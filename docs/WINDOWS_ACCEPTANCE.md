@@ -18,3 +18,19 @@ These checks are **not implied** by a Linux build or portable tests. Run on a cl
 If any criterion fails, fix the defect and rerun the affected checks. A source PR or CI artifact is not a statement that Northpass 0.4 is a release-ready or universally working bypass application.
 
 For v0.4 also evaluate custom chrome, dropdowns, keyboard focus, EN/RU/AZ wrapping, 100/150/200% DPI, text scaling, small-window scroll behavior, actual installer post-install launch/UAC, and full About licence/source access. CI screenshots and published bootstrap checks are evidence for the runner only.
+
+
+## v0.5 real Russian ISP acceptance (unverified until performed)
+
+Record Windows build, physical ISP/provider, connection type, chosen reviewed strategy, catalog revision, port inputs and custom-list IDs. Repeat with at least two independent Russian ISPs where available; do not treat a VPN/non-Russian CI runner as provider evidence. Keep the application installed in Program Files with Windows security enabled.
+
+1. Run offline install, initial launch/Ready, restart/reuse and Repair installation. Upgrade a v0.4 install and verify language, tray/autostart/recovery preferences and a valid selected Zapret2 profile survive. Switch explicitly to each of the five Flowseal strategies after disconnection.
+2. Compare disconnected/connected YouTube and Discord DNS/TCP/TLS/HTTPS stages. Record the selected IPv4/IPv6 address; explicitly test both address families separately if available. A 2xx result for one host is not provider-wide success.
+3. Play multiple real YouTube videos (including seeking and sustained media delivery), compare HTTP/2 and QUIC/HTTP/3 where supported, and record actual failures. Do not infer video access from the home-page check.
+4. Sign in to Discord manually, establish a real gateway session, exchange text/media and perform a two-way voice call. Verify inbound/outbound audio, channel reconnection, STUN/UDP behavior and different voice regions. Automated probes do not exercise credentials, gateway negotiation or voice. Record these as manual observations.
+5. Test configured DNS environments without Northpass changing resolver/hosts settings. Check IPv6, QUIC/UDP blocking, provider variability and timestamp-dependent ALT strategies; Northpass does not apply upstream global TCP timestamp changes.
+6. Run another winws/winws2 deliberately. Northpass must show collision guidance, leave that process untouched and start only after it is closed through its own controls. Check antivirus/driver policy failures without disabling Defender, Firewall, Secure Boot or UAC.
+7. Disconnect/close during normal operation and during a guided test. Verify only owned children stop and per-session data/leases are released. A loaded shared driver may remain in Windows; do not remove its global service. Confirm cancellation/failure evidence is saved locally and no hidden strategy switching occurs.
+8. Run signed release candidates as an ordinary interactive user: actual UAC, clean Windows 10/11 machines, high DPI/keyboard accessibility, tray/autostart, install/upgrade/uninstall and privacy review of exported logs. CI artifacts are unsigned development builds.
+
+Use Advanced → Test selected strategy for bounded local evidence; test concludes disconnected. Connect that same configuration separately for real video/voice work, then record user-reported outcomes explicitly. Keep reported playback/voice separate from automated stage checks. None of these real Russian ISP results have been established by Linux cross-compilation or Windows CI.

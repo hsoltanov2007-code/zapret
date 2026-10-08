@@ -1,3 +1,11 @@
+# Northpass v0.5
+
+- Reviewed pinned Flowseal 1.10.3 / winws v72.9 adapter, five typed strategies, offline verified payload and corresponding sources/licences. No BAT execution or global network/security changes.
+- New-install default with existing valid selections preserved; optional Zapret2 retained and future native architecture unchanged.
+- Safe text-list imports, protected session snapshots, explicit game-port inputs, process-collision guidance and ownership cleanup.
+- Separate YouTube/Discord stage checks, manual guided strategy tests with local evidence and explicit user-reported playback/voice fields. No bypass/voice claims inferred from process liveness.
+- Preserved premium black EN/RU/AZ interface; one-file offline installer with protected normal runtime files and Windows acceptance/CI.
+
 # Changelog
 
 ## 0.4.0 — development

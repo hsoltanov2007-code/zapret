@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows.Threading;
 using Northpass.Desktop;
 using Northpass.Engine;
+using Northpass.Engine.Zapret1;
 using Northpass.Models;
 using Northpass.Services;
 
@@ -17,7 +18,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly UpdateChecker _updates;
     private readonly IDesktopServices _desktop;
     private readonly Dispatcher _dispatcher;
-    private readonly IEngineInstallationManager? _installation;
+    private readonly Dictionary<string, IEngineInstallationManager> _installations = new(StringComparer.OrdinalIgnoreCase);
+    private IEngineInstallationManager? _installation => _installations.GetValueOrDefault(SelectedProfile?.Engine ?? "");
+    private readonly DataListStore? _dataLists;
+    private readonly ServiceProbeService? _serviceProbes;
+    private readonly StrategyTestRecordStore? _testRecords;
+    private CancellationTokenSource? _testCancellation;
+    private Task? _testTask;
+    private StrategyTestRecord? _lastTest;
+    private string _providerLabel = "", _serviceResults = "";
+    private string _gameTcpPorts = "12", _gameUdpPorts = "12";
+    private string _generalListId = "", _excludedHostsId = "", _excludedIpsId = "", _allIpsId = "";
+    private DataListKind _importListKind;
     private string _setupPhase = "SetupRequired", _engineRevision = "";
     private double _setupProgress;
     private Task? _setupTask;
@@ -36,11 +48,25 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private readonly List<AsyncRelayCommand> _commands = new();
 
     public MainViewModel(EngineController controller, EngineRegistry registry, SettingsStore settingsStore,
-        ProfileStore profileStore, DiagnosticsService diagnostics, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher, IEngineInstallationManager? installation = null)
+        ProfileStore profileStore, DiagnosticsService diagnostics, UpdateChecker updates, IDesktopServices desktop, Dispatcher dispatcher, IEngineInstallationManager? installation = null,
+        IEnumerable<IEngineInstallationManager>? additionalInstallations = null, DataListStore? dataLists = null,
+        ServiceProbeService? serviceProbes = null, StrategyTestRecordStore? testRecords = null)
     {
         (_controller, _registry, _settingsStore, _profileStore, _diagnostics, _updates, _desktop, _dispatcher) =
             (controller, registry, settingsStore, profileStore, diagnostics, updates, desktop, dispatcher);
-        _installation = installation;
+        if (installation is not null) _installations.Add(installation.EngineId, installation);
+        foreach (var manager in additionalInstallations ?? []) _installations.Add(manager.EngineId, manager);
+        (_dataLists, _serviceProbes, _testRecords) = (dataLists, serviceProbes, testRecords);
+        ImportListCommand = Command(ImportListAsync, () => CanConfigure && FlowsealSelected && _dataLists is not null);
+        SaveInputsCommand = Command(SaveInputsAsync, () => CanConfigure && FlowsealSelected);
+        ServiceProbesCommand = Command(ServiceProbesAsync, () => _serviceProbes is not null);
+        TestStrategyCommand = Command(TestStrategyAsync, () => SelectedProfile is not null && _serviceProbes is not null && _testRecords is not null);
+        NextStrategyCommand = Command(NextStrategyAsync, () => SelectedProfile is not null);
+        CancelTestCommand = new(() => _testCancellation?.Cancel(), () => _testCancellation is not null);
+        ReportPlaybackPassedCommand = Command(() => ReportManualOutcome(true, ProbeState.Passed), () => _lastTest is not null);
+        ReportPlaybackFailedCommand = Command(() => ReportManualOutcome(true, ProbeState.Failed), () => _lastTest is not null);
+        ReportVoicePassedCommand = Command(() => ReportManualOutcome(false, ProbeState.Passed), () => _lastTest is not null);
+        ReportVoiceFailedCommand = Command(() => ReportManualOutcome(false, ProbeState.Failed), () => _lastTest is not null);
         SetupEngineCommand = Command(SetupEngineAsync, () => CanConfigure);
         RepairEngineCommand = Command(RepairEngineAsync, () => CanConfigure);
         UpdateEngineCommand = Command(UpdateEngineAsync, () => CanConfigure);
@@ -92,13 +118,47 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         get => _selectedProfile;
         set
         {
+            if (SessionOpen && !_loading) throw new InvalidOperationException("Disconnect before selecting another strategy.");
+            string? previousEngine = _selectedProfile?.Engine;
             if (!Set(ref _selectedProfile, value)) return;
+            _lastTest = null; ServiceResults = "";
+            if (!_loading && !string.Equals(previousEngine, value?.Engine, StringComparison.OrdinalIgnoreCase))
+            { EnginePath = ""; EngineRevision = ""; SetSetupPhase(_installation is null ? "Ready" : "SetupRequired"); }
+            GameTcpPorts = value?.GameTcpPorts ?? "12"; GameUdpPorts = value?.GameUdpPorts ?? "12";
+            GeneralListId = value?.ListBindings?.GetValueOrDefault("general") ?? "";
+            ExcludedHostsId = value?.ListBindings?.GetValueOrDefault("excluded-hosts") ?? "";
+            ExcludedIpsId = value?.ListBindings?.GetValueOrDefault("excluded-ips") ?? "";
+            AllIpsId = value?.ListBindings?.GetValueOrDefault("all-ips") ?? "";
+            Changed(nameof(FlowsealSelected));
             Changed(nameof(CurrentEngine)); Changed(nameof(ProfileDescription)); Changed(nameof(ManagedEngine)); Changed(nameof(CanChooseEngine));
             _reachability = null; Changed(nameof(Reachability));
             if (!_loading) PersistSelection();
             RefreshCommands();
         }
     }
+    public bool FlowsealSelected => SelectedProfile?.Engine == "zapret1";
+    public ObservableCollection<DataListEntry> HostLists { get; } = new();
+    public ObservableCollection<DataListEntry> IpLists { get; } = new();
+    public DataListKind[] ListKinds { get; } = [DataListKind.Hosts, DataListKind.IpSet];
+    public DataListKind ImportListKind { get => _importListKind; set => Set(ref _importListKind, value); }
+    public string GeneralListId { get => _generalListId; set => Set(ref _generalListId, value); }
+    public string ExcludedHostsId { get => _excludedHostsId; set => Set(ref _excludedHostsId, value); }
+    public string ExcludedIpsId { get => _excludedIpsId; set => Set(ref _excludedIpsId, value); }
+    public string AllIpsId { get => _allIpsId; set => Set(ref _allIpsId, value); }
+    public string GameTcpPorts { get => _gameTcpPorts; set => Set(ref _gameTcpPorts, value); }
+    public string GameUdpPorts { get => _gameUdpPorts; set => Set(ref _gameUdpPorts, value); }
+    public string ProviderLabel { get => _providerLabel; set => Set(ref _providerLabel, value); }
+    public string ServiceResults { get => _serviceResults; private set => Set(ref _serviceResults, value); }
+    public AsyncRelayCommand ImportListCommand { get; }
+    public AsyncRelayCommand SaveInputsCommand { get; }
+    public AsyncRelayCommand ServiceProbesCommand { get; }
+    public AsyncRelayCommand TestStrategyCommand { get; }
+    public AsyncRelayCommand NextStrategyCommand { get; }
+    public RelayCommand CancelTestCommand { get; }
+    public AsyncRelayCommand ReportPlaybackPassedCommand { get; }
+    public AsyncRelayCommand ReportPlaybackFailedCommand { get; }
+    public AsyncRelayCommand ReportVoicePassedCommand { get; }
+    public AsyncRelayCommand ReportVoiceFailedCommand { get; }
     public string EnginePath { get => _enginePath; set => Set(ref _enginePath, value); }
     public bool ManagedEngine => _installation is not null && string.Equals(SelectedProfile?.Engine, _installation.EngineId, StringComparison.OrdinalIgnoreCase);
     public bool CanChooseEngine => CanConfigure && !ManagedEngine;
@@ -167,16 +227,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             CheckForUpdates = _settings.CheckForUpdates;
             ShowAdvancedTools = _settings.ShowAdvancedTools;
             _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
-            ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? "zapret2-reviewed-example" : null);
+            string starter = _registry.Find("zapret1") is not null ? FlowsealCatalog.StarterProfileId : "zapret2-reviewed-example";
+            ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? starter : null);
+            ReloadLists();
             // Preserve drafts as files, but do not make upgrades require JSON editing
             // before the first connection. A valid custom selection is kept.
-            if (ManagedEngine && SelectedProfile?.Arguments.Count == 0 && Profiles.FirstOrDefault(p => p.Id == "zapret2-reviewed-example") is { } included)
+            if (ManagedEngine && SelectedProfile?.Arguments.Count == 0 && Profiles.FirstOrDefault(p => p.Id == starter) is { } included)
             {
                 Log("The selected profile was an empty draft; selected the included configuration without changing the draft.");
                 SelectedProfile = included;
             }
             _loading = false;
-            Log("Northpass 0.4. Engine process state and website reachability are reported separately.");
+            Log("Northpass 0.5. Engine process state and website reachability are reported separately.");
             if (_installation is not null)
             {
                 try
@@ -327,6 +389,90 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         ResultText = $"{_reachability.Url} · {Reachability}\n{_reachability.Detail}";
         Log(ResultText);
     }
+    private void ReloadLists()
+    {
+        HostLists.Clear(); IpLists.Clear();
+        HostLists.Add(new("", Strings["BundledDefault"], DataListKind.Hosts));
+        IpLists.Add(new("", Strings["BundledDefault"], DataListKind.IpSet));
+        foreach (var entry in _dataLists?.Load() ?? [])
+            (entry.Kind == DataListKind.Hosts ? HostLists : IpLists).Add(entry);
+    }
+    private Task ImportListAsync()
+    {
+        string? file = _desktop.PickDataList();
+        if (file is null) return Task.CompletedTask;
+        var entry = _dataLists!.Import(file, ImportListKind);
+        ReloadLists(); Log("Imported validated data-only list: " + entry.Name);
+        return Task.CompletedTask;
+    }
+    private Task SaveInputsAsync()
+    {
+        if (!Zapret1Options.ValidPorts(GameTcpPorts) || !Zapret1Options.ValidPorts(GameUdpPorts))
+            throw new InvalidDataException("Port lists must contain decimal ports or ordered ranges from 1 to 65535.");
+        var original = SelectedProfile ?? throw new InvalidOperationException("Select a strategy first.");
+        var replacement = ProfileValidation.Copy(original);
+        replacement.GameTcpPorts = GameTcpPorts; replacement.GameUdpPorts = GameUdpPorts;
+        replacement.ListBindings = new(StringComparer.Ordinal);
+        foreach (var pair in new[] { ("general", GeneralListId), ("excluded-hosts", ExcludedHostsId), ("excluded-ips", ExcludedIpsId), ("all-ips", AllIpsId) })
+            if (!string.IsNullOrEmpty(pair.Item2))
+            {
+                _dataLists!.Read(pair.Item2, pair.Item1 is "general" or "excluded-hosts" ? DataListKind.Hosts : DataListKind.IpSet);
+                replacement.ListBindings.Add(pair.Item1, pair.Item2);
+            }
+        _profileStore.Update(original, replacement); ReloadProfiles(original.Id);
+        SetMessage("SettingsSaved"); return Task.CompletedTask;
+    }
+    private string FormatServices(IReadOnlyList<ServiceProbeResult> results) => string.Join("\n\n", results.Select(r =>
+        $"{r.Name} · DNS: {Strings[r.Dns.State.ToString()]} · TCP: {Strings[r.Tcp.State.ToString()]} · TLS: {Strings[r.Tls.State.ToString()]} · HTTPS: {Strings[r.Https.State.ToString()]}\n{Strings["ProbeScope"]}"));
+    private async Task ServiceProbesAsync()
+    {
+        var results = await _serviceProbes!.TestAsync(_lifetime.Token);
+        ServiceResults = FormatServices(results);
+        foreach (var result in results) Log(System.Text.Json.JsonSerializer.Serialize(result));
+    }
+    private async Task TestStrategyAsync()
+    {
+        var selected = ProfileValidation.Copy(SelectedProfile!);
+        _lastTest = null;
+        if (!_desktop.ConfirmTrust(Strings["StrategyTestConsent"])) return;
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _testCancellation = cancel; CancelTestCommand.Refresh();
+        var runner = new StrategyTestRunner(_controller, _serviceProbes!, _testRecords!);
+        var task = runner.RunAsync(selected, ProviderLabel, async (profile, token) =>
+        {
+            if (!_installations.TryGetValue(profile.Engine, out var manager))
+                throw new InvalidOperationException("Guided testing requires a managed, reviewed module.");
+            var installed = await manager.EnsureInstalledAsync(SetupProgress(), token);
+            ApplyInstalled(installed);
+            return (new EngineConfiguration(installed.ExecutablePath, profile), installed.Revision);
+        }, cancel.Token);
+        _testTask = task;
+        try
+        {
+            _lastTest = await task;
+            ServiceResults = FormatServices(_lastTest.Services);
+            Log("Strategy evidence saved: " + _lastTest.Id + ".json (no provider-wide or voice conclusion)");
+        }
+        finally { _testTask = null; _testCancellation = null; CancelTestCommand.Refresh(); }
+    }
+    private async Task NextStrategyAsync()
+    {
+        await _controller.DisconnectAsync(_lifetime.Token);
+        // This is an explicit user action; it never connects or chooses based on probe results.
+        ApplyStatus(await _controller.GetStatusAsync(_lifetime.Token));
+        var choices = Profiles.Where(p => p.Engine == "zapret1").ToArray();
+        if (choices.Length == 0) return;
+        int index = Array.FindIndex(choices, p => p.Id == SelectedProfile?.Id);
+        SelectedProfile = choices[(index + 1) % choices.Length];
+        _lastTest = null;
+    }
+    private Task ReportManualOutcome(bool playback, ProbeState outcome)
+    {
+        if (!_desktop.ConfirmTrust(Strings["ManualOutcomeConsent"])) return Task.CompletedTask;
+        _lastTest = playback ? _lastTest! with { UserReportedPlayback = outcome } : _lastTest! with { UserReportedVoice = outcome };
+        _testRecords!.Save(_lastTest); Log("User-reported observation saved separately from automated checks.");
+        return Task.CompletedTask;
+    }
     private void PersistSelection()
     {
         if (!_settingsReadable) { Log("Settings are unreadable; selection was not persisted."); return; }
@@ -369,7 +515,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (path is not null) { File.WriteAllText(path, LogText); Log("Diagnostics exported. Review paths and hostnames before sharing."); }
         return Task.CompletedTask;
     }
-    private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); }
+    private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); CancelTestCommand.Refresh(); }
     private void SetMessage(string key) { _messageKey = key; Changed(nameof(UserMessage)); }
     public void Fail(Exception ex, string messageKey = "ActionFailed")
     {
@@ -377,6 +523,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (messageKey == "InstallationFailed" && (ex is FileNotFoundException ||
             ex is InvalidDataException && (ex.Message.Contains("acquisition.zip", StringComparison.OrdinalIgnoreCase) ||
             ex.Message.Contains("Offline engine payload", StringComparison.OrdinalIgnoreCase)))) messageKey = "ReinstallRequired";
+        if (ex is EngineConflictException) messageKey = "EngineConflict";
         if (ex is UnauthorizedAccessException) messageKey = "AccessDenied";
         if (messageKey == "ConnectionFailed" && (ex.Message.Contains("driver", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("windivert", StringComparison.OrdinalIgnoreCase)))
             messageKey = "NetworkBlocked";
@@ -413,6 +560,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         _shuttingDown = true;
         RefreshCommands();
         _lifetime.Cancel();
+        if (_testTask is { } test)
+        { try { await test; } catch (Exception ex) { Log("Strategy test ended during shutdown: " + ex.Message); } }
         if (_setupTask is { } setup)
         {
             try { await setup; }

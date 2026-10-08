@@ -1,4 +1,4 @@
-# Northpass v0.4 architecture
+# Northpass v0.5 architecture
 
 The v0.1 starter was a single `net8.0-windows` WPF project with synchronous `IEngineAdapter` calls and engine-specific code in `MainWindow.xaml.cs`. v0.2 preserves its WPF/.NET/JSON design, profile schema and administrator manifest while replacing that coupling with asynchronous engine-independent services.
 
@@ -37,3 +37,8 @@ Diagnostics performs an explicitly requested HTTPS GET, preserves TLS validation
 The entire UI is elevated as in the starter because the external WinDivert engine requires it. A separate least-privilege Windows service/IPC design is future work. No native adapter, universal strategy or auto-selection success is simulated. The installation contract does not change IDpiEngine and a future native engine can provide its own installer or no installation service. See ENGINE_INSTALLATION.md for transactions and threat boundaries.
 
 The v0.4 presentation separates localized consumer messages from raw diagnostic output. Advanced tools are optional, legal notices live in About, and ProductDialog uses WPF modal ownership/focus. See PRODUCT_V0.4.md.
+
+
+v0.5 adds independent `Northpass.Engine.Zapret1`, a compiled immutable FlowsealCatalog, typed port/list inputs and `IEngineDataProvider` leases. The composition root registers both reviewed modules and chooses a manager by selected engine. Existing engine-neutral APIs remain unchanged. Flowseal accepts only canonical arguments compiled from reviewed definitions; the app cannot execute BAT files. DataListStore validates data-only imports, and ProtectedEngineDataProvider prepares sealed snapshots without modifying the bundle.
+
+ServiceProbeService and StrategyTestRunner are engine independent. DNS/TCP/TLS/HTTPS outcomes and process states are separate records; UDP/QUIC/STUN/playback/voice remain Unknown. Guided testing always stops the old session and the tested session, has bounded logs/local JSON evidence, and never automatically rotates strategies. The current probe targets are YouTube and Discord, with no credentials/cookies/redirects or global network changes. Process collisions fail closed rather than killing another engine. See FLOWSEAL_REVIEW.md.

@@ -1,0 +1,2331 @@
+{
+  "bundleRevision": "865da4f4c3659523bf79bc6edf0446e7d7969614",
+  "bundleVersion": "1.10.3",
+  "strategies": [
+    {
+      "id": "general",
+      "name": "Balanced",
+      "sourceFile": "general.bat",
+      "sourceSha256": "2c0723be1d3539a70392607b9cf2ef590efcceec8e6139b1a0d2984ea1da1947",
+      "global": [
+        {
+          "name": "--wf-tcp",
+          "kind": "Ports",
+          "value": "80,443,2053,2083,2087,2096,8443,{GAME_TCP}"
+        },
+        {
+          "name": "--wf-udp",
+          "kind": "Ports",
+          "value": "443,19294-19344,50000-50100,{GAME_UDP}"
+        }
+      ],
+      "rules": [
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "19294-19344,50000-50100"
+          },
+          {
+            "name": "--filter-l7",
+            "kind": "Literal",
+            "value": "discord,stun"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-fake-discord",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-stun",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "2053,2083,2087,2096,8443"
+          },
+          {
+            "name": "--hostlist-domains",
+            "kind": "Literal",
+            "value": "discord.media"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "681"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-google.txt"
+          },
+          {
+            "name": "--ip-id",
+            "kind": "Literal",
+            "value": "zero"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "681"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "568"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_4pda_to.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443,8443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "568"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_4pda_to.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Ports",
+            "value": "{GAME_TCP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n3"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "568"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_4pda_to.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Ports",
+            "value": "{GAME_UDP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "12"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown-udp",
+            "kind": "BinAsset",
+            "value": "ACTIVE_GAME_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n2"
+          }
+        ]
+      ]
+    },
+    {
+      "id": "alt",
+      "name": "Alternative 1",
+      "sourceFile": "general (ALT).bat",
+      "sourceSha256": "94d40f898fcefe075d54895200c85c264a7d0d0b2842a6825b68ffd5d9c07ab7",
+      "global": [
+        {
+          "name": "--wf-tcp",
+          "kind": "Ports",
+          "value": "80,443,2053,2083,2087,2096,8443,{GAME_TCP}"
+        },
+        {
+          "name": "--wf-udp",
+          "kind": "Ports",
+          "value": "443,19294-19344,50000-50100,{GAME_UDP}"
+        }
+      ],
+      "rules": [
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "19294-19344,50000-50100"
+          },
+          {
+            "name": "--filter-l7",
+            "kind": "Literal",
+            "value": "discord,stun"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-fake-discord",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-stun",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "2053,2083,2087,2096,8443"
+          },
+          {
+            "name": "--hostlist-domains",
+            "kind": "Literal",
+            "value": "discord.media"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,fakedsplit"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fakedsplit-pattern",
+            "kind": "Literal",
+            "value": "0x00"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-google.txt"
+          },
+          {
+            "name": "--ip-id",
+            "kind": "Literal",
+            "value": "zero"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,fakedsplit"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fakedsplit-pattern",
+            "kind": "Literal",
+            "value": "0x00"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,fakedsplit"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fakedsplit-pattern",
+            "kind": "Literal",
+            "value": "0x00"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "stun.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443,8443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,fakedsplit"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fakedsplit-pattern",
+            "kind": "Literal",
+            "value": "0x00"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "stun.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Ports",
+            "value": "{GAME_TCP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,fakedsplit"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n4"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fakedsplit-pattern",
+            "kind": "Literal",
+            "value": "0x00"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "stun.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown",
+            "kind": "BinAsset",
+            "value": "stun.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Ports",
+            "value": "{GAME_UDP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "12"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown-udp",
+            "kind": "BinAsset",
+            "value": "ACTIVE_GAME_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n3"
+          }
+        ]
+      ]
+    },
+    {
+      "id": "alt2",
+      "name": "Alternative 2",
+      "sourceFile": "general (ALT2).bat",
+      "sourceSha256": "f928a447fd312866c02e3a06519537c892424c9133a6ec91ee741664ff17595e",
+      "global": [
+        {
+          "name": "--wf-tcp",
+          "kind": "Ports",
+          "value": "80,443,2053,2083,2087,2096,8443,{GAME_TCP}"
+        },
+        {
+          "name": "--wf-udp",
+          "kind": "Ports",
+          "value": "443,19294-19344,50000-50100,{GAME_UDP}"
+        }
+      ],
+      "rules": [
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "19294-19344,50000-50100"
+          },
+          {
+            "name": "--filter-l7",
+            "kind": "Literal",
+            "value": "discord,stun"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-fake-discord",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-stun",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "2053,2083,2087,2096,8443"
+          },
+          {
+            "name": "--hostlist-domains",
+            "kind": "Literal",
+            "value": "discord.media"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "652"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "2"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-google.txt"
+          },
+          {
+            "name": "--ip-id",
+            "kind": "Literal",
+            "value": "zero"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "652"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "2"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "652"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "2"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443,8443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "652"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "2"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Ports",
+            "value": "{GAME_TCP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "multisplit"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n3"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl",
+            "kind": "Literal",
+            "value": "652"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "2"
+          },
+          {
+            "name": "--dpi-desync-split-seqovl-pattern",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Ports",
+            "value": "{GAME_UDP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "12"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown-udp",
+            "kind": "BinAsset",
+            "value": "ACTIVE_GAME_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n2"
+          }
+        ]
+      ]
+    },
+    {
+      "id": "simple-fake",
+      "name": "Simple fake",
+      "sourceFile": "general (SIMPLE FAKE).bat",
+      "sourceSha256": "861260c78e00c24a1ef847b60bcad8369a63d87640cc3b219d7db7171306ef47",
+      "global": [
+        {
+          "name": "--wf-tcp",
+          "kind": "Ports",
+          "value": "80,443,2053,2083,2087,2096,8443,{GAME_TCP}"
+        },
+        {
+          "name": "--wf-udp",
+          "kind": "Ports",
+          "value": "443,19294-19344,50000-50100,{GAME_UDP}"
+        }
+      ],
+      "rules": [
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "19294-19344,50000-50100"
+          },
+          {
+            "name": "--filter-l7",
+            "kind": "Literal",
+            "value": "discord,stun"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-fake-discord",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-stun",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "2053,2083,2087,2096,8443"
+          },
+          {
+            "name": "--hostlist-domains",
+            "kind": "Literal",
+            "value": "discord.media"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-google.txt"
+          },
+          {
+            "name": "--ip-id",
+            "kind": "Literal",
+            "value": "zero"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "hostfakesplit"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-hostfakesplit-mod",
+            "kind": "Literal",
+            "value": "host=www.google.com"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443,8443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Ports",
+            "value": "{GAME_TCP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n4"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "ts"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown",
+            "kind": "BinAsset",
+            "value": "stun2.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Ports",
+            "value": "{GAME_UDP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "12"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown-udp",
+            "kind": "BinAsset",
+            "value": "ACTIVE_GAME_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n3"
+          }
+        ]
+      ]
+    },
+    {
+      "id": "fake-tls-auto",
+      "name": "TLS automatic fake",
+      "sourceFile": "general (FAKE TLS AUTO).bat",
+      "sourceSha256": "afa40e1fbe9695c7d98ee97a620666a0812bc6831b387034bdb989d38d20357a",
+      "global": [
+        {
+          "name": "--wf-tcp",
+          "kind": "Ports",
+          "value": "80,443,2053,2083,2087,2096,8443,{GAME_TCP}"
+        },
+        {
+          "name": "--wf-udp",
+          "kind": "Ports",
+          "value": "443,19294-19344,50000-50100,{GAME_UDP}"
+        }
+      ],
+      "rules": [
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "11"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "19294-19344,50000-50100"
+          },
+          {
+            "name": "--filter-l7",
+            "kind": "Literal",
+            "value": "discord,stun"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-fake-discord",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-stun",
+            "kind": "BinAsset",
+            "value": "ACTIVE_DISCORD_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "6"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "2053,2083,2087,2096,8443"
+          },
+          {
+            "name": "--hostlist-domains",
+            "kind": "Literal",
+            "value": "discord.media"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,multidisorder"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1,midsld"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "11"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "badseq"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "0x00000000"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "!"
+          },
+          {
+            "name": "--dpi-desync-fake-tls-mod",
+            "kind": "Literal",
+            "value": "rnd,dupsid,sni=www.google.com"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-google.txt"
+          },
+          {
+            "name": "--ip-id",
+            "kind": "Literal",
+            "value": "zero"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,multidisorder"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1,midsld"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "11"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "badseq"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "0x00000000"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "!"
+          },
+          {
+            "name": "--dpi-desync-fake-tls-mod",
+            "kind": "Literal",
+            "value": "rnd,dupsid,sni=www.google.com"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "BundleList",
+            "value": "list-general.txt"
+          },
+          {
+            "name": "--hostlist",
+            "kind": "UserList",
+            "value": "general"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,multidisorder"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1,midsld"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "11"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "badseq"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "0x00000000"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "!"
+          },
+          {
+            "name": "--dpi-desync-fake-tls-mod",
+            "kind": "Literal",
+            "value": "rnd,dupsid,sni=www.google.com"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Literal",
+            "value": "443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "11"
+          },
+          {
+            "name": "--dpi-desync-fake-quic",
+            "kind": "BinAsset",
+            "value": "quic_initial_www_google_com.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Literal",
+            "value": "80,443,8443"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "BundleList",
+            "value": "list-exclude.txt"
+          },
+          {
+            "name": "--hostlist-exclude",
+            "kind": "UserList",
+            "value": "excluded-hosts"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,multidisorder"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1,midsld"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "11"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "badseq"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "0x00000000"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "!"
+          },
+          {
+            "name": "--dpi-desync-fake-tls-mod",
+            "kind": "Literal",
+            "value": "rnd,dupsid,sni=www.google.com"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-tcp",
+            "kind": "Ports",
+            "value": "{GAME_TCP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake,multidisorder"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n4"
+          },
+          {
+            "name": "--dpi-desync-split-pos",
+            "kind": "Literal",
+            "value": "1,midsld"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "11"
+          },
+          {
+            "name": "--dpi-desync-fooling",
+            "kind": "Literal",
+            "value": "badseq"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "0x00000000"
+          },
+          {
+            "name": "--dpi-desync-fake-tls",
+            "kind": "Literal",
+            "value": "!"
+          },
+          {
+            "name": "--dpi-desync-fake-tls-mod",
+            "kind": "Literal",
+            "value": "rnd,dupsid,sni=www.google.com"
+          },
+          {
+            "name": "--dpi-desync-fake-http",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown",
+            "kind": "Literal",
+            "value": "0x00000000"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown",
+            "kind": "BinAsset",
+            "value": "tls_clienthello_max_ru.bin"
+          }
+        ],
+        [
+          {
+            "name": "--filter-udp",
+            "kind": "Ports",
+            "value": "{GAME_UDP}"
+          },
+          {
+            "name": "--ipset",
+            "kind": "BundleList",
+            "value": "ipset-all.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "BundleList",
+            "value": "ipset-exclude.txt"
+          },
+          {
+            "name": "--ipset-exclude",
+            "kind": "UserList",
+            "value": "excluded-ips"
+          },
+          {
+            "name": "--dpi-desync",
+            "kind": "Literal",
+            "value": "fake"
+          },
+          {
+            "name": "--dpi-desync-repeats",
+            "kind": "Literal",
+            "value": "10"
+          },
+          {
+            "name": "--dpi-desync-any-protocol",
+            "kind": "Literal",
+            "value": "1"
+          },
+          {
+            "name": "--dpi-desync-fake-unknown-udp",
+            "kind": "BinAsset",
+            "value": "ACTIVE_GAME_UDP.bin"
+          },
+          {
+            "name": "--dpi-desync-cutoff",
+            "kind": "Literal",
+            "value": "n2"
+          }
+        ]
+      ]
+    }
+  ]
+}

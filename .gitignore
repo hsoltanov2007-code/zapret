@@ -11,3 +11,5 @@ engine/*.sys
 engine/*.lua
 engine/cygwin1.dll
 !engine/PLACE_ENGINE_HERE.txt
+
+__pycache__/

@@ -8,7 +8,7 @@ public sealed class UpdateChecker(HttpClient client)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get,
             "https://api.github.com/repos/hsoltanov2007-code/zapret/releases/latest");
-        request.Headers.UserAgent.ParseAdd("Northpass/0.4");
+        request.Headers.UserAgent.ParseAdd("Northpass/0.5");
         using var response = await client.SendAsync(request, token);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return "No published release is available yet.";
         response.EnsureSuccessStatusCode();
@@ -16,6 +16,6 @@ public sealed class UpdateChecker(HttpClient client)
         string tag = document.RootElement.GetProperty("tag_name").GetString() ?? "";
         return Version.TryParse(tag.TrimStart('v', 'V'), out var latest) && latest > new Version(0, 4, 0)
             ? $"Update available: {tag}. Review the release on GitHub before installing."
-            : $"Latest published release: {tag}. Current version: 0.4.0.";
+            : $"Latest published release: {tag}. Current version: 0.5.0.";
     }
 }

@@ -12,6 +12,7 @@ public sealed class Zapret2Engine : IDpiEngine
     private bool _disposed;
     private readonly IEngineInstallationManager? _installation;
     private IAsyncDisposable? _launchLease;
+    private readonly IEngineCollisionDetector _collisions = new EngineCollisionDetector();
     public Zapret2Engine(IEngineInstallationManager? installation = null) => _installation = installation;
     public EngineDescriptor Descriptor => Metadata;
     private event Action<string>? _probeLog;
@@ -62,6 +63,7 @@ public sealed class Zapret2Engine : IDpiEngine
             ObjectDisposedException.ThrowIf(_disposed, this);
             if ((await _process.GetStatusAsync(cancellationToken)).State == EngineState.Active)
                 throw new InvalidOperationException("The engine is already running.");
+            _collisions.Check((await _process.GetStatusAsync(cancellationToken)).ProcessId);
             var info = await PrepareAsync(configuration, cancellationToken);
             await ReleaseLeaseAsync();
             _launchLease = _installation is null ? null : await _installation.AcquireLaunchLeaseAsync(info.FileName, cancellationToken);
@@ -112,6 +114,7 @@ public sealed class Zapret2Engine : IDpiEngine
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            _collisions.Check((await _process.GetStatusAsync(cancellationToken)).ProcessId);
             var info = await PrepareAsync(configuration, cancellationToken);
             await _process.StopAsync(cancellationToken);
             await ReleaseLeaseAsync();
@@ -158,8 +161,7 @@ public sealed class Zapret2Engine : IDpiEngine
                 throw new InvalidOperationException("Managed engine Lua must come from the verified protected engine installation. Imported Lua cannot run elevated.");
         }
         // Prevent environment-based DLL/Lua substitution. The executable and working directory are protected.
-        info.Environment["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
-        foreach (string variable in new[] { "LUA_PATH", "LUA_CPATH", "LUA_INIT", "LUA_PATH_5_1", "LUA_CPATH_5_1", "CYGWIN" }) info.Environment.Remove(variable);
+        EngineProcessEnvironment.Harden(info);
     }
     private static bool TrustedLuaPath(string path, string directory)
     {
@@ -172,8 +174,7 @@ public sealed class Zapret2Engine : IDpiEngine
         var info = new ProcessStartInfo(engine.ExecutablePath) { WorkingDirectory = Path.GetDirectoryName(engine.ExecutablePath)!,
             UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         info.ArgumentList.Add("--version");
-        info.Environment["PATH"] = Environment.GetFolderPath(Environment.SpecialFolder.System);
-        foreach (string variable in new[] { "LUA_PATH", "LUA_CPATH", "LUA_INIT", "CYGWIN" }) info.Environment.Remove(variable);
+        EngineProcessEnvironment.Harden(info);
         using var process = Process.Start(info) ?? throw new IOException("Engine version probe could not start.");
         var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(10));

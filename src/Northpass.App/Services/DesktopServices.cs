@@ -22,6 +22,11 @@ public sealed class DesktopServices : IDesktopServices
         var dialog = new OpenFileDialog { Title = "Import strategy", Filter = "JSON profiles|*.json", CheckFileExists = true };
         return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
     }
+    public string? PickDataList()
+    {
+        var dialog = new OpenFileDialog { Title = "Northpass", Filter = "Data lists (*.txt)|*.txt", CheckFileExists = true };
+        return dialog.ShowDialog(Owner) == true ? dialog.FileName : null;
+    }
     public string? PickExport(string name, string extension)
     {
         var dialog = new SaveFileDialog { FileName = name + "." + extension, Filter = $"{extension.ToUpperInvariant()} files|*.{extension}", OverwritePrompt = true };

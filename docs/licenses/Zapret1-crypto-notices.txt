@@ -1,0 +1,82 @@
+sha.h
+/**************************** sha.h ****************************/
+/***************** See RFC 6234 for details. *******************/
+/*
+   Copyright (c) 2011 IETF Trust and the persons identified as
+   authors of the code.  All rights reserved.
+   Redistribution and use in source and binary forms, with or
+   without modification, are permitted provided that the following
+   conditions are met:
+   - Redistributions of source code must retain the above
+     copyright notice, this list of conditions and
+     the following disclaimer.
+   - Redistributions in binary form must reproduce the above
+     copyright notice, this list of conditions and the following
+     disclaimer in the documentation and/or other materials provided
+     with the distribution.
+   - Neither the name of Internet Society, IETF or IETF Trust, nor
+     the names of specific contributors, may be used to endorse or
+     promote products derived from this software without specific
+     prior written permission.
+   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+   CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+   INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+   MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+   DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+   NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+   LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+   HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+   OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+   EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+aes.h
+/******************************************************************************
+*
+* THIS SOURCE CODE IS HEREBY PLACED INTO THE PUBLIC DOMAIN FOR THE GOOD OF ALL
+*
+* This is a simple and straightforward implementation of the AES Rijndael
+* 128-bit block cipher designed by Vincent Rijmen and Joan Daemen. The focus
+* of this work was correctness & accuracy.  It is written in 'C' without any
+* particular focus upon optimization or speed. It should be endian (memory
+* byte order) neutral since the few places that care are handled explicitly.
+*
+* This implementation of Rijndael was created by Steven M. Gibson of GRC.com.
+*
+* It is intended for general purpose use, but was written in support of GRC's
+* reference implementation of the SQRL (Secure Quick Reliable Login) client.
+*
+* See:    http://csrc.nist.gov/archive/aes/rijndael/wsdindex.html
+*
+* NO COPYRIGHT IS CLAIMED IN THIS WORK, HOWEVER, NEITHER IS ANY WARRANTY MADE
+* REGARDING ITS FITNESS FOR ANY PARTICULAR PURPOSE. USE IT AT YOUR OWN RISK.
+*
+*******************************************************************************/
+
+gcm.h
+/******************************************************************************
+*
+* THIS SOURCE CODE IS HEREBY PLACED INTO THE PUBLIC DOMAIN FOR THE GOOD OF ALL
+*
+* This is a simple and straightforward implementation of AES-GCM authenticated
+* encryption. The focus of this work was correctness & accuracy. It is written
+* in straight 'C' without any particular focus upon optimization or speed. It
+* should be endian (memory byte order) neutral since the few places that care
+* are handled explicitly.
+*
+* This implementation of AES-GCM was created by Steven M. Gibson of GRC.com.
+*
+* It is intended for general purpose use, but was written in support of GRC's
+* reference implementation of the SQRL (Secure Quick Reliable Login) client.
+*
+* See:    http://csrc.nist.gov/publications/nistpubs/800-38D/SP-800-38D.pdf
+*         http://csrc.nist.gov/groups/ST/toolkit/BCM/documents/proposedmodes/ \
+*         gcm/gcm-revised-spec.pdf
+*
+* NO COPYRIGHT IS CLAIMED IN THIS WORK, HOWEVER, NEITHER IS ANY WARRANTY MADE
+* REGARDING ITS FITNESS FOR ANY PARTICULAR PURPOSE. USE IT AT YOUR OWN RISK.
+*
+*******************************************************************************/

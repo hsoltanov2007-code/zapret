@@ -104,9 +104,10 @@
       "Northpass": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Engine.Native": "[0.2.0, )",
-          "Northpass.Engine.Zapret2": "[0.2.0, )",
-          "Northpass.Services": "[0.2.0, )"
+          "Northpass.Engine.Native": "[0.4.0, )",
+          "Northpass.Engine.Zapret1": "[0.4.0, )",
+          "Northpass.Engine.Zapret2": "[0.4.0, )",
+          "Northpass.Services": "[0.4.0, )"
         }
       },
       "northpass.core": {
@@ -115,25 +116,31 @@
       "northpass.engine.abstractions": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Core": "[0.2.0, )"
+          "Northpass.Core": "[0.4.0, )"
         }
       },
       "northpass.engine.native": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Engine.Abstractions": "[0.2.0, )"
+          "Northpass.Engine.Abstractions": "[0.4.0, )"
+        }
+      },
+      "northpass.engine.zapret1": {
+        "type": "Project",
+        "dependencies": {
+          "Northpass.Engine.Abstractions": "[0.4.0, )"
         }
       },
       "northpass.engine.zapret2": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Engine.Abstractions": "[0.2.0, )"
+          "Northpass.Engine.Abstractions": "[0.4.0, )"
         }
       },
       "northpass.services": {
         "type": "Project",
         "dependencies": {
-          "Northpass.Engine.Abstractions": "[0.2.0, )"
+          "Northpass.Engine.Abstractions": "[0.4.0, )"
         }
       }
     }

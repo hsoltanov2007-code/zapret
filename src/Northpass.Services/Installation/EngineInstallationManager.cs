@@ -64,7 +64,7 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
         catch (IOException ex) { throw new IOException("Engine installation is in use. Disconnect all Northpass sessions before changing it.", ex); }
     }
     private InstalledEngine Installed(EngineManifest manifest) => new(EngineId, manifest.Revision, manifest.Version,
-        Path.Combine(_root, manifest.Revision, manifest.Executable), manifest.SourceRevision);
+        Path.GetFullPath(Path.Combine(_root, manifest.Revision, manifest.Executable)), manifest.SourceRevision);
 
     private async Task<List<FileStream>> VerifyTreeAsync(EngineManifest manifest, CancellationToken token)
     {
