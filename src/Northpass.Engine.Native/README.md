@@ -1,6 +1,8 @@
-# Native engine extension point
+# Native Engine v0.1 adapter
 
-No native engine is implemented or registered in v0.2. Implement `IDpiEngine`,
-then register its factory in `App.xaml.cs`. Keep C++/PInvoke details inside this
-assembly; the view models and profile store depend only on the engine API.
-Do not register a placeholder that claims to start or protect traffic.
+NativeEngine implements IDpiEngine for the original C++20 NorthpassCore process.
+NativeCatalog accepts only typed idle/dedicated-loopback pass-through scopes.
+No DPI bypass is implemented. Flowseal remains the consumer default/fallback.
+Build scripts generate an immutable embedded offline manifest before compiling
+the Windows app. No downloaded manifest, script or arbitrary filter can authorize
+execution. See [architecture, trust and tests](../../docs/NATIVE_ENGINE.md).

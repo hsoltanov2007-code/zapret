@@ -9,7 +9,7 @@ public sealed class EngineCollisionDetector : IEngineCollisionDetector
     public void Check(int? ownedProcessId = null)
     {
         if (!OperatingSystem.IsWindows()) return;
-        foreach (string name in new[] { "winws", "winws2" })
+        foreach (string name in new[] { "winws", "winws2", "NorthpassCore" })
             foreach (var process in Process.GetProcessesByName(name))
                 using (process)
                 {

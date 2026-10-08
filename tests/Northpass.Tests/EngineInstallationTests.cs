@@ -54,6 +54,33 @@ public sealed class EngineInstallationTests : IDisposable
     private string State => Path.Combine(_directory, "protected/selection.json");
 
     [Fact]
+    public async Task NativeOfflineBuildRequiresBundledVerifiedBytesAndNeverDownloads()
+    {
+        var fixture = Fixture(); string hash = Hash(fixture.Archive);
+        var native = fixture.Manifest with { EngineId = "native", AcquisitionKind = "OfflineBuild", SourceRevision = new string('b', 40), Revision = hash[..40], ArchiveUrl = "" };
+        native.Validate();
+        using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);
+        Assert.Throws<InvalidDataException>(() => Manager(http, native));
+        Directory.CreateDirectory(_directory); var payload = Path.Combine(_directory, "native.zip");
+        var manager = new EngineInstallationManager(Path.Combine(_directory, "native"), http, new TestSecurity(), native, offlinePayload: payload, requireOfflinePayload: true);
+        await Assert.ThrowsAsync<FileNotFoundException>(() => manager.EnsureInstalledAsync()); Assert.Equal(0, handler.Requests);
+        await File.WriteAllBytesAsync(payload, fixture.Archive);
+        var installed = await manager.EnsureInstalledAsync(); Assert.Equal(installed, await manager.EnsureInstalledAsync()); Assert.Equal(0, handler.Requests);
+        await using (var lease = await manager.AcquireLaunchLeaseAsync(installed.ExecutablePath))
+        {
+            if (OperatingSystem.IsWindows()) Assert.Throws<IOException>(() => File.Open(installed.ExecutablePath, FileMode.Open, FileAccess.Write, FileShare.Read));
+            else Assert.NotNull(lease); // Unix FileShare is not mandatory write denial.
+        }
+        Assert.Throws<InvalidDataException>(() => (native with { EngineId = "zapret1" }).Validate());
+        Assert.Throws<InvalidDataException>(() => (native with { ArchiveUrl = "https://example.org/native.zip" }).Validate());
+        Assert.Throws<InvalidDataException>(() => (native with { OfflineSha256 = "short" }).Validate());
+        Assert.Throws<InvalidDataException>(() => (native with { AcquisitionKind = "Latest" }).Validate());
+        var broken = fixture.Archive.ToArray(); broken[10] ^= 1; await File.WriteAllBytesAsync(payload, broken);
+        Directory.Delete(Path.Combine(_directory, "native"), true);
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.EnsureInstalledAsync()); Assert.Equal(0, handler.Requests);
+    }
+
+    [Fact]
     public async Task NestedExecutablePathsAreCanonicalizedBeforeAcquiringTheProtectedLease()
     {
         var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);

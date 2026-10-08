@@ -4,10 +4,16 @@ using Northpass.Models;
 
 namespace Northpass.Engine;
 
+// Optional owned-child protocol. Legacy engines retain their existing startup behavior.
+public sealed record ChildProcessProtocol(string ReadyLine, string StopCommand, TimeSpan StartupTimeout, TimeSpan ShutdownTimeout);
+
 // Owns exactly one foreground child. All lifecycle transitions are serialized.
 // Active means the process is alive, never that a site is accessible.
 public sealed class ProcessSupervisor : IAsyncDisposable
 {
+    private readonly ChildProcessProtocol? _protocol;
+    private Task _pumps = Task.CompletedTask;
+    public ProcessSupervisor(ChildProcessProtocol? protocol = null) => _protocol = protocol;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _process;
     private volatile EngineStatus _status = new(EngineState.Disconnected);
@@ -39,6 +45,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         info.CreateNoWindow = true;
         info.RedirectStandardOutput = true;
         info.RedirectStandardError = true;
+        info.RedirectStandardInput = _protocol is not null;
         var process = new Process { StartInfo = info };
         try
         {
@@ -47,11 +54,26 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             _process = process;
             SetStatus(new(EngineState.Connecting, process.Id));
             var recent = new ConcurrentQueue<string>();
-            var output = PumpAsync(process.StandardOutput, "", recent);
-            var error = PumpAsync(process.StandardError, "[stderr] ", recent);
+            var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var output = PumpAsync(process.StandardOutput, "", recent, ready);
+            var error = PumpAsync(process.StandardError, "[stderr] ", recent, null);
+            _pumps = Task.WhenAll(output, error);
             _ = ObserveExitAsync(process, output, error, recent);
             // Catch immediate argument/dependency failures, without claiming interception is verified.
-            await Task.Delay(300, token);
+            if (_protocol is null) await Task.Delay(300, token);
+            else
+            {
+                using var startup = CancellationTokenSource.CreateLinkedTokenSource(token);
+                startup.CancelAfter(_protocol.StartupTimeout);
+                try
+                {
+                    var exited = process.WaitForExitAsync(startup.Token);
+                    var completed = await Task.WhenAny(ready.Task, exited).WaitAsync(startup.Token);
+                    if (completed == exited) await exited;
+                }
+                catch (OperationCanceledException) when (!token.IsCancellationRequested)
+                { throw new TimeoutException("Native engine did not confirm initialization within its startup deadline."); }
+            }
             if (process.HasExited)
             {
                 await Task.WhenAll(output, error);
@@ -65,7 +87,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             if (_process == process)
             {
                 // Keep ownership until cleanup succeeds, even on cancelled startup.
-                try { await TerminateAsync(process); }
+                try { await RequestGracefulStopAsync(process); await TerminateAsync(process); await _pumps; }
                 catch (Exception cleanup)
                 {
                     SetStatus(new(EngineState.Error, process.Id, Error: "Engine startup failed and cleanup needs retry: " + cleanup.Message));
@@ -79,7 +101,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         }
     }
 
-    private async Task PumpAsync(StreamReader reader, string prefix, ConcurrentQueue<string> recent)
+    private async Task PumpAsync(StreamReader reader, string prefix, ConcurrentQueue<string> recent, TaskCompletionSource? ready)
     {
         try
         {
@@ -88,6 +110,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 string text = prefix + (line.Length > 16384 ? line[..16384] + "…" : line);
                 recent.Enqueue(text); while (recent.Count > 8) recent.TryDequeue(out _);
                 LogReceived?.Invoke(text);
+                if (prefix.Length == 0 && line == _protocol?.ReadyLine) ready?.TrySetResult();
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException)
@@ -135,13 +158,30 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         finally { _gate.Release(); }
     }
 
+    private async Task RequestGracefulStopAsync(Process process)
+    {
+        if (_protocol is null || process.HasExited) return;
+        try
+        {
+            await process.StandardInput.WriteLineAsync(_protocol.StopCommand);
+            await process.StandardInput.FlushAsync();
+            process.StandardInput.Close();
+            using var timeout = new CancellationTokenSource(_protocol.ShutdownTimeout);
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or OperationCanceledException)
+        { LogReceived?.Invoke("Graceful native shutdown failed; terminating only the owned child: " + ex.Message); }
+    }
+
     private async Task StopCoreAsync()
     {
         if (_process is not { } process) { SetStatus(new(EngineState.Disconnected)); return; }
         SetStatus(_status with { State = EngineState.Stopping });
         try
         {
+            await RequestGracefulStopAsync(process);
             await TerminateAsync(process);
+            await _pumps;
             _process = null;
             process.Dispose();
             SetStatus(new(EngineState.Disconnected));
