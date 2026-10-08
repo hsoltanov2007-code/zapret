@@ -31,7 +31,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private EngineStatus _status = new(EngineState.Disconnected);
     private ReachabilityResult? _reachability;
     private int _pageIndex;
-    private bool _showAdvanced;
+    private bool _showAdvanced, _hasStartedSession;
     private string _messageKey = "Welcome";
     private readonly List<AsyncRelayCommand> _commands = new();
 
@@ -127,7 +127,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public bool SessionOpen => _status.State is EngineState.Active or EngineState.Connecting or EngineState.Stopping || _status.ProcessId is not null;
     public bool CanConfigure => !SessionOpen && !Busy;
     public string ConnectText => Strings[SessionOpen ? "Disconnect" : "Connect"];
-    public string StatusText => Preparing || _setupPhase == "SetupFailed" ? EngineSetupText : Strings[_status.State == EngineState.Disconnected && _setupPhase == "Ready" ? "Ready" : _status.State.ToString()];
+    public string StatusText => Preparing || _setupPhase == "SetupFailed" ? EngineSetupText : Strings[_status.State == EngineState.Disconnected && _setupPhase == "Ready" && !_hasStartedSession ? "Ready" : _status.State.ToString()];
     public string StatusColor => _status.State switch { EngineState.Active => "#9DC5B1", EngineState.Error => "#DC998D", EngineState.Connecting or EngineState.Stopping => "#D2BE8F", _ => "#949EAA" };
     public string CurrentEngine => _registry.Find(SelectedProfile?.Engine ?? "")?.Name ?? "Unavailable";
     public string ProfileDescription => SelectedProfile?.Description ?? "Select or import a strategy.";
@@ -374,6 +374,10 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public void Fail(Exception ex, string messageKey = "ActionFailed")
     {
         ResultText = ex.Message; Log("Error: " + ex.Message);
+        if (messageKey == "InstallationFailed" && (ex is FileNotFoundException ||
+            ex is InvalidDataException && (ex.Message.Contains("acquisition.zip", StringComparison.OrdinalIgnoreCase) ||
+            ex.Message.Contains("Offline engine payload", StringComparison.OrdinalIgnoreCase)))) messageKey = "ReinstallRequired";
+        if (ex is UnauthorizedAccessException) messageKey = "AccessDenied";
         if (messageKey == "ConnectionFailed" && (ex.Message.Contains("driver", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("windivert", StringComparison.OrdinalIgnoreCase)))
             messageKey = "NetworkBlocked";
         SetMessage(messageKey);
@@ -389,6 +393,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_status.State != status.State) { _reachability = null; Changed(nameof(Reachability)); }
         _status = status;
+        if (status.State == EngineState.Active) _hasStartedSession = true;
         foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(CanChooseEngine), nameof(ConnectText), nameof(SessionDuration), nameof(ConnectionNote) }) Changed(name);
         if (status.Error is not null) Fail(new IOException(status.Error), "ConnectionFailed");
         RefreshCommands();

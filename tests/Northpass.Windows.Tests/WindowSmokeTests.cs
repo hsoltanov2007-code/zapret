@@ -14,9 +14,10 @@ namespace Northpass.Windows.Tests;
 
 public sealed class WindowSmokeTests
 {
-    // Real WPF window on a Windows STA thread. No driver or engine is started.
+    // Real WPF window on a Windows STA thread. Session state uses an explicit fake;
+    // real PE/driver/ownership checks live in EngineInstallationWindowsTests.
     [Fact]
-    public async Task WindowOpensAllPagesAndClosesWithoutStartingAnEngine()
+    public async Task ConsumerWindowPreparesAutomaticallyAndKeepsAccessStatusHonest()
     {
         var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         string stage = "STA startup";
@@ -36,7 +37,7 @@ public sealed class WindowSmokeTests
                     var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                     try
                     {
-                        var registry = new EngineRegistry(); registry.Register(Zapret2Engine.Metadata, () => new Zapret2Engine());
+                        var registry = new EngineRegistry(); registry.Register(Zapret2Engine.Metadata, () => new SessionFixture());
                         var profiles = new ProfileStore(Path.Combine(temporary, "profiles"));
                         profiles.Save(new() { Id = "draft", Name = "Draft", Engine = "ZAPRET2", Arguments = [] });
                         using var http = new HttpClient();
@@ -84,6 +85,18 @@ public sealed class WindowSmokeTests
                         Assert.Equal("Готово", model.EngineSetupText);
                         model.Language = "az"; Assert.Equal("Əsas", model.Strings["Dashboard"]);
                         Assert.Equal("Hazır", model.EngineSetupText);
+                        stage = "consumer connect/disconnect with a session fixture";
+                        model.Language = "en"; tabs.SelectedIndex = 0;
+                        model.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+                        Assert.True(model.SessionOpen);
+                        Assert.Equal("Connection started", model.StatusText);
+                        Assert.Contains("has not been verified", model.ConnectionNote);
+                        window.UpdateLayout(); AssertConsumerText(window);
+                        model.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
+                        Assert.False(model.SessionOpen); Assert.Equal("Disconnected", model.StatusText);
+                        Assert.Equal(0, desktop.Consents);
                         stage = "custom modal accept and cancel";
                         foreach (bool accept in new[] { false, true })
                         {
@@ -183,6 +196,27 @@ public sealed class WindowSmokeTests
         public StrategyProfile? EditProfile(ProfileStore store, StrategyProfile? original) => throw new InvalidOperationException("Unexpected dialog.");
         public Task SetAutoStartAsync(bool enabled) => throw new InvalidOperationException("Unexpected autostart change.");
     }
+    private sealed class SessionFixture : IDpiEngine
+    {
+        private EngineStatus _status = new(EngineState.Disconnected);
+        public EngineDescriptor Descriptor => Zapret2Engine.Metadata;
+        public event Action<string>? LogReceived;
+        public event Action<EngineStatus>? StatusChanged;
+        public Task StartAsync(EngineConfiguration configuration, CancellationToken token = default)
+        {
+            _status = new(EngineState.Active, 4242, DateTimeOffset.UtcNow);
+            LogReceived?.Invoke("UI session fixture only; no process launched.");
+            StatusChanged?.Invoke(_status); return Task.CompletedTask;
+        }
+        public Task StopAsync(CancellationToken token = default)
+        { _status = new(EngineState.Disconnected); StatusChanged?.Invoke(_status); return Task.CompletedTask; }
+        public async Task RestartAsync(EngineConfiguration configuration, CancellationToken token = default)
+        { await StopAsync(token); await StartAsync(configuration, token); }
+        public Task<EngineStatus> GetStatusAsync(CancellationToken token = default) => Task.FromResult(_status);
+        public Task<ValidationResult> ValidateConfigurationAsync(EngineConfiguration configuration, CancellationToken token = default)
+            => Task.FromResult(ValidationResult.Valid);
+        public async ValueTask DisposeAsync() => await StopAsync();
+    }
     // UI flow fixture only. Real executable/ACL checks are in EngineInstallationWindowsTests.
     private sealed class FakeInstallation : IEngineInstallationManager
     {
@@ -192,6 +226,7 @@ public sealed class WindowSmokeTests
         public Task<InstalledEngine?> DetectAsync(CancellationToken token = default) => Task.FromResult(_engine);
         public Task<InstalledEngine> EnsureInstalledAsync(IProgress<InstallationProgress>? progress = null, CancellationToken token = default)
         {
+            if (_engine is not null) return Task.FromResult(_engine);
             Setups++; _engine = new("zapret2", new string('a', 40), "test", "C:\\protected\\winws2.exe");
             progress?.Report(new("Ready", 1, 1)); return Task.FromResult(_engine);
         }
