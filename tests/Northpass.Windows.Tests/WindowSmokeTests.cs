@@ -217,6 +217,15 @@ public sealed class WindowSmokeTests
                         cancelledSplash.Loaded += (_, _) => app.Dispatcher.BeginInvoke(new Action(cancelledSplash.Close), DispatcherPriority.Background);
                         Assert.False(await StartupPresentation.ShowAsync(cancelledWindow, cancelledModel, splash: cancelledSplash));
                         Assert.False(cancelledWindow.IsVisible); Assert.False(cancelledSplash.IsVisible);
+                        stage = "optional update network never gates interface readiness";
+                        store.Save(new() { CheckForUpdates = true, Language = "en" });
+                        var updateHandler = new DelayedUpdateHandler(); using var delayedHttp = new HttpClient(updateHandler);
+                        var updateModel = new MainViewModel(new EngineController(registry), store, profiles,
+                            new UpdateChecker(delayedHttp), desktop, app.Dispatcher, installation, new ServiceProbeService(new ProbeFixture()));
+                        await updateModel.InitializeAsync();
+                        Assert.True(updateHandler.Started); Assert.Equal("Ready", updateModel.EngineSetupText);
+                        await updateModel.DisposeAsync(); Assert.True(updateHandler.Cancelled);
+                        store.Save(new() { Language = "en" });
                         stage = "stale diagnostic cancellation and shutdown";
                         var delayed = new DelayedProbeFixture();
                         var cancellationModel = new MainViewModel(new EngineController(registry), store, profiles,
@@ -325,6 +334,17 @@ public sealed class WindowSmokeTests
             return Task.FromResult(new ServiceProbeResult(target.Id, target.Name, target.HttpsUrl.Host, ["203.0.113.1"], "203.0.113.1",
                 passed, target.Id == "telegram" ? failed : passed, passed, target.Id == "discord" ? failed : passed,
                 unknown, unknown, unknown, unknown, unknown, unknown));
+        }
+    }
+    private sealed class DelayedUpdateHandler : HttpMessageHandler
+    {
+        public bool Started, Cancelled;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token)
+        {
+            Started = true;
+            try { await Task.Delay(Timeout.Infinite, token); }
+            catch (OperationCanceledException) { Cancelled = true; throw; }
+            throw new InvalidOperationException("Cancelled fixture must not return metadata.");
         }
     }
     private sealed class DelayedProbeFixture : IServiceProbeTransport

@@ -35,6 +35,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private string _setupPhase = "SetupRequired", _engineRevision = "";
     private double _setupProgress;
     private Task? _setupTask;
+    private Task? _startupUpdateTask;
     private CancellationTokenSource _lifetime = new();
     private AppSettings _settings = new();
     private bool _loading = true, _settingsReadable = true, _busy, _refreshing, _disposed, _shuttingDown;
@@ -224,14 +225,18 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
                 }
                 catch (Exception ex) { SetSetupPhase("SetupFailed"); Fail(ex, "InstallationFailed"); }
             }
-            if (CheckForUpdates)
-            {
-                try { await CheckUpdatesAsync(); }
-                catch (Exception ex) { Fail(ex); }
-            }
+
         }
         finally { Busy = false; }
         BeginDiagnostics();
+        if (CheckForUpdates && !_shuttingDown) _startupUpdateTask = CheckStartupUpdatesAsync();
+    }
+
+    private async Task CheckStartupUpdatesAsync()
+    {
+        try { await CheckUpdatesAsync(); }
+        catch (OperationCanceledException) when (_shuttingDown) { }
+        catch (Exception ex) { if (!_shuttingDown) Fail(ex); }
     }
 
     private void ReloadProfiles(string? selectId = null)
@@ -596,6 +601,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         RefreshCommands();
         _lifetime.Cancel();
         await CancelDiagnosticsAsync();
+        if (_startupUpdateTask is { } updates) await updates;
         if (_testTask is { } test)
         { try { await test; } catch (Exception ex) { Log("Strategy test ended during shutdown: " + ex.Message); } }
         if (_setupTask is { } setup)
