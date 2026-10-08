@@ -22,7 +22,9 @@ try {
     $output = Join-Path $root 'dist\Northpass'
     if (Test-Path $output) { Remove-Item $output -Recurse -Force }
     # The exact native PE hashes are embedded in the managed adapter at compile time.
-    ./scripts/build-native.ps1 -SignCertificateThumbprint $SignCertificateThumbprint -TimestampUrl $TimestampUrl
+    $nativeBuildOptions = @{ TimestampUrl = $TimestampUrl }
+    if ($SignCertificateThumbprint) { $nativeBuildOptions.SignCertificateThumbprint = $SignCertificateThumbprint }
+    ./scripts/build-native.ps1 @nativeBuildOptions
     Write-Host 'Publishing Northpass 0.7 for Windows x64...'
     dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
