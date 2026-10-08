@@ -543,11 +543,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         ResultText = result.Detail; Log(ResultText);
         Log((await _installation.CheckForUpdatesAsync(_lifetime.Token)).Detail);
     }
-    private Task ExportLogsAsync()
+    private async Task ExportLogsAsync()
     {
+        if (await _controller.GetPerformanceAsync(_lifetime.Token) is { } performance)
+            Log("Native performance: " + System.Text.Json.JsonSerializer.Serialize(performance));
         string? path = _desktop.PickExport("Northpass-diagnostics-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"), "txt");
         if (path is not null) { File.WriteAllText(path, LogText); Log("Diagnostics exported. Review paths and hostnames before sharing."); }
-        return Task.CompletedTask;
     }
     private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); CancelTestCommand.Refresh(); ServiceProbesCommand.Refresh(); }
     private void SetMessage(string key) { _messageKey = key; Changed(nameof(UserMessage)); }

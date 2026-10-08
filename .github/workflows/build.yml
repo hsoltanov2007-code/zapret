@@ -145,7 +145,7 @@ jobs:
           path: dist/Northpass/
       - uses: actions/upload-artifact@v4
         with:
-          name: NorthpassCore-0.1.0-win-x64
+          name: NorthpassCore-0.2.0-win-x64
           path: |
             dist/native/
             dist/native-build/Release/NorthpassCore.exe

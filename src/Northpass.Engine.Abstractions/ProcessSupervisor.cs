@@ -13,7 +13,11 @@ public sealed class ProcessSupervisor : IAsyncDisposable
 {
     private readonly ChildProcessProtocol? _protocol;
     private Task _pumps = Task.CompletedTask;
-    public ProcessSupervisor(ChildProcessProtocol? protocol = null) => _protocol = protocol;
+    private readonly Func<Process, CancellationToken, Task>? _initializeChild;
+    private readonly Func<CancellationToken, Task>? _stopChild;
+    public ProcessSupervisor(ChildProcessProtocol? protocol = null,
+        Func<Process, CancellationToken, Task>? initializeChild = null, Func<CancellationToken, Task>? stopChild = null)
+        => (_protocol, _initializeChild, _stopChild) = (protocol, initializeChild, stopChild);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _process;
     private volatile EngineStatus _status = new(EngineState.Disconnected);
@@ -67,6 +71,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 startup.CancelAfter(_protocol.StartupTimeout);
                 try
                 {
+                    if (_initializeChild is not null) await _initializeChild(process, startup.Token);
                     var exited = process.WaitForExitAsync(startup.Token);
                     var completed = await Task.WhenAny(ready.Task, exited).WaitAsync(startup.Token);
                     if (completed == exited) await exited;
@@ -163,10 +168,14 @@ public sealed class ProcessSupervisor : IAsyncDisposable
         if (_protocol is null || process.HasExited) return;
         try
         {
-            await process.StandardInput.WriteLineAsync(_protocol.StopCommand);
-            await process.StandardInput.FlushAsync();
-            process.StandardInput.Close();
             using var timeout = new CancellationTokenSource(_protocol.ShutdownTimeout);
+            if (_stopChild is not null) await _stopChild(timeout.Token);
+            else
+            {
+                await process.StandardInput.WriteLineAsync(_protocol.StopCommand);
+                await process.StandardInput.FlushAsync();
+                process.StandardInput.Close();
+            }
             await process.WaitForExitAsync(timeout.Token);
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or OperationCanceledException)

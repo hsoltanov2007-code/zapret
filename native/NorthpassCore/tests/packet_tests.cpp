@@ -15,8 +15,8 @@ std::vector<std::uint8_t> packet(bool ipv6 = false, bool udp = false, std::size_
     const std::size_t ip = ipv6 ? 40 : 20, transport = udp ? 8 : 20;
     std::vector<std::uint8_t> p(ip + transport + payload);
     p[0] = ipv6 ? 0x60 : 0x45;
-    if (ipv6) { put16(p, 4, transport + payload); p[6] = udp ? 17 : 6; p[23] = 1; p[39] = 2; }
-    else { put16(p, 2, p.size()); p[9] = udp ? 17 : 6; p[12] = 127; p[15] = 1; p[16] = 127; p[19] = 2; }
+    if (ipv6) { put16(p, 4, transport + payload); p[6] = udp ? 17 : 6; p[7] = 64; p[23] = 1; p[39] = 2; }
+    else { put16(p, 2, p.size()); p[8] = 64; p[9] = udp ? 17 : 6; p[12] = 127; p[15] = 1; p[16] = 127; p[19] = 2; }
     put16(p, ip, 52001); put16(p, ip + 2, 52002);
     if (udp) put16(p, ip + 4, transport + payload);
     else { p[ip + 12] = 0x50; p[ip + 13] = 2; }
@@ -54,20 +54,20 @@ void check(std::string_view name) {
         hello[1] = 2; require(classify_tls(hello) == TlsKind::Unknown);
         p = packet(); put16(p, 22, 443); require(classify(p).tls == TlsKind::Unknown);
     } else if (name == "fragments") {
-        auto p = packet(); put16(p, 6, 0x2000); require(classify(p).state == ParseState::Fragment);
+        auto p = packet(false, false, 4); put16(p, 6, 0x2000); require(classify(p).state == ParseState::Fragment);
         put16(p, 6, 1); require(classify(p).state == ParseState::Fragment);
         put16(p, 6, 0x4000); require(classify(p).state == ParseState::Parsed);
-        auto v6 = packet(true); v6[6] = 44; require(classify(v6).state == ParseState::Fragment);
+        auto v6 = packet(true, false, 4); v6.insert(v6.begin() + 40, 8, 0); v6[6] = 44; v6[40] = 6; v6[43] = 1; put16(v6, 4, v6.size() - 40); require(classify(v6).state == ParseState::Fragment);
     } else if (name == "malformed") {
         auto p = packet(); for (std::size_t size = 0; size < p.size(); ++size) require(classify(std::span(p).first(size)).state == ParseState::Malformed);
         p[9] = 1; require(classify(p).state == ParseState::Unsupported);
         put16(p, 2, 19); require(classify(p).state == ParseState::Malformed);
         auto v6 = packet(true); for (int i = 0; i < 9; ++i) { v6.insert(v6.begin() + 40, 8, 0); v6[40] = i == 0 ? 6 : 0; }
-        v6[6] = 0; put16(v6, 4, v6.size() - 40); require(classify(v6).state == ParseState::Unsupported);
+        v6[6] = 0; put16(v6, 4, v6.size() - 40); require(classify(v6).state == ParseState::Malformed);
     } else if (name == "tracking") {
         FlowTracker tracker(2); auto now = Clock::now(); auto v = classify(packet());
         require(tracker.observe(v, 40, now)->tcp == TcpObservation::Syn);
-        std::swap(v.source, v.destination); v.tcp_flags = 0x12; require(tracker.observe(v, 40, now)->tcp == TcpObservation::SynAck);
+        std::swap(v.source, v.destination); v.tcp_flags = 0x12; v.acknowledgement = 1; require(tracker.observe(v, 40, now)->tcp == TcpObservation::SynAck);
         v.tcp_flags = 0x10; require(tracker.observe(v, 40, now)->tcp == TcpObservation::SynAck);
         std::swap(v.source, v.destination); v.tcp_flags = 0x10;
         const auto* flow = tracker.observe(v, 40, now); require(flow->tcp == TcpObservation::Established && flow->packets[0] == 2 && flow->packets[1] == 2 && tracker.size() == 1);

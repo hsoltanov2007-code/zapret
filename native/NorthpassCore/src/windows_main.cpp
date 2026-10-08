@@ -1,6 +1,13 @@
 #include "northpass/flow.hpp"
 #include "northpass/options.hpp"
 #include "northpass/windows_security.hpp"
+#include "northpass/windows_ipc.hpp"
+#include "northpass/queue.hpp"
+#include <psapi.h>
+#include <algorithm>
+#include <cstring>
+#include <memory>
+#include <mutex>
 #include <tlhelp32.h>
 #define WINDIVERTEXPORT
 #include <windivert.h>
@@ -87,96 +94,147 @@ public:
     }
 private: HANDLE stop_; std::thread worker_;
 };
+class ResourceSampler {
+public:
+    std::string sample(const Metrics& metrics) {
+        std::lock_guard guard(mutex_);
+        FILETIME creation{}, exit{}, kernel{}, user{}; PROCESS_MEMORY_COUNTERS_EX memory{};
+        memory.cb = sizeof(memory);
+        const auto ticks = [](FILETIME value) { return (static_cast<std::uint64_t>(value.dwHighDateTime) << 32) | value.dwLowDateTime; };
+        double cpu{}; const auto now = monotonic_ns();
+        if (GetProcessTimes(GetCurrentProcess(), &creation, &exit, &kernel, &user)) {
+            const auto current = ticks(kernel) + ticks(user);
+            if (last_time_ && now > last_time_) cpu = std::clamp(static_cast<double>(current - last_cpu_) * 10000.0 /
+                static_cast<double>(now - last_time_) / processors_, 0.0, 100.0);
+            last_cpu_ = current; last_time_ = now;
+        }
+        const bool available = GetProcessMemoryInfo(GetCurrentProcess(), reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&memory), sizeof(memory)) != FALSE;
+        return metrics.line(cpu, available ? static_cast<std::uint64_t>(memory.PrivateUsage) : 0);
+    }
+private:
+    std::mutex mutex_;
+    DWORD processors_ = std::max<DWORD>(1, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
+    std::uint64_t last_time_{}, last_cpu_{};
+};
 int run(const Options& options) {
     auto locks = verify_runtime(executable_path());
-    // Check-only validates protected bytes and API availability; no driver/filter is opened.
     if (options.check) {
         Divert checked(executable_path().parent_path() / L"WinDivert.dll");
         std::cout << "NORTHPASS_CHECK protocol=1 mode=" << (options.loopback ? "loopback" : "idle") << '\n'; return 0;
     }
     auto parent = parent_handle(options.parent_pid);
+    // Shared with v0.1: direct older/newer workers cannot overlap interception.
     Handle singleton(CreateMutexW(nullptr, FALSE, L"Global\\Northpass.Native.v0.1"));
     if (!singleton.get()) throw std::runtime_error(windows_error("Native ownership mutex", GetLastError()));
     const auto ownership = WaitForSingleObject(singleton.get(), 0);
     if (ownership != WAIT_OBJECT_0 && ownership != WAIT_ABANDONED) throw std::runtime_error("Another native session owns interception. Close it through its owner.");
     struct MutexRelease { HANDLE value; ~MutexRelease() { ReleaseMutex(value); } } release{singleton.get()};
-    Handle stop(CreateEventW(nullptr, TRUE, FALSE, nullptr)), ready(CreateEventW(nullptr, TRUE, FALSE, nullptr));
-    if (!stop.get() || !ready.get()) throw std::runtime_error("Cancellation event initialization failed.");
-    Control control(stop.get());
-    // Declared after ownership: driver/DLL close before the singleton is released,
-    // including exceptional exits. Another direct session cannot overlap teardown.
+    Handle stop(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+    if (!stop.get()) throw std::runtime_error("Cancellation event initialization failed.");
+    Metrics metrics; ResourceSampler resources;
+    // Preallocate all queue storage before opening a driver/filter.
+    PacketQueue queue(Metrics::queue_capacity);
+    std::unique_ptr<Control> stdio;
+    std::unique_ptr<PipeControl> ipc;
+    if (options.pipe_id.empty()) stdio = std::make_unique<Control>(stop.get());
+    else ipc = std::make_unique<PipeControl>(options.pipe_id, parent.get(), options.parent_pid, stop.get(), metrics,
+        [&] { return resources.sample(metrics); });
+    reduce_worker_privileges();
     Divert divert(executable_path().parent_path() / L"WinDivert.dll");
     const auto filter = options.filter();
     divert.handle = divert.open(filter.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
     if (divert.handle == INVALID_HANDLE_VALUE) throw std::runtime_error(windows_error("Scoped driver initialization", GetLastError()));
     for (const auto& [name, value] : std::array<std::pair<WINDIVERT_PARAM, UINT64>, 3>{ {{WINDIVERT_PARAM_QUEUE_LENGTH, 512}, {WINDIVERT_PARAM_QUEUE_SIZE, 1048576}, {WINDIVERT_PARAM_QUEUE_TIME, 1000}} })
         if (!divert.parameter(divert.handle, name, value)) throw std::runtime_error(windows_error("Bounded driver queue setup", GetLastError()));
-    PassThroughStrategy strategy; PacketProcessor processor(strategy);
-    std::vector<std::uint8_t> packet(WINDIVERT_MTU_MAX);
-    std::uint64_t forwarded{}; bool draining = false; ULONGLONG deadline{};
-    std::cout << "NORTHPASS_READY protocol=1\n" << std::flush;
-    auto last_report = Clock::now();
-    const auto report = [&] {
-        const auto& c = processor.counters();
-        std::cout << "NORTHPASS_STATS packets=" << c.packets << " forwarded=" << forwarded << " tcp=" << c.tcp << " udp=" << c.udp
-            << " tls=" << c.tls << " malformed=" << c.malformed << " fragments=" << c.fragments << " flows=" << processor.flows() << '\n' << std::flush;
+    std::mutex send_mutex, error_mutex; std::string receive_error;
+    const auto forward = [&](const QueuedPacket& packet) {
+        WINDIVERT_ADDRESS address{}; static_assert(sizeof(address) <= 80);
+        std::memcpy(&address, packet.metadata.data(), sizeof(address)); UINT sent{};
+        std::lock_guard guard(send_mutex);
+        if (!divert.send(divert.handle, packet.bytes.data(), static_cast<UINT>(packet.length), &sent, &address) || sent != packet.length) {
+            ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get()); return false;
+        }
+        ++metrics.forwarded; return true;
     };
-    for (;;) {
-        const auto begin_drain = [&] {
-            if (!draining) {
-                if (!divert.shutdown(divert.handle, WINDIVERT_SHUTDOWN_RECV)) throw std::runtime_error(windows_error("Receive shutdown", GetLastError()));
-                draining = true; deadline = GetTickCount64() + 3000;
-            }
-        };
-        if (WaitForSingleObject(stop.get(), 0) == WAIT_OBJECT_0 || WaitForSingleObject(parent.get(), 0) == WAIT_OBJECT_0) begin_drain();
-        if (draining && GetTickCount64() >= deadline) throw std::runtime_error("Packet drain timed out; scoped queued packets may have been lost.");
-        WINDIVERT_ADDRESS address{}; UINT length{}, address_length = sizeof(address);
-        OVERLAPPED operation{}; operation.hEvent = ready.get(); ResetEvent(ready.get());
-        struct PendingOperation {
-            HANDLE handle; OVERLAPPED& operation; bool pending{};
-            ~PendingOperation() {
-                if (pending) { CancelIoEx(handle, &operation); DWORD ignored{}; GetOverlappedResult(handle, &operation, &ignored, TRUE); }
-            }
-        } pending{divert.handle, operation};
-        BOOL received = divert.receive(divert.handle, packet.data(), static_cast<UINT>(packet.size()), &length, 0, &address, &address_length, &operation);
-        DWORD code = received ? ERROR_SUCCESS : GetLastError();
-        if (!received && code == ERROR_IO_PENDING) {
-            pending.pending = true;
+    std::thread receiver([&] {
+        try {
+            Handle ready(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+            if (!ready.get()) throw std::runtime_error("Receive event initialization failed.");
+            QueuedPacket packet; bool draining = false; ULONGLONG deadline{};
+            const auto begin_drain = [&] {
+                if (!draining) {
+                    if (!divert.shutdown(divert.handle, WINDIVERT_SHUTDOWN_RECV)) throw std::runtime_error(windows_error("Receive shutdown", GetLastError()));
+                    draining = true; deadline = GetTickCount64() + 3000;
+                }
+            };
             for (;;) {
-                const HANDLE waits[]{ready.get(), stop.get(), parent.get()};
-                const auto timeout = draining ? static_cast<DWORD>(deadline > GetTickCount64() ? deadline - GetTickCount64() : 0) : INFINITE;
-                const auto event = WaitForMultipleObjects(draining ? 1 : 3, waits, FALSE, timeout);
-                if (event == WAIT_OBJECT_0) break;
-                if (event == WAIT_OBJECT_0 + 1 || event == WAIT_OBJECT_0 + 2) { begin_drain(); continue; }
-                throw std::runtime_error("Receive cancellation/drain failed; scoped queued packets may have been lost.");
+                if (WaitForSingleObject(stop.get(), 0) == WAIT_OBJECT_0 || WaitForSingleObject(parent.get(), 0) == WAIT_OBJECT_0) begin_drain();
+                if (draining && GetTickCount64() >= deadline) throw std::runtime_error("Packet drain timed out; kernel loss is unknown.");
+                WINDIVERT_ADDRESS address{}; UINT length{}, address_length = sizeof(address);
+                OVERLAPPED operation{}; operation.hEvent = ready.get(); ResetEvent(ready.get());
+                struct PendingOperation {
+                    HANDLE handle; OVERLAPPED& operation; bool pending{};
+                    ~PendingOperation() { if (pending) { CancelIoEx(handle, &operation); DWORD ignored{}; GetOverlappedResult(handle, &operation, &ignored, TRUE); } }
+                } pending{divert.handle, operation};
+                BOOL received = divert.receive(divert.handle, packet.bytes.data(), static_cast<UINT>(packet.bytes.size()), &length, 0, &address, &address_length, &operation);
+                DWORD code = received ? ERROR_SUCCESS : GetLastError();
+                if (!received && code == ERROR_IO_PENDING) {
+                    pending.pending = true;
+                    for (;;) {
+                        const HANDLE waits[]{ready.get(), stop.get(), parent.get()};
+                        const auto timeout = draining ? static_cast<DWORD>(deadline > GetTickCount64() ? deadline - GetTickCount64() : 0) : INFINITE;
+                        const auto event = WaitForMultipleObjects(draining ? 1 : 3, waits, FALSE, timeout);
+                        if (event == WAIT_OBJECT_0) break;
+                        if (event == WAIT_OBJECT_0 + 1 || event == WAIT_OBJECT_0 + 2) { begin_drain(); continue; }
+                        throw std::runtime_error("Receive cancellation/drain failed; kernel loss is unknown.");
+                    }
+                    DWORD transferred{}; received = GetOverlappedResult(divert.handle, &operation, &transferred, FALSE);
+                    pending.pending = false; length = transferred; code = received ? ERROR_SUCCESS : GetLastError();
+                }
+                if (!received) { if (draining && code == ERROR_NO_DATA) break; throw std::runtime_error(windows_error("Packet receive", code)); }
+                ++metrics.captured;
+                if (length == 0 || length > packet.bytes.size() || address_length != sizeof(address)) {
+                    ++metrics.dropped_known; throw std::runtime_error("Unexpected driver framing; captured packet could not be reinjected.");
+                }
+                packet.length = length; packet.captured_ns = monotonic_ns(); std::memcpy(packet.metadata.data(), &address, sizeof(address));
+                (void)forward(packet); // original bytes are reinjected before fallible/read-only observation
+                if (!queue.try_push(packet)) ++metrics.backpressure; // skip observation, never reorder originals or wait on space
+                const auto size = queue.size(); metrics.queue_size = size;
+                auto peak = metrics.queue_peak.load(); while (peak < size && !metrics.queue_peak.compare_exchange_weak(peak, size)) { }
             }
-            DWORD transferred{};
-            received = GetOverlappedResult(divert.handle, &operation, &transferred, FALSE);
-            pending.pending = false;
-            length = transferred; code = received ? ERROR_SUCCESS : GetLastError();
+        } catch (const std::exception& error) {
+            ++metrics.fatal; { std::lock_guard guard(error_mutex); receive_error = error.what(); } SetEvent(stop.get());
+        } catch (...) { ++metrics.fatal; SetEvent(stop.get()); }
+        queue.close();
+    });
+    struct ReceiverCleanup { HANDLE stop; std::thread& thread; ~ReceiverCleanup() { SetEvent(stop); if (thread.joinable()) thread.join(); } } cleanup{stop.get(), receiver};
+    PassThroughStrategy strategy; PacketProcessor processor(strategy);
+    std::cout << "NORTHPASS_READY protocol=1\n" << std::flush;
+    const auto report = [&] {
+        std::cout << "NORTHPASS_STATS packets=" << metrics.captured.load() << " forwarded=" << metrics.forwarded.load() << " tcp=" << metrics.tcp.load()
+            << " udp=" << metrics.udp.load() << " tls=" << metrics.tls.load() << " malformed=" << metrics.malformed.load()
+            << " fragments=" << metrics.fragments.load() << " flows=" << metrics.active_flows.load() << '\n';
+        std::cout << resources.sample(metrics) << '\n' << std::flush;
+    };
+    auto last_report = Clock::now(); QueuedPacket packet;
+    while (!queue.drained()) {
+        if (queue.pop(packet, std::chrono::milliseconds(100))) {
+            (void)processor.process(std::span(packet.bytes).first(packet.length), Clock::now());
+            metrics.record_latency(monotonic_ns() - packet.captured_ns);
         }
-        if (!received) {
-            if (draining && code == ERROR_NO_DATA) break;
-            throw std::runtime_error(windows_error("Packet receive", code));
-        }
-        if (length == 0 || length > packet.size() || address_length != sizeof(address)) throw std::runtime_error("Unexpected driver packet framing.");
-        // Observation must not become a traffic rewrite. Even parser/strategy failure
-        // forwards the original bytes before ending the experimental session.
-        std::exception_ptr observation_error;
-        try { (void)processor.process(std::span(packet).first(length), Clock::now()); }
-        catch (...) { observation_error = std::current_exception(); }
-        UINT sent{};
-        if (!divert.send(divert.handle, packet.data(), length, &sent, &address) || sent != length)
-            throw std::runtime_error(windows_error("Original packet reinjection (scoped packet may be lost)", GetLastError()));
-        ++forwarded;
-        if (observation_error) std::rethrow_exception(observation_error);
+        processor.expire(Clock::now()); const auto& c = processor.counters();
+        metrics.tcp = c.tcp; metrics.udp = c.udp; metrics.tls = c.tls; metrics.malformed = c.malformed; metrics.fragments = c.fragments;
+        metrics.recoverable = c.recoverable_errors; metrics.rollbacks = c.rollbacks; metrics.active_flows = processor.flows(); metrics.queue_size = queue.size();
         if (Clock::now() - last_report >= std::chrono::seconds(1)) { report(); last_report = Clock::now(); }
     }
-    report();
+    receiver.join(); report();
     if (!divert.close(divert.handle)) throw std::runtime_error(windows_error("Driver handle cleanup", GetLastError()));
     divert.handle = INVALID_HANDLE_VALUE;
-    std::cout << "NORTHPASS_STOPPED protocol=1\n" << std::flush;
-    return 0;
+    if (metrics.fatal.load() || metrics.dropped_known.load()) {
+        std::lock_guard guard(error_mutex);
+        throw std::runtime_error(receive_error.empty() ? "Native processing/control failed; inspect known drops and unknown kernel loss in metrics." : receive_error);
+    }
+    std::cout << "NORTHPASS_STOPPED protocol=1\n" << std::flush; return 0;
 }
 }
 int main(int argc, char** argv) {
@@ -184,7 +242,7 @@ int main(int argc, char** argv) {
         std::vector<std::string_view> arguments;
         for (int i = 1; i < argc; ++i) arguments.emplace_back(argv[i]);
         const auto options = northpass::parse_options(arguments);
-        if (options.version) { std::cout << "NorthpassCore 0.1.0 protocol=1\n"; return 0; }
+        if (options.version) { std::cout << "NorthpassCore 0.2.0 protocol=1\n"; return 0; }
         return run(options);
     } catch (const std::exception& error) { std::cerr << "NORTHPASS_ERROR " << error.what() << '\n'; return 1; }
 }

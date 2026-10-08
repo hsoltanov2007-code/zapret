@@ -9,6 +9,7 @@ struct Options {
     std::uint16_t port{};
     std::uint32_t parent_pid{};
     std::string protocol{"both"};
+    std::string pipe_id{};
     std::string filter() const;
 };
 Options parse_options(std::span<const std::string_view> args);

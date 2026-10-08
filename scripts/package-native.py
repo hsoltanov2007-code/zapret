@@ -31,7 +31,7 @@ def package(executable, sdk, output):
             archive.writestr(entry, data)
             components.append(dict(sourcePath=name, path=name, size=len(data), sha256=hashlib.sha256(data).hexdigest()))
     digest = hashlib.sha256(payload.read_bytes()).hexdigest()
-    manifest = dict(engineId="native", revision=digest[:40], version="0.1.0", executable="bin/NorthpassCore.exe",
+    manifest = dict(engineId="native", revision=digest[:40], version="0.2.0", executable="bin/NorthpassCore.exe",
                     acquisitionKind="OfflineBuild", sourceRevision=revision, archiveUrl="", archivePrefix="",
                     archiveSha256=digest, archiveSize=payload.stat().st_size, offlineSha256=digest,
                     offlineSize=payload.stat().st_size, components=components)
@@ -45,7 +45,7 @@ def package(executable, sdk, output):
         for name in ("scripts/prepare-native.py", "scripts/package-native.py", "scripts/build-native.ps1", "docs/NATIVE_ENGINE.md"):
             archive.write(ROOT / name, name)
         archive.writestr("BUILD-REVISION.txt", revision + "\n")
-    print(f"Native 0.1.0 offline payload: {len(components)} components; immutable manifest ready for embedding.")
+    print(f"Native 0.2.0 offline payload: {len(components)} components; immutable manifest ready for embedding.")
 
 
 if __name__ == "__main__":

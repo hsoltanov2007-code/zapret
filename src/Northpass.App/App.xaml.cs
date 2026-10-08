@@ -53,14 +53,14 @@ public partial class App : Application
             if (NativeCatalog.IsBundled)
             {
                 using var manifest = NativeCatalog.OpenTrustedManifest();
-                native = new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native"),
+                native = new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.2"),
                     _http, new WindowsInstallationSecurity(), EngineManifest.Parse(manifest),
                     offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "native-offline.zip"),
                     probe: NativeEngine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
-                registry.Register(NativeEngine.Metadata, () => new NativeEngine(native));
+                registry.Register(NativeEngine.Metadata, () => new NativeEngine(native, useNamedPipe: e.Args.Contains("--native-ipc-check")));
             }
             // Internal acceptance path; never switches the consumer UI to a non-bypass engine.
-            if (e.Args.Contains("--native-check"))
+            if (e.Args.Contains("--native-check") || e.Args.Contains("--native-ipc-check"))
             {
                 if (native is null) throw new IOException("The native offline build is missing.");
                 var installed = await native.EnsureInstalledAsync();
@@ -68,6 +68,8 @@ public partial class App : Application
                 await using var controller = new EngineController(registry);
                 await controller.ConnectAsync(new(installed.ExecutablePath, NativeCatalog.Idle()), autoRecover: false);
                 if ((await controller.GetStatusAsync()).State != Northpass.Models.EngineState.Active) throw new IOException("Native initialization failed.");
+                if (e.Args.Contains("--native-ipc-check") && await controller.GetPerformanceAsync() is not { KernelLossUnknown: true })
+                    throw new IOException("Authenticated native metrics unavailable.");
                 await controller.DisconnectAsync();
                 Shutdown(0); return;
             }
@@ -95,7 +97,7 @@ public partial class App : Application
             System.Diagnostics.Trace.WriteLine(ex);
             if (model is not null)
             { try { await model.DisposeAsync(); } catch (Exception cleanup) { System.Diagnostics.Trace.WriteLine(cleanup); } }
-            if (!e.Args.Contains("--installation-check") && !e.Args.Contains("--native-check"))
+            if (!e.Args.Contains("--installation-check") && !e.Args.Contains("--native-check") && !e.Args.Contains("--native-ipc-check"))
                 ProductDialog.Show(MainWindow?.IsVisible == true ? MainWindow : null, strings, strings["StartupFailed"], false);
             Shutdown(1);
         }

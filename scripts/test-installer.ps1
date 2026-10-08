@@ -35,8 +35,9 @@ try {
     # Product startup and this check share the same mandatory-offline manager and Windows ACL policy.
     Invoke-Checked $app @('--installation-check')
     Invoke-Checked $app @('--native-check')
+    Invoke-Checked $app @('--native-ipc-check')
     $nativeManifest = Get-Content (Join-Path $root 'dist/native/native-manifest.json') -Raw | ConvertFrom-Json
-    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native'
+    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.2'
     foreach ($component in $nativeManifest.components) {
         $path = Join-Path (Join-Path $nativeRoot $nativeManifest.revision) $component.path
         if ((Get-Item $path).Length -ne $component.size -or (Get-FileHash $path -Algorithm SHA256).Hash -ne $component.sha256 -or !(Get-Acl $path).AreAccessRulesProtected) { throw "Native published installation failed integrity/ACL verification: $($component.path)" }
