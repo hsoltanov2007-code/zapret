@@ -1,0 +1,20 @@
+[
+  {
+    "name": "cygwin-3.4.10-source.zip",
+    "url": "https://codeload.github.com/cygwin/cygwin/zip/89a1e4a573d40b233011402f42630b970ff71291",
+    "sha256": "6543985a93ec3dc6586e61aa4da395b80a0324ca209b368172023335975248dd",
+    "size": 16989792
+  },
+  {
+    "name": "windivert-2.2.2-source.zip",
+    "url": "https://codeload.github.com/basil00/WinDivert/zip/1789526ecfb9ff5397c94f9f54c1a3dc2fb60440",
+    "sha256": "25054821d47ec0ef2227c79f3d6688a3a11d6a128d8f103710d1022e92ea1054",
+    "size": 203965
+  },
+  {
+    "name": "zapret2-1.0.5.2-source.zip",
+    "url": "https://codeload.github.com/bol-van/zapret2/zip/6b6c63e3385fa73f8af3be4a69171e947f5a319d",
+    "sha256": "81c2ab542cf8597c86b50927aa2f532f38a1d23f8846fb3292c0d3fbf8dc6f0c",
+    "size": 781890
+  }
+]

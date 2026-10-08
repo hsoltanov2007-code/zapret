@@ -1,0 +1,4 @@
+Northpass v0.3 installs the reviewed Zapret2 x64 engine automatically after consent.
+Do not place executable files here or locate a bundle manually.
+Trusted catalog: engine/catalog/zapret2.json. Offline payload: scripts/prepare-engine.py.
+Protected runtime installation: %ProgramFiles%\Northpass-Zapret2\<reviewed-revision>.
