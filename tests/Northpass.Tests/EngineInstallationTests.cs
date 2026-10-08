@@ -54,6 +54,16 @@ public sealed class EngineInstallationTests : IDisposable
     private string State => Path.Combine(_directory, "protected/selection.json");
 
     [Fact]
+    public async Task NestedExecutablePathsAreCanonicalizedBeforeAcquiringTheProtectedLease()
+    {
+        var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);
+        var manifest = fixture.Manifest with { Executable = "bin/winws2.exe", Components = fixture.Manifest.Components.Select(c => c with { Path = "bin/" + c.Path }).ToArray() };
+        var manager = Manager(http, manifest); var installed = await manager.EnsureInstalledAsync();
+        Assert.Equal(Path.GetFullPath(installed.ExecutablePath), installed.ExecutablePath);
+        await using var lease = await manager.AcquireLaunchLeaseAsync(installed.ExecutablePath);
+        Assert.True(File.Exists(installed.ExecutablePath));
+    }
+    [Fact]
     public async Task DownloadVerifiesAndReusesInstalledComponents()
     {
         var fixture = Fixture(); using var handler = new Handler(fixture.Archive); using var http = new HttpClient(handler);

@@ -79,17 +79,17 @@ public sealed class NetworkServiceProbeTransport : IServiceProbeTransport
                 byte[] request = Encoding.ASCII.GetBytes($"GET {target.HttpsUrl.PathAndQuery} HTTP/1.1\r\nHost: {target.HttpsUrl.Host}\r\nUser-Agent: Northpass/0.5\r\nAccept: */*\r\nConnection: close\r\n\r\n");
                 await stream.WriteAsync(request, timeout.Token);
                 await stream.FlushAsync(timeout.Token);
-                var status = new List<byte>(); byte[] one = new byte[1];
+                var status = new List<byte>(); byte[] one = new byte[1]; bool completeLine = false;
                 while (status.Count < 4096)
                 {
                     int read = await stream.ReadAsync(one, timeout.Token);
                     if (read == 0) break;
-                    if (one[0] == '\n') break;
+                    if (one[0] == '\n') { completeLine = true; break; }
                     status.Add(one[0]);
                 }
                 string line = Encoding.ASCII.GetString(status.ToArray()).TrimEnd('\r');
                 var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 2 || !parts[0].StartsWith("HTTP/1.", StringComparison.Ordinal) || !int.TryParse(parts[1], out int code) || code is < 100 or > 599)
+                if (!completeLine || parts.Length < 2 || parts[0] is not ("HTTP/1.0" or "HTTP/1.1") || !int.TryParse(parts[1], out int code) || code is < 100 or > 599)
                     throw new IOException("Endpoint did not return a bounded valid HTTP/1.1 status line.");
                 https = new(code is >= 200 and < 300 ? ProbeState.Passed : ProbeState.Failed,
                     $"HTTP {code} from {target.HttpsUrl}. This host/status only; no media, login, voice or provider-wide bypass conclusion.", watch.Elapsed.TotalMilliseconds);
@@ -110,7 +110,7 @@ public sealed class NetworkServiceProbeTransport : IServiceProbeTransport
 public sealed record StrategyTestRecord(string Id, DateTimeOffset StartedAt, string Provider, string ProfileId, string EngineId,
     string StrategyId, string InstalledRevision, EngineStatus EngineBeforeProbes, EngineStatus EngineAfterProbes,
     IReadOnlyList<ServiceProbeResult> Services, IReadOnlyList<string> Logs, string? Failure = null,
-    ProbeState UserReportedPlayback = ProbeState.Unknown, ProbeState UserReportedVoice = ProbeState.Unknown);
+    ProbeState UserReportedPlayback = ProbeState.Unknown, ProbeState UserReportedVoice = ProbeState.Unknown, StrategyProfile? Inputs = null);
 public sealed class StrategyTestRecordStore(string directory)
 {
     public string DirectoryPath { get; } = Path.GetFullPath(directory);
@@ -161,7 +161,7 @@ public sealed class StrategyTestRunner(EngineController controller, ServiceProbe
                 controller.LogReceived -= Log;
                 string[] lines; lock (sync) lines = logs.ToArray();
                 record = new StrategyTestRecord(Guid.NewGuid().ToString("N"), started, provider, snapshot.Id, snapshot.Engine,
-                    snapshot.StrategyId, revision, before, after, results, Array.AsReadOnly(lines), string.IsNullOrEmpty(failure) ? null : failure);
+                    snapshot.StrategyId, revision, before, after, results, Array.AsReadOnly(lines), string.IsNullOrEmpty(failure) ? null : failure, Inputs: snapshot);
                 records.Save(record);
             }
         }

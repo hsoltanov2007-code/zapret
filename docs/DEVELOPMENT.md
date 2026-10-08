@@ -34,3 +34,8 @@ The portable suite checks malformed/draft profiles, path traversal, duplicate ID
 On Linux the process fixture is .NET, not a Windows executable and not Zapret2. Container PID 1 may retain killed descendants as zombies; the process test confirms they cannot execute rather than interpreting a zombie PID as an active child. Windows tests use Windows process state directly.
 
 GitHub Actions has separate Linux and Windows jobs. The Windows job runs both suites, cross-project Release compilation through the tests, x64 publish and installer compilation. Windows tests use the actual pinned official components. CI also runs the built installer and published bootstrap/reuse/missing-component/uninstall checks on its Windows runner. These do not establish ISP-specific bypass or clean consumer-machine compatibility. See the manual acceptance checklist for those checks.
+
+
+### v0.5 release signing
+
+The default CI artifacts are unsigned. On a Windows release machine with Windows SDK `signtool.exe` and an authorized code-signing certificate in the current-user store, run `./scripts/build.ps1 -Installer -SignCertificateThumbprint <40-hex-thumbprint>`. The optional `-TimestampUrl` must use HTTPS. This signs and verifies Northpass's own executable/project DLLs before generating distribution checksums and then signs/verifies the final single setup EXE. It never changes the pinned engine/driver/DLL payload bytes. A missing tool/certificate, signing error or verification failure blocks that release build. Signing requires real release credentials and was not performed for development artifacts. Inno Setup's installed uninstaller signing remains a separate release policy; validate it before a public signed release.

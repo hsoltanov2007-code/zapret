@@ -56,6 +56,12 @@ public sealed class Zapret1Engine : IDpiEngine
             await ReleaseLeasesAsync();
             _engineLease = await _installation.AcquireLaunchLeaseAsync(configuration.ExecutablePath, token);
             _dataLease = await _data.PrepareAsync(configuration.Profile, token);
+            foreach (string path in Directory.EnumerateFiles(_dataLease.DirectoryPath).OrderBy(p => p, StringComparer.Ordinal))
+            {
+                using var input = File.OpenRead(path);
+                string hash = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(input, token)).ToLowerInvariant();
+                LogReceived?.Invoke("[data snapshot] " + Path.GetFileName(path) + " SHA-256 " + hash);
+            }
             var info = CreateStartInfo(configuration, _dataLease, _noTrafficCapture);
             await ProbeAsync(info, ["--version"], token);
             await ProbeAsync(info, info.ArgumentList.Append("--dry-run").ToArray(), token);

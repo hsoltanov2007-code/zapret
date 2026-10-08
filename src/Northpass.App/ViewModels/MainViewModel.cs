@@ -121,6 +121,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             if (SessionOpen && !_loading) throw new InvalidOperationException("Disconnect before selecting another strategy.");
             string? previousEngine = _selectedProfile?.Engine;
             if (!Set(ref _selectedProfile, value)) return;
+            _lastTest = null; ServiceResults = "";
             if (!_loading && !string.Equals(previousEngine, value?.Engine, StringComparison.OrdinalIgnoreCase))
             { EnginePath = ""; EngineRevision = ""; SetSetupPhase(_installation is null ? "Ready" : "SetupRequired"); }
             GameTcpPorts = value?.GameTcpPorts ?? "12"; GameUdpPorts = value?.GameUdpPorts ?? "12";

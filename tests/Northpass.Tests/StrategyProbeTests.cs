@@ -58,7 +58,7 @@ public sealed class StrategyProbeTests : IDisposable
         Assert.Equal(EngineState.Active, record.EngineAfterProbes.State);
         Assert.Equal(EngineState.Disconnected, (await controller.GetStatusAsync()).State);
         Assert.Equal(2, transport.Requests); Assert.Single(Directory.GetFiles(_root, "*.json"));
-        Assert.Equal("Fixture provider", record.Provider); Assert.Single(record.Logs);
+        Assert.Equal("Fixture provider", record.Provider); Assert.Single(record.Inputs!.Arguments); Assert.Single(record.Logs);
         foreach (var service in record.Services)
         {
             Assert.Equal(ProbeState.Passed, service.Dns.State);
