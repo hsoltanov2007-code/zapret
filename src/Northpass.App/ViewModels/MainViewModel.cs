@@ -461,7 +461,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private void BeginDiagnostics()
     {
-        if (!_disposed && !_shuttingDown && _setupPhase == "Ready" && !DiagnosticsRunning)
+        if (!_disposed && !_shuttingDown && _setupPhase == "Ready" && !DiagnosticsRunning && _status.State is not (EngineState.Connecting or EngineState.Stopping))
             _ = RefreshServiceDiagnosticsAsync(); // The task is tracked and exceptions handled below.
     }
     public async Task RefreshServiceDiagnosticsAsync()
@@ -477,7 +477,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         finally
         {
             _diagnosticsTask = null; _diagnosticsCancellation = null; DiagnosticsRunning = false;
-            if (epoch != _diagnosticsEpoch && CanConfigure) BeginDiagnostics();
+            if (epoch != _diagnosticsEpoch && !Busy) BeginDiagnostics();
         }
     }
     private async Task RunDiagnosticsAsync(long epoch, CancellationToken token)
@@ -578,7 +578,13 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_disposed || _shuttingDown || _refreshing) return;
         _refreshing = true;
-        try { ApplyStatus(await _controller.GetStatusAsync(_lifetime.Token)); }
+        try
+        {
+            var current = await _controller.GetStatusAsync(_lifetime.Token);
+            bool changed = current.State != _status.State || current.ProcessId != _status.ProcessId;
+            ApplyStatus(current);
+            if (changed && !Busy) BeginDiagnostics();
+        }
         catch (OperationCanceledException) { }
         catch (Exception ex) { Fail(ex); }
         finally { _refreshing = false; }

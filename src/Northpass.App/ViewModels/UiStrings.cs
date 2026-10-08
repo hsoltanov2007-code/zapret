@@ -62,7 +62,7 @@ public sealed class UiStrings(string language)
         ["Exit"] = ("Exit", "Выход", "Çıxış"),
         ["Welcome"] = ("Everything you need is included.", "Всё необходимое уже включено.", "Lazım olan hər şey daxildir."),
         ["HomeNote"] = ("One click to get started. Northpass handles the rest.", "Одно нажатие для запуска. Остальное сделает Northpass.", "Başlamaq üçün bir klik. Qalanını Northpass həll edir."),
-        ["ActiveNote"] = ("The network module is running. Website access has not been verified. Use Diagnostics to check a website.", "Сетевой модуль запущен. Доступ к сайтам ещё не проверен. Проверьте сайт в разделе «Диагностика».", "Şəbəkə modulu işləyir. Saytlara giriş təsdiqlənməyib. Saytı Diaqnostikada yoxlayın."),
+        ["ActiveNote"] = ("Connection started. Web access is checked separately below.", "Соединение запущено. Доступ к сайтам проверяется отдельно ниже.", "Bağlantı başladılıb. Saytlara giriş aşağıda ayrıca yoxlanılır."),
         ["Hero"] = ("Your connection.\nMade simple.", "Ваше соединение.\nВсё просто.", "Bağlantınız.\nSadə şəkildə."),
         ["Tagline"] = ("A quieter way to connect", "Подключение без лишних забот", "Rahat bağlantı"),
         ["ShowAdvanced"] = ("Show advanced tools", "Показывать дополнительные инструменты", "Əlavə alətləri göstər"),

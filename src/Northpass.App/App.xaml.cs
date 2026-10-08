@@ -48,11 +48,8 @@ public partial class App : Application
             // offline composition without opening a window or intercepting traffic.
             if (e.Args.Contains("--installation-check"))
             {
-                foreach (var manager in new[] { flowseal })
-                {
-                    var installed = await manager.EnsureInstalledAsync();
-                    if (await manager.DetectAsync() != installed) throw new IOException("Installation verification failed.");
-                }
+                var installed = await flowseal.EnsureInstalledAsync();
+                if (await flowseal.DetectAsync() != installed) throw new IOException("Installation verification failed.");
                 Shutdown(0); return;
             }
             var model = new MainViewModel(new EngineController(registry), settings, profiles,

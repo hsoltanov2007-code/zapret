@@ -107,7 +107,7 @@ public sealed class WindowSmokeTests
                         await app.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.Background);
                         Assert.True(model.SessionOpen);
                         Assert.Equal("Connection started", model.StatusText);
-                        Assert.Contains("has not been verified", model.ConnectionNote);
+                        Assert.Contains("checked separately", model.ConnectionNote);
                         window.UpdateLayout(); AssertConsumerText(window);
                         Assert.False(selector.IsEnabled);
                         model.ConnectCommand.Execute(null);
