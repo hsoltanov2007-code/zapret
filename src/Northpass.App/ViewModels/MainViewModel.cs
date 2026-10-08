@@ -127,7 +127,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public bool SessionOpen => _status.State is EngineState.Active or EngineState.Connecting or EngineState.Stopping || _status.ProcessId is not null;
     public bool CanConfigure => !SessionOpen && !Busy;
     public string ConnectText => Strings[SessionOpen ? "Disconnect" : "Connect"];
-    public string StatusText => Preparing ? EngineSetupText : Strings[_status.State == EngineState.Disconnected && _setupPhase == "Ready" ? "Ready" : _status.State.ToString()];
+    public string StatusText => Preparing || _setupPhase == "SetupFailed" ? EngineSetupText : Strings[_status.State == EngineState.Disconnected && _setupPhase == "Ready" ? "Ready" : _status.State.ToString()];
     public string StatusColor => _status.State switch { EngineState.Active => "#9DC5B1", EngineState.Error => "#DC998D", EngineState.Connecting or EngineState.Stopping => "#D2BE8F", _ => "#949EAA" };
     public string CurrentEngine => _registry.Find(SelectedProfile?.Engine ?? "")?.Name ?? "Unavailable";
     public string ProfileDescription => SelectedProfile?.Description ?? "Select or import a strategy.";
@@ -168,6 +168,13 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             ShowAdvancedTools = _settings.ShowAdvancedTools;
             _profileStore.Seed(Path.Combine(AppContext.BaseDirectory, "profiles"));
             ReloadProfiles(string.IsNullOrEmpty(_settings.SelectedProfileId) ? "zapret2-reviewed-example" : null);
+            // Preserve drafts as files, but do not make upgrades require JSON editing
+            // before the first connection. A valid custom selection is kept.
+            if (ManagedEngine && SelectedProfile?.Arguments.Count == 0 && Profiles.FirstOrDefault(p => p.Id == "zapret2-reviewed-example") is { } included)
+            {
+                Log("The selected profile was an empty draft; selected the included configuration without changing the draft.");
+                SelectedProfile = included;
+            }
             _loading = false;
             Log("Northpass 0.4. Engine process state and website reachability are reported separately.");
             if (_installation is not null)
@@ -272,7 +279,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (_installation is null || !_desktop.ConfirmTrust(Strings["EngineRepairConsent"])) return;
         await _controller.DisconnectAsync(_lifetime.Token);
-                var task = _installation.RepairAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
+        var task = _installation.RepairAsync(SetupProgress(), _lifetime.Token); _setupTask = task;
         try { ApplyInstalled(await task); }
         catch { SetSetupPhase("SetupFailed"); throw; }
         finally { _setupTask = null; }

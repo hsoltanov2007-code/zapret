@@ -42,6 +42,7 @@ public sealed class WindowSmokeTests
                         using var http = new HttpClient();
                         var desktop = new SetupConsent(); var installation = new FakeInstallation();
                         var store = new SettingsStore(temporary);
+                        store.Save(new() { SelectedProfileId = "draft" });
                         var model = new MainViewModel(new EngineController(registry), registry, store, profiles,
                             new DiagnosticsService(http), new UpdateChecker(http), desktop, app.Dispatcher, installation);
                         window = new MainWindow(model); app.MainWindow = window;
@@ -56,6 +57,8 @@ public sealed class WindowSmokeTests
                         Assert.Equal(0, desktop.Consents); Assert.Equal(1, installation.Setups);
                         Assert.False(store.Load().EngineSetupConsent); Assert.False(model.CanChooseEngine);
                         Assert.True(model.ManagedEngine);
+                        Assert.Equal("zapret2-reviewed-example", model.SelectedProfile?.Id);
+                        Assert.Empty(profiles.Load().Profiles.Single(profile => profile.Id == "draft").Arguments);
                         var tabs = Assert.IsType<TabControl>(window.FindName("NavigationTabs"));
                         Assert.Equal(5, tabs.Items.Count);
                         Assert.False(model.ShowAdvancedTools);
@@ -73,6 +76,8 @@ public sealed class WindowSmokeTests
                         Assert.Contains("SHA-256", model.ResultText);
                         Assert.DoesNotContain("SHA-256", model.UserMessage);
                         model.ShowAdvancedTools = true;
+                        model.SaveSettingsCommand.Execute(null);
+                        Assert.True(store.Load().ShowAdvancedTools);
                         Assert.Equal(Visibility.Visible, ((TabItem)tabs.Items[1]).Visibility);
                         for (int page = 0; page < tabs.Items.Count; page++) { tabs.SelectedIndex = page; window.UpdateLayout(); }
                         model.Language = "ru"; Assert.Equal("Главная", model.Strings["Dashboard"]);
@@ -107,6 +112,7 @@ public sealed class WindowSmokeTests
                         await next.InitializeAsync(null);
                         Assert.Equal(0, desktop.Consents); Assert.Equal(1, installation.Setups);
                         Assert.Equal("Ready", next.EngineSetupText);
+                        Assert.True(next.ShowAdvancedTools);
                         await next.DisposeAsync();
                     }
                     catch (Exception ex) { failure = ex; }
@@ -148,6 +154,18 @@ public sealed class WindowSmokeTests
         bitmap.Render(window);
         var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
         using var file = File.Create(Path.Combine(output, "northpass-v0.4-" + language + ".png")); png.Save(file);
+        if (language == "en")
+        {
+            // Small CI annotation preview complements the full-resolution artifact,
+            // allowing visual review even where artifact-storage hosts are blocked.
+            int width = 640, height = (int)(window.ActualHeight * width / window.ActualWidth);
+            var visual = new DrawingVisual();
+            using (var drawing = visual.RenderOpen()) drawing.DrawImage(bitmap, new Rect(0, 0, width, height));
+            var preview = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); preview.Render(visual);
+            var encoded = new PngBitmapEncoder(); encoded.Frames.Add(BitmapFrame.Create(preview));
+            using var bytes = new MemoryStream(); encoded.Save(bytes);
+            File.WriteAllText(Path.Combine(output, "ui-preview.txt"), Convert.ToBase64String(bytes.ToArray()));
+        }
     }
     private static string FindRepository()
     {

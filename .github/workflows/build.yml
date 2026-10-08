@@ -65,6 +65,8 @@ jobs:
           $summary = $output | ForEach-Object { $_.ToString() } | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
           if (!$summary) { throw 'Windows runner did not confirm nonzero completed tests.' }
           Write-Host "::notice title=Windows integration test result::$summary"
+          $preview = Get-Content TestResults/ui-preview.txt -Raw
+          if ($preview.Length -lt 60000) { Write-Host "::notice title=Northpass UI preview::$preview" }
           Get-ChildItem TestResults/engine-*.txt | ForEach-Object {
             $evidence = (Get-Content $_.FullName -Raw).Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
             Write-Host "::notice title=$($_.BaseName)::$evidence"
