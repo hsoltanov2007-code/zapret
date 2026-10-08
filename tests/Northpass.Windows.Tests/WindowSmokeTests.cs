@@ -64,6 +64,7 @@ public sealed class WindowSmokeTests
                         var selector = Assert.IsType<ComboBox>(window.FindName("HomeStrategySelector"));
                         Assert.True(selector.IsVisible); Assert.True(selector.IsEnabled);
                         Assert.Equal(5, selector.Items.Count);
+                        Assert.Contains(Visuals(selector).OfType<TextBlock>().Where(block => block.IsVisible), block => block.Text == model.SelectedStrategy!.Label);
                         Assert.Equal(3, model.ServiceCards.Count);
                         Assert.Equal(new[] { "youtube", "discord", "telegram" }, model.ServiceCards.Select(card => card.Id));
                         Assert.Equal(ServiceAvailability.Available, model.ServiceCards[0].Availability);
@@ -81,6 +82,7 @@ public sealed class WindowSmokeTests
                         {
                             model.Language = language; tabs.SelectedIndex = 0; window.UpdateLayout();
                             AssertConsumerText(window);
+                            Assert.Contains(Visuals(selector).OfType<TextBlock>().Where(block => block.IsVisible), block => block.Text == model.SelectedStrategy!.Label);
                             Screenshot(window, language);
                             tabs.SelectedIndex = 3; window.UpdateLayout(); AssertConsumerText(window);
                             tabs.SelectedIndex = 2; window.UpdateLayout(); AssertConsumerText(window);
@@ -200,7 +202,7 @@ public sealed class WindowSmokeTests
     private static void AssertConsumerText(Window window)
     {
         string text = string.Join("\n", Visuals(window).OfType<TextBlock>().Where(block => block.IsVisible).Select(block => block.Text));
-        foreach (string forbidden in new[] { "Zapret", "WinDivert", "SHA-256", "GitHub", "winws", "revision", "Program Files", "JSON" })
+        foreach (string forbidden in new[] { "Zapret", "WinDivert", "SHA-256", "GitHub", "winws", "revision", "Program Files", "JSON", "Northpass.ViewModels" })
             Assert.DoesNotContain(forbidden, text, StringComparison.OrdinalIgnoreCase);
     }
     private static void Screenshot(Window window, string language)
@@ -210,7 +212,7 @@ public sealed class WindowSmokeTests
         bitmap.Render(window);
         var png = new PngBitmapEncoder(); png.Frames.Add(BitmapFrame.Create(bitmap));
         using var file = File.Create(Path.Combine(output, "northpass-v0.6-" + language + ".png")); png.Save(file);
-        if (language == "en")
+        if (language is "en" or "en-about")
         {
             // Small CI annotation preview complements the full-resolution artifact,
             // allowing visual review even where artifact-storage hosts are blocked.
@@ -227,7 +229,7 @@ public sealed class WindowSmokeTests
                 if (encodedPreview.Length <= 40000) break;
             }
             Assert.True(encodedPreview.Length <= 40000, "Review preview must fit GitHub's annotation bound.");
-            File.WriteAllText(Path.Combine(output, "ui-preview.txt"), encodedPreview);
+            File.WriteAllText(Path.Combine(output, language == "en" ? "ui-preview.txt" : "about-preview.txt"), encodedPreview);
         }
     }
     private static string FindRepository()

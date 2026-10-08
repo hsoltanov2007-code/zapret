@@ -82,6 +82,16 @@ jobs:
             Write-Host "::notice title=Northpass UI preview $index::$part"
           }
       - shell: pwsh
+        name: Publish bounded About review preview
+        run: |
+          $preview = Get-Content TestResults/about-preview.txt -Raw
+          if ($preview.Length -gt 40000) { throw 'About annotation preview exceeds its bounded size.' }
+          for ($offset = 0; $offset -lt $preview.Length; $offset += 4000) {
+            $part = $preview.Substring($offset, [Math]::Min(4000, $preview.Length - $offset))
+            $index = [int]($offset / 4000)
+            Write-Host "::notice title=Northpass About preview $index::$part"
+          }
+      - shell: pwsh
         run: ./scripts/build.ps1 -Installer
       - shell: pwsh
         name: Install and verify the published application
