@@ -9,6 +9,7 @@ using Northpass.Engine.Zapret2;
 using Northpass.Models;
 using Northpass.Services;
 using Northpass.ViewModels;
+using ValidationResult = Northpass.Models.ValidationResult;
 
 namespace Northpass.Windows.Tests;
 
