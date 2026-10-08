@@ -70,7 +70,7 @@ void check(std::string_view name) {
         std::swap(v.source, v.destination); v.tcp_flags = 0x12; require(tracker.observe(v, 40, now)->tcp == TcpObservation::SynAck);
         v.tcp_flags = 0x10; require(tracker.observe(v, 40, now)->tcp == TcpObservation::SynAck);
         std::swap(v.source, v.destination); v.tcp_flags = 0x10;
-        const auto* flow = tracker.observe(v, 40, now); require(flow->tcp == TcpObservation::Established && flow->packets[0] == 2 && flow->packets[1] == 1 && tracker.size() == 1);
+        const auto* flow = tracker.observe(v, 40, now); require(flow->tcp == TcpObservation::Established && flow->packets[0] == 2 && flow->packets[1] == 2 && tracker.size() == 1);
         v.tcp_flags = 1; require(tracker.observe(v, 40, now)->tcp == TcpObservation::Closing);
         v.tcp_flags = 4; require(tracker.observe(v, 40, now)->tcp == TcpObservation::Reset);
         v.source.port++; tracker.observe(v, 40, now); v.source.port++; tracker.observe(v, 40, now); require(tracker.size() == 2);
