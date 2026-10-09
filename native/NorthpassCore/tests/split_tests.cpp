@@ -70,7 +70,7 @@ void test(std::string_view name) {
             require(reconstruction(*p.proposal) == payload);
         }
     } else if (name == "split_transaction") {
-        SegmentTransaction tx(bytes, strategy.transaction_configuration()); require(tx.propose(*decision.proposal) && tx.commit());
+        SegmentTransaction tx(bytes, strategy.transaction_configuration()); require(tx.propose(*decision.proposal)); require(tx.segments().empty()); require(tx.commit());
         bytes.back() ^= 1; require(tx.original().back() != bytes.back()); require(tx.rollback());
         require(tx.propose(*decision.proposal) && tx.commit()); require(tx.record_sent(0)); require(!tx.rollback() && !tx.fallback_allowed());
         require(!tx.record_sent(0)); tx.send_failed(); require(tx.failure() == SegmentFailure::Transmission && !tx.record_sent(1) && !tx.propose(*decision.proposal));

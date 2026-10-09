@@ -39,10 +39,14 @@ public sealed class NativeSplitLabWindowsTests
         var serverHandshake = serverTls.AuthenticateAsServerAsync(new SslServerAuthenticationOptions {
             ServerCertificate = certificate, EnabledSslProtocols = protocol, ClientCertificateRequired = false, CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         }, token);
-        await clientTls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions {
+        var clientHandshake = clientTls.AuthenticateAsClientAsync(new SslClientAuthenticationOptions {
             TargetHost = "northpass-lab.invalid", EnabledSslProtocols = protocol, CertificateRevocationCheckMode = X509RevocationMode.NoCheck
         }, token);
-        await serverHandshake;
+        // Surface either endpoint's first failure immediately; awaiting only the
+        // client could hide a server credential error behind a network timeout.
+        var first = await Task.WhenAny(serverHandshake, clientHandshake);
+        await first;
+        await Task.WhenAll(serverHandshake, clientHandshake);
         Assert.True(serverTls.IsAuthenticated && clientTls.IsAuthenticated); Assert.Equal(protocol, clientTls.SslProtocol);
         byte[] pattern = Enumerable.Range(0, size).Select(x => (byte)(x * 31)).ToArray(), received = new byte[size];
         // Concurrent reads/writes prevent a large test from depending on socket buffers.
@@ -105,6 +109,12 @@ public sealed class NativeSplitLabWindowsTests
                     catch (Exception e) when (e is IOException or AuthenticationException or OperationCanceledException or SocketException) { endpointRecovered = false; }
                     evidence.Add($"{mode}: injected suppressed actual lab segment, reinjections={metrics.LabReinjections}, known_drop>=1, rollback forbidden, worker nonzero, endpoint_recovered={endpointRecovered}. Not a naturally occurring driver send failure.");
                 }
+            }
+            catch (Exception failure)
+            {
+                try { await Stop(process); } catch (Exception) { if (!process.HasExited) process.Kill(); }
+                if (output is not null) await output;
+                throw new InvalidOperationException($"Lab fault mode={mode}; native exit={(process.HasExited ? process.ExitCode : -999)} stderr={await errors}; trace={string.Join('\n', lines)}", failure);
             }
             finally { listener.Stop(); if (!process.HasExited) { process.Kill(); await process.WaitForExitAsync(); } if (output is not null) await output; }
         }
@@ -174,6 +184,13 @@ public sealed class NativeSplitLabWindowsTests
                 File.WriteAllLines(Path.Combine(outputDirectory, name + "-trace.txt"), lines);
                 evidence.Add(new { name, authenticatedTls = true, reconstruction = "three bidirectional fixed-pattern exchanges matched exactly", sizes = new[] { 1, 4096, 32768 }, metrics,
                     native, wallMilliseconds = watch.Elapsed.TotalMilliseconds, scope = "dedicated loopback only", simulatorIsNotIspEvidence = true });
+            }
+            catch (Exception failure)
+            {
+                try { await Stop(process); } catch (Exception) { if (!process.HasExited) process.Kill(); }
+                if (output is not null) await output;
+                File.WriteAllLines(Path.Combine(outputDirectory, $"lab-failed-{address.AddressFamily}-{protocol}-{split}-trace.txt"), lines);
+                throw new InvalidOperationException($"Lab address={address} protocol={protocol} split={split}; native exit={(process.HasExited ? process.ExitCode : -999)} stderr={await errors}; trace={string.Join('\n', lines)}", failure);
             }
             finally { listener.Stop(); if (!process.HasExited) { process.Kill(); await process.WaitForExitAsync(); } if (output is not null) await output; }
         }

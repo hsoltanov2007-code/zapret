@@ -55,7 +55,10 @@ public:
     bool record_sent(std::size_t index) noexcept;
     void send_failed() noexcept { failure_ = SegmentFailure::Transmission; transmission_failed_ = true; }
     std::span<const std::uint8_t> original() const noexcept { return original_; }
-    const std::vector<std::vector<std::uint8_t>>& segments() const noexcept { return segments_; }
+    const std::vector<std::vector<std::uint8_t>>& segments() const noexcept {
+        static const std::vector<std::vector<std::uint8_t>> empty;
+        return committed_ ? segments_ : empty;
+    }
     bool committed() const noexcept { return committed_; }
     bool fallback_allowed() const noexcept { return sent_ == 0 && !transmission_failed_; }
     std::size_t sent() const noexcept { return sent_; }

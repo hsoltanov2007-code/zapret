@@ -21,6 +21,12 @@ public sealed class BrokerProtocolTests
         Assert.Throws<InvalidDataException>(()=>BrokerProtocol.Validate(new(3,1,"STOP","native","passthrough-idle"),1));
     }
     [Theory]
+    [InlineData("northpass-split")]
+    [InlineData("--lab-split")]
+    [InlineData("passthrough-loopback --lab-split")]
+    public void ExperimentalLabCannotBeEnabledAcrossThePrivilegeBoundary(string strategy) =>
+        Assert.Throws<InvalidDataException>(() => BrokerProtocol.Validate(new(3,1,"START","native",strategy,55001,"tcp"),1));
+    [Theory]
     [InlineData("{\"Version\":3,\"Version\":2}")]
     [InlineData("{\"Version\":3,\"RawCommand\":\"cmd.exe\"}")]
     public async Task DuplicateAndUnknownFieldsAreRejected(string json)
