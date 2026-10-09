@@ -4,6 +4,7 @@
 #include "northpass/windows_ipc.hpp"
 #include "northpass/queue.hpp"
 #include "northpass/transformation.hpp"
+#include "northpass/split.hpp"
 #include <psapi.h>
 #include <algorithm>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include <thread>
 #include <stdexcept>
 #include <vector>
+#include <sstream>
 namespace {
 using namespace northpass;
 std::atomic<HANDLE> control_stop{};
@@ -122,6 +124,50 @@ private:
     DWORD processors_ = std::max<DWORD>(1, GetActiveProcessorCount(ALL_PROCESSOR_GROUPS));
     std::uint64_t last_time_{}, last_cpu_{};
 };
+// Separate lower-priority sniff-only handle observes the actual post-injection
+// lab packets. It never consumes traffic and stores header/length traces only.
+class LabTrace {
+public:
+    LabTrace(Divert& divert, const Options& options, HANDLE stop, Metrics& metrics, std::mutex& output)
+        : divert_(divert), stop_(stop), output_(output) {
+        auto filter = options.filter(); const auto marker = filter.find("!impostor");
+        if (marker != std::string::npos) filter.replace(marker, 9, "true"); // read-only observer must see reinjected lab packets too
+        handle_ = divert.open(filter.c_str(), WINDIVERT_LAYER_NETWORK, -100, WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY);
+        if (handle_ == INVALID_HANDLE_VALUE) throw std::runtime_error(windows_error("Lab trace opening", GetLastError()));
+        try { worker_ = std::thread([this, &metrics, port = options.port] {
+            try {
+                Handle ready(CreateEventW(nullptr, TRUE, FALSE, nullptr));
+                if (!ready.get()) throw std::runtime_error("Lab trace event unavailable.");
+                std::array<std::uint8_t, MaximumPacketSize> bytes{};
+                while (WaitForSingleObject(stop_, 0) == WAIT_TIMEOUT) {
+                    WINDIVERT_ADDRESS address{}; UINT count{}, size = sizeof(address); OVERLAPPED io{}; io.hEvent = ready.get(); ResetEvent(ready.get());
+                    auto received = divert_.receive(handle_, bytes.data(), static_cast<UINT>(bytes.size()), &count, 0, &address, &size, &io);
+                    if (!received && GetLastError() == ERROR_IO_PENDING) {
+                        const HANDLE waits[]{ready.get(), stop_}; const auto event = WaitForMultipleObjects(2, waits, FALSE, INFINITE);
+                        if (event != WAIT_OBJECT_0) { CancelIoEx(handle_, &io); DWORD ignored{}; GetOverlappedResult(handle_, &io, &ignored, TRUE); break; }
+                        DWORD transferred{}; received = GetOverlappedResult(handle_, &io, &transferred, FALSE); count = transferred;
+                    }
+                    if (!received || count > bytes.size() || size != sizeof(address)) throw std::runtime_error("Lab trace receive failed.");
+                    const auto packet = std::span(bytes).first(count); const auto view = classify(packet);
+                    if (view.state == ParseState::Parsed && view.transport == Transport::Tcp && view.destination.port == port && !view.payload.empty()) {
+                        ++observed_;
+                        if (observed_ <= 256) { std::lock_guard guard(output_);
+                            std::cout << "NORTHPASS_LAB_TRACE stage=post seq=" << view.sequence << " ack=" << view.acknowledgement
+                                << " bytes=" << count << " payload=" << view.payload.size() << " flags=" << static_cast<unsigned>(view.tcp_flags)
+                                << " hello=" << simulator_recognizes_client_hello(packet) << '\n' << std::flush;
+                        }
+                    }
+                }
+            } catch (...) { ++metrics.fatal; SetEvent(stop_); }
+        }); } catch (...) { divert_.close(handle_); handle_ = INVALID_HANDLE_VALUE; throw; }
+    }
+    void stop() { SetEvent(stop_); if (worker_.joinable()) worker_.join(); }
+    ~LabTrace() { stop(); if (handle_ != INVALID_HANDLE_VALUE) divert_.close(handle_); }
+    std::uint64_t observed() const { return observed_.load(); }
+private:
+    Divert& divert_; HANDLE stop_, handle_{INVALID_HANDLE_VALUE}; std::mutex& output_; std::thread worker_;
+    std::atomic<std::uint64_t> observed_{};
+};
 int run(const Options& options) {
     auto locks = verify_runtime(executable_path());
     if (options.check) {
@@ -154,7 +200,17 @@ int run(const Options& options) {
     if (divert.handle == INVALID_HANDLE_VALUE) throw std::runtime_error(windows_error("Scoped driver initialization", GetLastError()));
     for (const auto& [name, value] : std::array<std::pair<WINDIVERT_PARAM, UINT64>, 3>{ {{WINDIVERT_PARAM_QUEUE_LENGTH, 512}, {WINDIVERT_PARAM_QUEUE_SIZE, 1048576}, {WINDIVERT_PARAM_QUEUE_TIME, 1000}} })
         if (!divert.parameter(divert.handle, name, value)) throw std::runtime_error(windows_error("Bounded driver queue setup", GetLastError()));
-    std::mutex send_mutex, error_mutex; std::string receive_error;
+    std::mutex send_mutex, error_mutex, output_mutex; std::string receive_error;
+    NorthpassSplit split; FlowTracker split_flows(64);
+    if (options.lab_split) split.initialize({4, 1280, 9, TransformScope::Laboratory});
+    std::uint64_t proposed{}, accepted{}, rejected{}, lab_reinjections{}, send_failures{}, split_latency_ns{};
+    std::atomic<std::uint64_t> lab_observation_errors{};
+    std::unique_ptr<LabTrace> trace;
+    if (options.lab_split) trace = std::make_unique<LabTrace>(divert, options, stop.get(), metrics, output_mutex);
+    // This timer cannot be extended through commands or auto-recovery.
+    std::thread hard_stop;
+    if (options.lab_split) hard_stop = std::thread([&] { if (WaitForSingleObject(stop.get(), options.lab_seconds * 1000) == WAIT_TIMEOUT) SetEvent(stop.get()); });
+    struct TimerCleanup { HANDLE stop; std::thread& thread; ~TimerCleanup() { SetEvent(stop); if (thread.joinable()) thread.join(); } } timer_cleanup{stop.get(), hard_stop};
     std::uint64_t checksum_invalid{}, offload_unverified{}, metadata_invalid{}, oversize{};
     bool send_fault_used = false;
     const auto forward = [&](const QueuedPacket& packet) {
@@ -166,6 +222,51 @@ int run(const Options& options) {
         }
         if (!divert.send(divert.handle, packet.bytes.data(), static_cast<UINT>(packet.length), &sent, &address) || sent != packet.length) {
             ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get()); return false;
+        }
+        ++metrics.forwarded; return true;
+    };
+    const auto lab_forward = [&](const QueuedPacket& packet, WINDIVERT_ADDRESS address, bool& transmission_attempted) {
+        const auto bytes = std::span(packet.bytes).first(packet.length); const auto view = classify(bytes);
+        // Runtime scope defense in addition to the driver filter; no ordinary
+        // engine/broker command can request this experimental path.
+        if (!options.lab_split || WaitForSingleObject(stop.get(), 0) != WAIT_TIMEOUT || !address.Outbound || !address.Loopback || address.Impostor)
+            return forward(packet);
+        Endpoint expected; expected.address[15] = 1; if (view.ip_version == 4) expected.address[12] = 127;
+        if (view.state != ParseState::Parsed || view.transport != Transport::Tcp || view.source.address != expected.address || view.destination.address != expected.address)
+            return forward(packet);
+        const auto* flow = split_flows.observe(view, packet.length, Clock::now());
+        if (view.destination.port != options.port || view.payload.empty() || view.payload[0] != 22) return forward(packet);
+        const auto started = monotonic_ns(); ++proposed;
+        const auto checksum = observe_checksum(bytes, {true, true, false, address.IPv6 != 0, address.IPChecksum != 0, address.TCPChecksum != 0, address.UDPChecksum != 0});
+        if (checksum == ChecksumObservation::Invalid) { ++rejected; return forward(packet); }
+        auto decision = split.propose(bytes, flow);
+        if (!decision.proposal) { ++rejected; return forward(packet); }
+        SegmentTransaction transaction(bytes, split.transaction_configuration());
+        if (!transaction.propose(*decision.proposal) || !transaction.commit()) { ++rejected; return forward(packet); }
+        ++accepted; split_latency_ns += monotonic_ns() - started;
+        { std::lock_guard guard(output_mutex);
+            std::cout << "NORTHPASS_LAB_TRACE stage=original seq=" << view.sequence << " ack=" << view.acknowledgement
+                << " bytes=" << bytes.size() << " payload=" << view.payload.size() << " flags=" << static_cast<unsigned>(view.tcp_flags)
+                << " hello=1 segments=" << transaction.segments().size() << " retransmission=" << decision.retransmission << '\n' << std::flush;
+        }
+        address.IPChecksum = address.TCPChecksum = 1;
+        std::lock_guard send_guard(send_mutex);
+        for (std::size_t i = 0; i < transaction.segments().size(); ++i) {
+            const auto& segment = transaction.segments()[i]; UINT sent{};
+            transmission_attempted = true; // includes an ambiguous FIRST send failure
+            if (options.lab_send_failure == i + 1 || !divert.send(divert.handle, segment.data(), static_cast<UINT>(segment.size()), &sent, &address) || sent != segment.size()) {
+                transaction.send_failed(); ++send_failures; ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get());
+                { std::lock_guard guard(output_mutex); std::cout << "NORTHPASS_LAB_SEND_FAILURE transmitted=" << transaction.sent()
+                    << " unsent_segments=" << transaction.segments().size() - transaction.sent()
+                    << " rollback_allowed=0 connection_may_be_interrupted=1\n" << std::flush; }
+                return false; // never forward original after ambiguous/partial transmission
+            }
+            if (!transaction.record_sent(i)) throw std::runtime_error("Lab transaction send accounting failed.");
+            ++lab_reinjections;
+            { std::lock_guard guard(output_mutex); const auto sent_view = classify(segment);
+                std::cout << "NORTHPASS_LAB_TRACE stage=sent seq=" << sent_view.sequence << " ack=" << sent_view.acknowledgement
+                    << " bytes=" << segment.size() << " payload=" << sent_view.payload.size() << " flags=" << static_cast<unsigned>(sent_view.tcp_flags)
+                    << " hello=" << simulator_recognizes_client_hello(segment) << " checksum_valid=1\n" << std::flush; }
         }
         ++metrics.forwarded; return true;
     };
@@ -211,7 +312,16 @@ int run(const Options& options) {
                 }
                 packet.length = length; packet.captured_ns = monotonic_ns(); std::memcpy(packet.metadata.data(), &address, sizeof(address));
                 if (options.fault == TestFault::Crash) TerminateProcess(GetCurrentProcess(), 91);
-                (void)forward(packet); // original bytes are reinjected before fallible/read-only observation
+                // Consumer/native pass-through is unchanged. Only explicit bounded
+                // lab sessions may propose modifications BEFORE original forwarding.
+                if (options.lab_split) {
+                    bool transmission_attempted = false;
+                    try { (void)lab_forward(packet, address, transmission_attempted); }
+                    catch (...) {
+                        if (transmission_attempted) { ++send_failures; ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get()); }
+                        else { ++lab_observation_errors; (void)forward(packet); }
+                    }
+                } else (void)forward(packet);
                 if (!queue.try_push(packet)) ++metrics.backpressure; // skip observation, never reorder originals or wait on space
                 const auto size = queue.size(); metrics.queue_size = size;
                 const auto actual_peak = queue.peak();
@@ -226,6 +336,7 @@ int run(const Options& options) {
     PassThroughStrategy strategy; PacketProcessor processor(strategy);
     std::cout << "NORTHPASS_READY protocol=1\n" << std::flush;
     const auto report = [&] {
+        std::lock_guard guard(output_mutex);
         std::cout << "NORTHPASS_STATS packets=" << metrics.captured.load() << " forwarded=" << metrics.forwarded.load() << " tcp=" << metrics.tcp.load()
             << " udp=" << metrics.udp.load() << " tls=" << metrics.tls.load() << " malformed=" << metrics.malformed.load()
             << " fragments=" << metrics.fragments.load() << " flows=" << metrics.active_flows.load() << '\n';
@@ -251,10 +362,18 @@ int run(const Options& options) {
         }
         processor.expire(Clock::now()); const auto& c = processor.counters();
         metrics.tcp = c.tcp; metrics.udp = c.udp; metrics.tls = c.tls; metrics.malformed = c.malformed; metrics.fragments = c.fragments;
-        metrics.recoverable = c.recoverable_errors; metrics.rollbacks = c.rollbacks; metrics.active_flows = processor.flows(); metrics.queue_size = queue.size();
+        metrics.recoverable = c.recoverable_errors + lab_observation_errors.load(); metrics.rollbacks = c.rollbacks; metrics.active_flows = processor.flows(); metrics.queue_size = queue.size();
         if (Clock::now() - last_report >= std::chrono::seconds(1)) { report(); last_report = Clock::now(); }
     }
-    receiver.join(); report();
+    receiver.join();
+    if (trace) trace->stop();
+    split.shutdown(); report();
+    if (options.lab_split) {
+        std::cout << "NORTHPASS_SPLIT_METRICS protocol=4 proposed=" << proposed << " accepted=" << accepted << " rejected=" << rejected
+            << " lab_reinjections=" << lab_reinjections << " send_failures=" << send_failures << " dropped_known=" << metrics.dropped_known.load()
+            << " kernel_loss_unknown=1 reconstruction_unknown=1 trace_packets=" << trace->observed()
+            << " latency_us=" << (accepted ? static_cast<double>(split_latency_ns) / static_cast<double>(accepted) / 1000 : 0) << '\n' << std::flush;
+    }
     if (!divert.close(divert.handle)) throw std::runtime_error(windows_error("Driver handle cleanup", GetLastError()));
     divert.handle = INVALID_HANDLE_VALUE;
     if (metrics.fatal.load() || metrics.dropped_known.load()) {
@@ -269,7 +388,7 @@ int main(int argc, char** argv) {
         std::vector<std::string_view> arguments;
         for (int i = 1; i < argc; ++i) arguments.emplace_back(argv[i]);
         const auto options = northpass::parse_options(arguments);
-        if (options.version) { std::cout << "NorthpassCore 0.3.0 protocol=1\n"; return 0; }
+        if (options.version) { std::cout << "NorthpassCore 0.4.0 protocol=1\n"; return 0; }
         return run(options);
     } catch (const std::exception& error) { std::cerr << "NORTHPASS_ERROR " << error.what() << '\n'; return 1; }
 }

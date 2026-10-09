@@ -36,7 +36,7 @@ public sealed class NativeWindowsTests
     [Fact]
     public async Task NativeOfflineOwnershipLoopbackPassThroughAndParentDeathAreRealWindowsChecks()
     {
-        string repo = Repository(), root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.3");
+        string repo = Repository(), root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.4");
         using var catalog = NativeCatalog.OpenTrustedManifest(); var manifest = EngineManifest.Parse(catalog);
         using var handler = new NoNetwork(); using var http = new HttpClient(handler); var security = new WindowsInstallationSecurity();
         var manager = new EngineInstallationManager(root, http, security, manifest,
@@ -133,6 +133,6 @@ public sealed class NativeWindowsTests
             if (Alive(orphan)) { using var leftover = Process.GetProcessById(orphan); leftover.Kill(true); Assert.Fail("Native process survived real parent termination."); }
         }
         Assert.False(Alive(orphan)); Assert.NotNull(await manager.DetectAsync());
-        Evidence(repo, "engine-native-lifecycle", "Actual NorthpassCore 0.3.0 installed/reused offline with immutable component hashes and protected ACLs. Unsafe ACL rejected by managed/native checks. Real idle driver readiness, duplicate/collision rejection, file leases, graceful STOP/drain, cancellation, IDpiEngine controller and parent-death cleanup passed. No ordinary internet traffic captured, security settings changed, DPI bypass or Russian ISP effectiveness tested.");
+        Evidence(repo, "engine-native-lifecycle", "Actual NorthpassCore 0.4.0 installed/reused offline with immutable component hashes and protected ACLs. Unsafe ACL rejected by managed/native checks. Real idle driver readiness, duplicate/collision rejection, file leases, graceful STOP/drain, cancellation, IDpiEngine controller and parent-death cleanup passed. No ordinary internet traffic captured, security settings changed, DPI bypass or Russian ISP effectiveness tested.");
     }
 }

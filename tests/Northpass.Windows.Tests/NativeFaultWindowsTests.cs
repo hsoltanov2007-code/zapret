@@ -14,7 +14,7 @@ public sealed class NativeFaultWindowsTests
     {
         string repo=AppContext.BaseDirectory;while(!File.Exists(Path.Combine(repo,"Northpass.sln")))repo=Directory.GetParent(repo)!.FullName;
         using var catalog=NativeCatalog.OpenTrustedManifest();using var http=new HttpClient();
-        var manager=new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Northpass-Native-0.3"),http,new WindowsInstallationSecurity(),EngineManifest.Parse(catalog),
+        var manager=new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Northpass-Native-0.4"),http,new WindowsInstallationSecurity(),EngineManifest.Parse(catalog),
             offlinePayload:Path.Combine(repo,"dist/native/native-offline.zip"),probe:NativeEngine.VerifyInstalledVersionAsync,requireOfflinePayload:true);
         var installed=await manager.EnsureInstalledAsync();var evidence=new List<string>();
         foreach(string fault in new[]{"driver-open","send","observation-delay","crash"})

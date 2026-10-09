@@ -1,8 +1,8 @@
-# Northpass Native Engine v0.3
+# Northpass Native Engine v0.4
 
-NorthpassCore is original C++20 code. Native v0.3 forwards unchanged packets only; **it does not implement DPI bypass**. Native remains an internal experiment. The premium v0.7 WPF UI, Russian first-launch default, saved EN/RU/AZ choices, Home strategies, automatic service diagnostics, reviewed Flowseal consumer engine and single offline installer are preserved.
+NorthpassCore is original C++20 code. The current module is **0.4.0**. [Northpass Split](NATIVE_SPLIT.md) adds ABI 4 segmentation transactions and an explicitly scoped TCP/TLS laboratory to the v0.3 reliability/broker foundation below. Consumer and broker native commands still allow only unchanged pass-through; **no real DPI bypass is demonstrated**. The protected root is now `Program Files/Northpass-Native-0.4`, with independently verified new payloads; older protected roots are retained, not silently trusted. The historical [v0.3 validation record](NATIVE_V03_VALIDATION.md) does not certify this revision. See [manual desktop/UAC acceptance](NATIVE_V04_MANUAL.md). Premium v0.7 UI, Russian default, EN/RU/AZ, service diagnostics, Flowseal and the offline installer are preserved.
 
-## Packet processing and transformation boundary
+## Preserved v0.3 pass-through and transformation foundation
 
 The receiver reinjects original bytes and original WinDivert metadata **before** fallible read-only observation. An eight-slot preallocated queue (about 0.5 MiB) skips and counts observations on saturation instead of delaying original forwarding. Packet capacity is 65,575 bytes; flow tracking caps at 4,096 with bounded LRU expiry. UDP expires after 30 seconds, TCP after 120, closing/reset TCP after five. TCP sequence/ACK tracking handles directional wrap, overlap, retransmission candidates, handshake transitions, FIN/RST and tuple reuse; it is not stream reconstruction.
 

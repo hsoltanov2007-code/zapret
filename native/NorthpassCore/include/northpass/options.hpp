@@ -12,6 +12,8 @@ struct Options {
     std::string protocol{"both"};
     std::string pipe_id{};
     TestFault fault{TestFault::None};
+    bool lab_split{};
+    std::uint32_t lab_seconds{}, lab_send_failure{};
     std::string filter() const;
 };
 Options parse_options(std::span<const std::string_view> args);

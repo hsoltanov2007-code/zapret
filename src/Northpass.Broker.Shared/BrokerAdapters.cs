@@ -16,7 +16,7 @@ public sealed class BrokerInstallation(BrokerClient client,string engineId) : IE
 {
     public string EngineId=>engineId;
     private static EngineManifest Catalog(string id){using var s=id=="native"?NativeCatalog.OpenTrustedManifest():FlowsealCatalog.OpenTrustedManifest();return EngineManifest.Parse(s);}
-    public static string Root(string id)=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),id=="native"?"Northpass-Native-0.3":"Northpass-Flowseal");
+    public static string Root(string id)=>Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),id=="native"?"Northpass-Native-0.4":"Northpass-Flowseal");
     private async Task<(InstalledEngine?,List<FileStream>)> ReadAsync(CancellationToken token)
     {
         var leases=new List<FileStream>();string root=Root(engineId);if(!Directory.Exists(root))return(null,leases);
