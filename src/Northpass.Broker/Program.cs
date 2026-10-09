@@ -78,6 +78,11 @@ try
                     case "REPAIR":installed=await manager.RepairAsync(token:lifetime.Token);break;
                     case "ROLLBACK":installed=await manager.RollbackAsync(lifetime.Token);break;
                     case "START":
+                        if((await controller.GetStatusAsync(lifetime.Token)).State is EngineState.Active or EngineState.Connecting or EngineState.Stopping)
+                            throw new InvalidOperationException("Disconnect the owned session before starting another.");
+                        // Discard only previous private input copies; snapshots are
+                        // separately leased. Session disk use cannot grow per reconnect.
+                        foreach(string copy in Directory.EnumerateFiles(session)) {security.ValidateFile(copy);File.Delete(copy);}
                         installed=await manager.EnsureInstalledAsync(token:lifetime.Token);
                         StrategyProfile profile;
                         if(request.Engine=="native")profile=request.Strategy=="passthrough-idle"?NativeCatalog.Idle():NativeCatalog.Loopback(request.Port!.Value,request.Transport);

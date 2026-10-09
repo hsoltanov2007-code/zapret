@@ -54,10 +54,18 @@ internal static class BrokerAcceptance
         {
             if(!(await client.RequestAsync("STATUS")).NoTrafficTest)throw new IOException("Flowseal acceptance requires verified no-traffic test composition.");
             var fallback=await flowseal.EnsureInstalledAsync();
-            await using var checkedEngine=new BrokerEngine(client,"zapret1");
-            await checkedEngine.StartAsync(new(fallback.ExecutablePath,FlowsealCatalog.Profile(FlowsealCatalog.Strategies[0])));
-            if((await checkedEngine.GetStatusAsync()).State!=EngineState.Active)throw new IOException("Broker Flowseal readiness failed.");
-            await checkedEngine.StopAsync(); // only CI --test-no-traffic bootstrap permits this acceptance path
+            string testLists=Path.Combine(Path.GetTempPath(),"northpass-broker-lists-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(testLists);
+            try {
+                string input=Path.Combine(testLists,"source.txt");await File.WriteAllTextAsync(input,"example.com\n");
+                var store=new Northpass.Services.DataListStore(testLists);
+                var profile=FlowsealCatalog.Profile(FlowsealCatalog.Strategies[0]);profile.ListBindings["general"]=store.Import(input,Northpass.Services.DataListKind.Hosts).Id;
+                await using var checkedEngine=new BrokerEngine(client,"zapret1",store);
+                for(int repeat=0;repeat<2;repeat++) {
+                    await checkedEngine.StartAsync(new(fallback.ExecutablePath,profile));
+                    if((await checkedEngine.GetStatusAsync()).State!=EngineState.Active)throw new IOException("Broker Flowseal readiness failed.");
+                    await checkedEngine.StopAsync(); // verified filter=false; also exercises bounded private list copy/reuse
+                }
+            } finally {Directory.Delete(testLists,true);}
         }
         if(mode=="replay")await client.VerifyReplayRejectionForAcceptanceAsync();
         if(mode is "worker-crash" or "disconnect-active" && !faultNotification)throw new IOException("Owned failure did not notify the replaceable controller.");
