@@ -1,4 +1,3 @@
-param([switch]$Preview)
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $worker = Join-Path $root 'dist/broker-worker'

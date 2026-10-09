@@ -33,9 +33,13 @@ Type: files; Name: "{app}\profiles\example-template.json"
 Type: files; Name: "{app}\docs\third-party-source\zapret2-1.0.5.2-source.zip"
 [Files]
 Source: "..\dist\Northpass\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+[Registry]
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Northpass"; Flags: dontcreatekey uninsdeletevalue
 [Icons]
 Name: "{group}\Northpass"; Filename: "{app}\Northpass.exe"
 [Run]
+; Migrate this user away from the legacy elevated startup task.
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""Northpass-{code:CurrentUserSid}"" /F"; Flags: runhidden
 Filename: "{app}\Northpass.exe"; Description: "Launch Northpass"; Flags: postinstall skipifsilent shellexec runasoriginaluser
 [UninstallRun]
 ; Remove this user's task only; user settings and protected engine revisions stay intact.

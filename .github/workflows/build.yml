@@ -88,21 +88,19 @@ jobs:
             Write-Host "::notice title=$($_.BaseName)::$evidence"
           }
       - shell: pwsh
-        name: Build privileged broker preview
+        name: Build protected product and offline installer
         run: |
-          $output = & ./scripts/build.ps1 -BrokerPreview 2>&1
+          $output = & ./scripts/build.ps1 -Installer 2>&1
           $result = $LASTEXITCODE
           $output | Write-Output
           if ($result -ne 0) {
             $message = ($output | Select-Object -Last 45 | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
-            Write-Host "::error title=Broker preview build::$message"
+            Write-Host "::error title=Protected product build::$message"
             exit $result
           }
       - shell: pwsh
         name: Real medium UI and elevated broker integration
         run: ./scripts/test-broker.ps1
-      - shell: pwsh
-        run: ./scripts/build.ps1 -Installer
       - shell: pwsh
         name: Install and verify the published application
         run: ./scripts/test-installer.ps1

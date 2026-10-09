@@ -39,15 +39,11 @@ def package(executable, sdk, output):
     shutil.copytree(sdk / "source", output / "source", dirs_exist_ok=True)
     # Original NorthpassCore source and build metadata are supplied for audit/rebuild.
     with zipfile.ZipFile(output / "source/NorthpassCore-source.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted((ROOT / "native").rglob("*")):
-            if path.is_file():
-                archive.write(path, path.relative_to(ROOT).as_posix())
-        for name in ("scripts/prepare-native.py", "scripts/package-native.py", "scripts/build-native.ps1", "docs/NATIVE_ENGINE.md", "scripts/build-broker.ps1", "scripts/prepare-broker.py", "scripts/test-broker.ps1"):
+        tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
+        roots = ("native/", "src/", "tests/", "scripts/", "installer/", "profiles/", "engine/", "branding/", "docs/")
+        metadata = {"Northpass.sln", "Directory.Build.props", "global.json", "NuGet.Config", "README.md", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md"}
+        for name in sorted(n for n in tracked if n and (n.startswith(roots) or n in metadata)):
             archive.write(ROOT / name, name)
-        for folder in ("src/Northpass.Broker", "src/Northpass.Broker.Shared"):
-            for path in sorted((ROOT / folder).rglob("*")):
-                if path.is_file() and not any(part in ("bin", "obj") for part in path.relative_to(ROOT / folder).parts):
-                    archive.write(path, path.relative_to(ROOT).as_posix())
         archive.writestr("BUILD-REVISION.txt", revision + "\n")
     print(f"Native 0.3.0 offline payload: {len(components)} components; immutable manifest ready for embedding.")
 

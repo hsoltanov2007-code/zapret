@@ -2,7 +2,7 @@
 
 ## Native Engine 0.3.0 (desktop remains 0.7.0)
 
-- Added protected native elevation bootstrap, verified managed network worker and authenticated versioned local IPC preview; production activation is gated by actual medium-integrity Windows acceptance.
+- Added protected native elevation bootstrap, verified managed network worker and authenticated versioned local IPC. Default WPF launch is unelevated after the actual medium-integrity Windows acceptance gate passed. Per-user startup migrates away from elevated tasks.
 - Added synthetic-only immutable packet transactions, typed proposals, capability/MTU validation and commit/rollback lifecycle tests. No live transformations or native DPI bypass.
 - Added checksum/offload metadata observations, bounded synthetic flow benchmark and scoped driver/send/queue/crash fault tests.
 - Preserved reviewed Flowseal consumer engine, premium localized UI, offline payloads and legal/source distribution.

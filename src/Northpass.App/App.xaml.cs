@@ -42,7 +42,6 @@ public partial class App : Application
             var dataLists = new DataListStore(Path.Combine(settings.Folder, "lists"));
             IEngineInstallationManager flowseal;
             IEngineInstallationManager? native = null;
-#if NORTHPASS_BROKER_PREVIEW
             int handoff=e.Args.ToList().IndexOf("--broker-test-handoff");
             _broker=new BrokerClient(handoff>=0 && handoff+1<e.Args.Length?e.Args[handoff+1]:null);
             flowseal=new BrokerInstallation(_broker,"zapret1");
@@ -54,28 +53,6 @@ public partial class App : Application
                 await BrokerAcceptance.CheckAsync(_broker,flowseal,native,e.Args);
                 await _broker.DisposeAsync();_broker=null;Shutdown(0);return;
             }
-#else
-            var data = new ProtectedEngineDataProvider(dataLists,
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-StrategyData"), new WindowsInstallationSecurity());
-            using var flowsealManifest = FlowsealCatalog.OpenTrustedManifest();
-            var flowsealPrevious = new List<EngineManifest>();
-            foreach (var stream in FlowsealCatalog.OpenPreviousTrustedManifests()) using (stream) flowsealPrevious.Add(EngineManifest.Parse(stream));
-            flowseal = new EngineInstallationManager(
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Flowseal"),
-                _http, new WindowsInstallationSecurity(), EngineManifest.Parse(flowsealManifest), previous: flowsealPrevious,
-                offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "flowseal-offline.zip"),
-                probe: Zapret1Engine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
-            registry.Register(Zapret1Engine.Metadata, () => new Zapret1Engine(flowseal, data));
-            if (NativeCatalog.IsBundled)
-            {
-                using var manifest = NativeCatalog.OpenTrustedManifest();
-                native = new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.3"),
-                    _http, new WindowsInstallationSecurity(), EngineManifest.Parse(manifest),
-                    offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "native-offline.zip"),
-                    probe: NativeEngine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
-                registry.Register(NativeEngine.Metadata, () => new NativeEngine(native, useNamedPipe: e.Args.Contains("--native-ipc-check")));
-            }
-#endif
             // Internal acceptance path; never switches the consumer UI to a non-bypass engine.
             if (e.Args.Contains("--native-check") || e.Args.Contains("--native-ipc-check"))
             {
@@ -102,8 +79,13 @@ public partial class App : Application
 #if DEBUG
             developerTools = e.Args.Contains("--dev-tools");
 #endif
+            var desktop = new DesktopServices();
+            // Preserve a saved startup preference while migrating the old elevated
+            // task to this user's unelevated Run entry. Headless checks skip this.
+            try { if(settings.Load().StartWithWindows && Path.GetFileName(Environment.ProcessPath)=="Northpass.exe")await desktop.SetAutoStartAsync(true); }
+            catch(Exception migration){System.Diagnostics.Trace.WriteLine("Startup preference migration: "+migration.Message);}
             model = new MainViewModel(new EngineController(registry), settings, profiles,
-                new UpdateChecker(_http), new DesktopServices(), Dispatcher, flowseal,
+                new UpdateChecker(_http), desktop, Dispatcher, flowseal,
                 new ServiceProbeService(new NetworkServiceProbeTransport()), dataLists, new StrategyTestRecordStore(Path.Combine(settings.Folder, "strategy-tests")), developerTools);
             var window = new MainWindow(model);
             MainWindow = window;
