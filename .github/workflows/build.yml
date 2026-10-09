@@ -153,7 +153,7 @@ jobs:
           Write-Host "::notice title=Windows Server 2022 actual lab::$summary"
           Get-ChildItem TestResults/engine-broker-token-coverage.txt,TestResults/engine-flowseal-real-capture.txt | ForEach-Object {
             $evidence = (Get-Content $_.FullName -Raw).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
-            Write-Host "::notice title=Broker token coverage::$evidence"
+            Write-Host "::notice title=$($_.BaseName)::$evidence"
           }
       - uses: actions/upload-artifact@v4
         if: always()

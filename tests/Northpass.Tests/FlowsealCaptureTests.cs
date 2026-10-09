@@ -24,6 +24,19 @@ public sealed class FlowsealCaptureTests
         Assert.Equal(CaptureState.Unconfirmed, observer.Evidence.Capture); Assert.Equal("alt", observer.Evidence.Strategy);
     }
     [Fact]
+    public void CaptureLossCannotStayActiveAndOwnedProcessIsRetainedForStopping()
+    {
+        var observer = new FlowsealCaptureObserver(); observer.Reset(FlowsealCatalog.Profile(FlowsealCatalog.Find("general")!), false);
+        observer.Observe(FlowsealCaptureObserver.ReadyLine); var active = new EngineStatus(EngineState.Active, 123, DateTimeOffset.UtcNow);
+        Assert.Equal(EngineState.Active, observer.Apply(active).State);
+        observer.Observe("logical network disappeared. deinitializing windivert.");
+        var lost = observer.Apply(active); Assert.Equal(EngineState.Error, lost.State); Assert.Equal(123, lost.ProcessId);
+        Assert.Null(lost.Traffic!.TrafficMatched); Assert.Null(lost.Traffic.TransformationConfirmed);
+        observer.Observe(FlowsealCaptureObserver.ReadyLine); Assert.Equal(EngineState.Active, observer.Apply(active).State);
+        Assert.Equal(CaptureState.Unconfirmed, observer.Apply(new(EngineState.Disconnected)).Traffic!.Capture);
+        Assert.Equal(CaptureState.Failed, observer.Apply(new(EngineState.Error, ExitCode: 17)).Traffic!.Capture);
+    }
+    [Fact]
     public void UnsafeUpstreamAdviceIsExcludedButDriverFailureRetained()
     {
         Assert.Null(FlowsealCaptureObserver.SafeLog("[stderr] windivert: try to disable secure boot and install OS patches"));

@@ -20,6 +20,16 @@ public sealed class FlowsealCaptureObserver
         Volatile.Write(ref _evidence, new(disabled ? CaptureState.TestDisabled : CaptureState.Unconfirmed,
             strategy.Id, Ports("--wf-tcp"), Ports("--wf-udp")));
     }
+    public EngineStatus Apply(EngineStatus state)
+    {
+        var evidence = Evidence;
+        if (state.State == EngineState.Disconnected) evidence = evidence with { Capture = CaptureState.Unconfirmed };
+        if (state.State == EngineState.Error && state.ProcessId is null && evidence.Capture == CaptureState.Initialized)
+            evidence = evidence with { Capture = CaptureState.Failed };
+        if (state.State == EngineState.Active && evidence.Capture is CaptureState.Unavailable or CaptureState.Failed)
+            state = state with { State = EngineState.Error, Error = "Network capture is unavailable. Disconnect and reconnect; service access is unverified." };
+        return state with { Traffic = evidence };
+    }
     public void Observe(string line)
     {
         if (Evidence.Capture == CaptureState.TestDisabled) return;

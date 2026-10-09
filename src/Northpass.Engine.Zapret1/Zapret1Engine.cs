@@ -138,16 +138,7 @@ public sealed class Zapret1Engine : IDpiEngine
         try { await _process.StopAsync(token); await ReleaseLeasesAsync(); await StartCoreAsync(configuration, token); }
         finally { _operations.Release(); }
     }
-    private EngineStatus WithEvidence(EngineStatus state)
-    {
-        var evidence = _capture.Evidence;
-        if (state.State == EngineState.Disconnected) evidence = evidence with { Capture = CaptureState.Unconfirmed };
-        if (state.State == EngineState.Error && state.ProcessId is null && evidence.Capture == CaptureState.Initialized)
-            evidence = evidence with { Capture = CaptureState.Failed };
-        if (state.State == EngineState.Active && evidence.Capture is CaptureState.Unavailable or CaptureState.Failed)
-            state = state with { State = EngineState.Error, Error = "Network capture is unavailable. Disconnect and reconnect; service access is unverified." };
-        return state with { Traffic = evidence };
-    }
+    private EngineStatus WithEvidence(EngineStatus state) => _capture.Apply(state);
     public async Task<EngineStatus> GetStatusAsync(CancellationToken token = default)
     {
         await _operations.WaitAsync(token);
