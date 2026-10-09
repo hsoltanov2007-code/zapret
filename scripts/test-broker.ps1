@@ -35,8 +35,13 @@ try {
             Start-Sleep -Milliseconds 50
         }
         $owner = Get-Content $handoff -Raw | ConvertFrom-Json
+        # Connect a real unrelated process first. The UI must reject its PID and
+        # still accept the verified owned worker; no forged AUTH can control it.
+        $intruder = Start-Process dotnet -ArgumentList @("`"$fixture`"",'broker-pipe-intruder',$owner.Pipe) -PassThru -RedirectStandardOutput (Join-Path $results ('broker-intruder-' + $mode + '.txt'))
+        Start-Sleep -Milliseconds 500
         $helper = Start-Process $bootstrap -ArgumentList @('--owner',$owner.Owner,'--created',$owner.Created,'--pipe',$owner.Pipe,'--test-no-traffic') -PassThru
         Set-Content ($handoff + '.pid') $helper.Id -NoNewline
+        if (!$intruder.WaitForExit(20000) -or $intruder.ExitCode -ne 0) { throw 'Unauthorized broker peer was not rejected.' }
         if (!$launcher.WaitForExit(120000)) { throw 'Medium UI broker acceptance timed out.' }
         if ($launcher.ExitCode -ne 0) { $errorText = if (Test-Path $evidence) { Get-Content $evidence -Raw } else { 'No UI evidence was written.' }; throw "Medium UI failed: $errorText" }
         if (!$helper.WaitForExit(15000) -or ($mode -ne 'replay' -and $helper.ExitCode -ne 0) -or ($mode -eq 'replay' -and $helper.ExitCode -eq 0)) { throw 'Owned elevated broker did not clean up successfully.' }

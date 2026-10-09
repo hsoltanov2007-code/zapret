@@ -22,6 +22,13 @@ if (mode is "protocol" or "protocol-stderr" or "protocol-hang" or "protocol-erro
     if (await Console.In.ReadLineAsync() == "STOP") { Console.WriteLine("fixture graceful stop"); return mode == "protocol-error" ? 27 : 0; }
     return 18;
 }
+if (mode == "broker-pipe-intruder") {
+    if(!OperatingSystem.IsWindows())throw new PlatformNotSupportedException();
+    using var pipe=await Northpass.Broker.BrokerPipe.ConnectAsync(args[1],default);
+    Console.WriteLine("unauthorized-broker-peer-connected");
+    try { _=await Northpass.Broker.BrokerProtocol.ReadAsync<string>(pipe,default).WaitAsync(TimeSpan.FromSeconds(15));return 31; }
+    catch(IOException){Console.WriteLine("unauthorized-broker-peer-rejected");return 0;}
+}
 if (mode == "native-pipe-intruder")
 {
     using var pipe = await PipeFixture.OpenAsync(args[1]);

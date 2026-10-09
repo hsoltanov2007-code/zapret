@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO.Pipes;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Win32.SafeHandles;
 namespace Northpass.Broker;
 
 public sealed class ElevationDeclinedException : IOException
@@ -14,6 +15,8 @@ public sealed class BrokerClient : IAsyncDisposable
     private readonly SemaphoreSlim _gate=new(1,1);
     private NamedPipeServerStream? _pipe;
     private Process? _helper;
+    private SafeProcessHandle? _helperHandle;
+    private bool OwnedAlive=>OperatingSystem.IsWindows() && _helper is not null && _helperHandle is not null && !BrokerSecurity.HasExited(_helperHandle);
     private List<FileStream>? _leases;
     private uint _sequence;
     private readonly string? _testHandoff;
@@ -23,7 +26,7 @@ public sealed class BrokerClient : IAsyncDisposable
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private async Task ConnectCoreAsync(CancellationToken token)
     {
-        if(_pipe is {IsConnected:true} && _helper is {HasExited:false})return;
+        if(_pipe is {IsConnected:true} && OwnedAlive)return;
         await CleanupAsync();
         if(_helper is not null)throw new IOException("The owned privileged helper has not exited. Retry cleanup before starting another.");
         try
@@ -42,6 +45,7 @@ public sealed class BrokerClient : IAsyncDisposable
                 for(int attempt=0;!File.Exists(_testHandoff+".pid");attempt++) { if(attempt>500)throw new TimeoutException("CI helper handoff expired.");await Task.Delay(20,token); }
                 _helper=Process.GetProcessById(int.Parse(await File.ReadAllTextAsync(_testHandoff+".pid",token)));
             }
+            _helperHandle=BrokerSecurity.ObserveProcess(_helper);
             using var startup=CancellationTokenSource.CreateLinkedTokenSource(token);startup.CancelAfter(TimeSpan.FromSeconds(15));
             for(int attempt=0;attempt<16;attempt++)
             {
@@ -67,7 +71,7 @@ public sealed class BrokerClient : IAsyncDisposable
         await _gate.WaitAsync(token);
         try
         {
-            if(command is "STATUS" or "STOP" or "METRICS" && (_helper is not {HasExited:false} || _pipe is not {IsConnected:true}))
+            if(command is "STATUS" or "STOP" or "METRICS" && (!OwnedAlive || _pipe is not {IsConnected:true}))
                 throw new IOException("The owned privileged helper is unavailable; reconnect explicitly.");
             await ConnectCoreAsync(token);if(_sequence==uint.MaxValue)throw new InvalidDataException("Broker sequence exhausted.");
             var request=new BrokerRequest(3,++_sequence,command,engine,strategy,port,transport,tcp,udp,lists);BrokerProtocol.Validate(request,_sequence);
@@ -99,13 +103,14 @@ public sealed class BrokerClient : IAsyncDisposable
     private async Task CleanupAsync()
     {
         _pipe?.Dispose();_pipe=null;
-        if(_helper is {} helper)
+        if(OperatingSystem.IsWindows() && _helper is {} helper)
         {
             // Medium UI cannot force-kill elevated workers. Pipe/owner closure is
             // the shutdown authority; retain/report the PID if shutdown times out.
-            try { await helper.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(8)); }
-            catch(TimeoutException){LogReceived?.Invoke("Privileged helper cleanup timed out; PID "+helper.Id+" remains owned until it exits.");}
-            if(helper.HasExited){helper.Dispose();_helper=null;}
+            if(_helperHandle is null)_helperHandle=BrokerSecurity.ObserveProcess(helper);
+            if(!await BrokerSecurity.WaitForExitAsync(_helperHandle,TimeSpan.FromSeconds(8)))
+                LogReceived?.Invoke("Privileged helper cleanup timed out; PID "+helper.Id+" remains owned until it exits.");
+            if(BrokerSecurity.HasExited(_helperHandle)){_helperHandle.Dispose();_helperHandle=null;helper.Dispose();_helper=null;}
         }
         if(_helper is null && _leases is {} leases){foreach(var lease in leases)lease.Dispose();_leases=null;}
     }

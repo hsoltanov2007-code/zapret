@@ -71,6 +71,22 @@ public static class BrokerSecurity
         // TOKEN_STATISTICS: AuthenticationId at offset 8, invariant across a UAC split token.
         return Convert.ToHexString(buffer.AsSpan(8,8))+Convert.ToHexString(session);
     }
+    public static SafeProcessHandle ObserveProcess(Process process)
+    {
+        var handle=OpenProcess(0x101000,false,process.Id); // synchronize + query limited; no write/control access
+        if(handle.IsInvalid){handle.Dispose();throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());}
+        return handle;
+    }
+    public static bool HasExited(SafeProcessHandle handle)
+    {
+        uint state=WaitForSingleObject(handle,0);
+        return state switch {0=>true,258=>false,_=>throw new IOException("Owned broker process observation failed.")};
+    }
+    public static async Task<bool> WaitForExitAsync(SafeProcessHandle handle,TimeSpan timeout)
+    {
+        var clock=Stopwatch.StartNew();while(!HasExited(handle)) {if(clock.Elapsed>=timeout)return false;await Task.Delay(25).ConfigureAwait(false);}return true;
+    }
+    [DllImport("kernel32.dll",SetLastError=true)]private static extern uint WaitForSingleObject(SafeProcessHandle process,uint timeout);
     public static void ValidateWorker(Process worker,Process bootstrap)
     {
         if(bootstrap.HasExited || worker.StartTime<bootstrap.StartTime)throw new UnauthorizedAccessException("Broker bootstrap ownership changed.");

@@ -3,6 +3,7 @@
 #include "northpass/flow.hpp"
 #include <iostream>
 #include <limits>
+#include <ctime>
 #include <stdexcept>
 using namespace northpass;
 namespace {
@@ -64,10 +65,10 @@ void run(std::string_view name) {
         for(auto fault:{"send","observation-delay","crash","unknown"}) { bool rejected=false;try{parse_test_fault(fault,false,true);}catch(const std::invalid_argument&){rejected=true;}require(rejected); }
         bool denied=false;try{parse_test_fault("send",true,false);}catch(const std::invalid_argument&){denied=true;}require(denied);
     } else if (name=="benchmark") {
-        PassThroughStrategy s; PacketProcessor p(s); const auto start=Clock::now();
+        PassThroughStrategy s; PacketProcessor p(s); const auto start=Clock::now();const auto cpu=std::clock();
         for(int i=0;i<200000;++i) { auto v=bytes; v[20]=static_cast<std::uint8_t>(i>>8);v[21]=static_cast<std::uint8_t>(i); p.process(v,start); }
         const auto seconds=std::chrono::duration<double>(Clock::now()-start).count();require(seconds<20 && p.flows()<=4096);
-        std::cout<<"SYNTHETIC benchmark packets=200000 seconds="<<seconds<<" packets_per_second="<<200000/seconds<<" tracked="<<p.flows()<<" flow_capacity=4096; no driver/hardware measurement\n";
+        std::cout<<"SYNTHETIC benchmark packets=200000 seconds="<<seconds<<" packets_per_second="<<200000/seconds<<" cpu_seconds="<<static_cast<double>(std::clock()-cpu)/CLOCKS_PER_SEC<<" bounded_queue_storage_bytes="<<8*sizeof(QueuedPacket)<<" tracked="<<p.flows()<<" flow_capacity=4096; no driver/hardware measurement\n";
     } else throw std::runtime_error("Unknown case");
 }
 }

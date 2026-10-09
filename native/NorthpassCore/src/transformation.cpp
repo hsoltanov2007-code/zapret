@@ -14,13 +14,13 @@ std::vector<std::uint8_t> bounded_copy(std::span<const std::uint8_t> packet) {
     if (packet.empty() || packet.size() > MaximumPacketSize) throw std::invalid_argument("Packet snapshot exceeds its bounded capacity.");
     return {packet.begin(), packet.end()};
 }
-bool checksum(std::span<const std::uint8_t> bytes) noexcept {
-    std::uint32_t sum{};
+std::uint32_t checksum_sum(std::span<const std::uint8_t> bytes, std::uint32_t sum = 0) noexcept {
     for (std::size_t i = 0; i < bytes.size(); i += 2)
         sum += (static_cast<std::uint32_t>(bytes[i]) << 8) | (i + 1 < bytes.size() ? bytes[i + 1] : 0);
     while (sum >> 16) sum = (sum & 0xffff) + (sum >> 16);
-    return sum == 0xffff;
+    return sum;
 }
+bool checksum(std::span<const std::uint8_t> bytes) noexcept { return checksum_sum(bytes) == 0xffff; }
 }
 PacketTransaction::PacketTransaction(std::span<const std::uint8_t> packet, TransformConfiguration c)
     : original_(bounded_copy(packet)), configuration_(c) {
@@ -74,19 +74,15 @@ ChecksumObservation observe_checksum(std::span<const std::uint8_t> packet, Packe
     const auto checksum_offset = view.transport == Transport::Udp ? 6u : 16u;
     if (view.transport == Transport::Udp && segment[checksum_offset] == 0 && segment[checksum_offset+1] == 0)
         return view.ip_version == 4 ? ChecksumObservation::Unsupported : ChecksumObservation::Invalid; // IPv4 checksum optional
-    std::vector<std::uint8_t> pseudo;
-    try {
-        if (view.ip_version == 4) {
-            pseudo.insert(pseudo.end(),packet.begin()+12,packet.begin()+20);
-            pseudo.push_back(0);pseudo.push_back(static_cast<std::uint8_t>(view.transport));
-            pseudo.push_back(static_cast<std::uint8_t>(segment.size()>>8));pseudo.push_back(static_cast<std::uint8_t>(segment.size()));
-        } else {
-            pseudo.insert(pseudo.end(),packet.begin()+8,packet.begin()+40);
-            for(int shift:{24,16,8,0})pseudo.push_back(static_cast<std::uint8_t>(segment.size()>>shift));
-            pseudo.insert(pseudo.end(),{0,0,0,static_cast<std::uint8_t>(view.transport)});
-        }
-        pseudo.insert(pseudo.end(),segment.begin(),segment.end());
-        return checksum(pseudo) ? ChecksumObservation::Valid : ChecksumObservation::Invalid;
-    } catch (...) { return ChecksumObservation::Unsupported; }
+    std::array<std::uint8_t,40> pseudo{};std::size_t size{};
+    if (view.ip_version == 4) {
+        std::copy_n(packet.begin()+12,8,pseudo.begin());pseudo[9]=static_cast<std::uint8_t>(view.transport);
+        pseudo[10]=static_cast<std::uint8_t>(segment.size()>>8);pseudo[11]=static_cast<std::uint8_t>(segment.size());size=12;
+    } else {
+        std::copy_n(packet.begin()+8,32,pseudo.begin());
+        for(unsigned i=0;i<4;++i)pseudo[32+i]=static_cast<std::uint8_t>(segment.size()>>(24-8*i));
+        pseudo[39]=static_cast<std::uint8_t>(view.transport);size=40;
+    }
+    return checksum_sum(segment,checksum_sum(std::span(pseudo).first(size))) == 0xffff ? ChecksumObservation::Valid : ChecksumObservation::Invalid;
 }
 }
