@@ -97,7 +97,9 @@ public sealed class BrokerStartupEvidence : IAsyncDisposable
     private readonly Action<string> _log;
     private readonly object _sync=new();
     private BrokerEvidenceRecord? _last;
+    private readonly Queue<BrokerEvidenceRecord> _records=new();
     public BrokerEvidenceRecord? Last { get {lock(_sync)return _last;} }
+    public BrokerEvidenceRecord[] Records { get {lock(_sync)return _records.ToArray();} }
     public BrokerStartupEvidence(string id,Action<string> log)
     {
         _log=log;_bootstrap=BrokerPipe.CreateEvidenceServer(id,false);
@@ -112,8 +114,8 @@ public sealed class BrokerStartupEvidence : IAsyncDisposable
             // Limited attempts: unrelated peers may not substitute diagnostic data.
             for(int attempt=0;attempt<16;attempt++)
             {
-                await pipe.WaitForConnectionAsync(_stop.Token);
-                var owned=await _owner.Task.WaitAsync(_stop.Token);int pid=BrokerPipe.PeerPid(pipe,true);
+                await pipe.WaitForConnectionAsync(_stop.Token).ConfigureAwait(false);
+                var owned=await _owner.Task.WaitAsync(_stop.Token).ConfigureAwait(false);int pid=BrokerPipe.PeerPid(pipe,true);
                 try
                 {
                     if(worker){using var peer=Process.GetProcessById(pid);BrokerSecurity.ValidateWorkerOrigin(peer,owned);}
@@ -125,12 +127,12 @@ public sealed class BrokerStartupEvidence : IAsyncDisposable
             var bytes=new byte[1];var line=new StringBuilder(128);int total=0;
             for(int records=0;records<32;)
             {
-                int read=await pipe.ReadAsync(bytes,_stop.Token);if(read==0)return;
+                int read=await pipe.ReadAsync(bytes,_stop.Token).ConfigureAwait(false);if(read==0)return;
                 if(++total>4096)return;
                 if(bytes[0]==10)
                 {
                     var record=BrokerEvidenceRecord.Parse(line.ToString());line.Clear();records++;
-                    lock(_sync)_last=record;
+                    lock(_sync){_last=record;_records.Enqueue(record);while(_records.Count>64)_records.Dequeue();}
                     _log(record.Diagnostic);
                 }
                 else {if(bytes[0]<32 || bytes[0]>126 || line.Length>=128)return;line.Append((char)bytes[0]);}
@@ -140,7 +142,7 @@ public sealed class BrokerStartupEvidence : IAsyncDisposable
         }
         catch(Exception ex)when(ex is IOException or OperationCanceledException or ObjectDisposedException or InvalidDataException or UnauthorizedAccessException or ArgumentException or Win32Exception){ }
     }
-    public async ValueTask DisposeAsync(){_stop.Cancel();_bootstrap.Dispose();_worker.Dispose();await Task.WhenAll(_readers);_stop.Dispose();}
+    public async ValueTask DisposeAsync(){_stop.Cancel();_bootstrap.Dispose();_worker.Dispose();await Task.WhenAll(_readers).ConfigureAwait(false);_stop.Dispose();}
 }
 
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]

@@ -62,6 +62,21 @@ public sealed class BrokerStartupTests
         Assert.True(errors.Observe("new failure"));errors.BeginAttempt();Assert.True(errors.Observe("new failure"));
         Assert.False(errors.Observe(null));Assert.True(errors.Observe("new failure"));
     }
+    [Fact] public void LocalEvidenceIsAtomicAndBoundedAcrossRetries()
+    {
+        string folder=Path.Combine(Path.GetTempPath(),"northpass-journal-"+Guid.NewGuid().ToString("N"));
+        try
+        {
+            var failure=new BrokerFailure(BrokerFailureKind.HelperExited,BrokerStage.WorkerOwner,31,5,17,true);
+            BrokerFailureJournal.Save(folder,failure,[new(BrokerStage.WorkerOwner,15,5,123)]);
+            using(var saved=System.Text.Json.JsonDocument.Parse(File.ReadAllBytes(Path.Combine(folder,"broker-startup.json"))))
+            {Assert.Equal(17,saved.RootElement.GetProperty("Failure").GetProperty("HelperExitCode").GetInt32());Assert.Single(saved.RootElement.GetProperty("Stages").EnumerateArray());}
+            for(int retry=0;retry<100;retry++)BrokerFailureJournal.Save(folder,failure,[]);
+            Assert.Single(Directory.GetFiles(folder));Assert.True(new FileInfo(Path.Combine(folder,"broker-startup.json")).Length<16384);
+            Assert.Throws<InvalidDataException>(()=>BrokerFailureJournal.Save(folder,failure,Enumerable.Repeat(new BrokerEvidenceRecord(BrokerStage.WorkerOwner,1,0,1),65).ToArray()));
+        }
+        finally {if(Directory.Exists(folder))Directory.Delete(folder,true);}
+    }
     [Theory][InlineData(BrokerFailureKind.UacDenied,"PermissionDeclined")][InlineData(BrokerFailureKind.StartupTimeout,"BrokerTimeout")]
     [InlineData(BrokerFailureKind.HelperExited,"BrokerExited")][InlineData(BrokerFailureKind.AuthenticationRejected,"BrokerRejected")]
     [InlineData(BrokerFailureKind.CleanupIncomplete,"BrokerCleanup")][InlineData(BrokerFailureKind.EngineLaunchFailed,"ConnectionFailed")]

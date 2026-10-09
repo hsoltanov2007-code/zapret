@@ -23,8 +23,19 @@ public sealed class BrokerClient : IAsyncDisposable
     private readonly Stopwatch _clock=new();
     private BrokerStage _stage;
     private int? _lastHelperExit;
+    private BrokerEvidenceRecord[] _failureEvidence=[];
     public BrokerFailure? LastFailure { get; private set; }
     private void Stage(BrokerStage stage) { _stage=stage; LogReceived?.Invoke($"BROKER_CLIENT stage={stage} elapsed_ms={_clock.ElapsedMilliseconds}"); }
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private void RecordFailure()
+    {
+        if(LastFailure is null)return;
+        LogReceived?.Invoke(LastFailure.Diagnostic);
+        // Do not make elevated writes to a per-user diagnostic directory.
+        if(BrokerSecurity.IsAdministrator)return;
+        try {BrokerFailureJournal.Save(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Northpass","diagnostics"),LastFailure,_failureEvidence);}
+        catch(Exception ex)when(ex is IOException or UnauthorizedAccessException){LogReceived?.Invoke($"BROKER_JOURNAL unavailable code={BrokerStartup.SafeCode(ex)}; original failure retained");}
+    }
     public int AuthenticatedWorkerIdForAcceptance { get; private set; }
     private readonly string? _testHandoff;
     public BrokerClient(string? testHandoff=null) => _testHandoff=testHandoff;
@@ -36,7 +47,7 @@ public sealed class BrokerClient : IAsyncDisposable
         if(_pipe is {IsConnected:true} && OwnedAlive)return;
         await CleanupAsync();
         if(_helper is not null){LastFailure=new(BrokerFailureKind.CleanupIncomplete,BrokerStage.Cleanup,0,0,null,false);throw new BrokerStartupException(LastFailure);}
-        _clock.Restart();LastFailure=null;_lastHelperExit=null;
+        _clock.Restart();LastFailure=null;_lastHelperExit=null;_failureEvidence=[];
         try
         {
             token.ThrowIfCancellationRequested();
@@ -98,7 +109,7 @@ public sealed class BrokerClient : IAsyncDisposable
             long elapsed=_clock.ElapsedMilliseconds;
             bool cleaned=await CleanupAsync();
             LastFailure=new(kind,stage,elapsed,detail is {Code:not 0}?detail.Code:BrokerStartup.SafeCode(ex),exit??_lastHelperExit,cleaned);
-            LogReceived?.Invoke(LastFailure.Diagnostic);
+            RecordFailure();
             throw new BrokerStartupException(LastFailure,ex);
         }
     }
@@ -123,7 +134,7 @@ public sealed class BrokerClient : IAsyncDisposable
             {
                 bool cleaned=await CleanupAsync();
                 LastFailure=new(command=="START"?BrokerFailureKind.EngineLaunchFailed:BrokerFailureKind.LaunchFailed,_stage,_clock.ElapsedMilliseconds,response.SafeCode,null,cleaned);
-                LogReceived?.Invoke(LastFailure.Diagnostic);
+                RecordFailure();
                 // Detail is returned only across the fully authenticated control pipe.
                 LogReceived?.Invoke("BROKER_ENGINE "+response.Error);
                 throw new BrokerStartupException(LastFailure);
@@ -132,7 +143,7 @@ public sealed class BrokerClient : IAsyncDisposable
             return response;
         }
         catch(BrokerStartupException){throw;}
-        catch(Exception ex) {int? exit=_helperHandle is null?null:BrokerSecurity.ExitCode(_helperHandle);bool cleaned=await CleanupAsync();LastFailure=new(token.IsCancellationRequested?BrokerFailureKind.Cancelled:BrokerFailureKind.IpcDisconnected,_stage,_clock.ElapsedMilliseconds,BrokerStartup.SafeCode(ex),exit,cleaned);LogReceived?.Invoke(LastFailure.Diagnostic);throw new BrokerStartupException(LastFailure,ex);}
+        catch(Exception ex) {int? exit=_helperHandle is null?null:BrokerSecurity.ExitCode(_helperHandle);bool cleaned=await CleanupAsync();LastFailure=new(token.IsCancellationRequested?BrokerFailureKind.Cancelled:BrokerFailureKind.IpcDisconnected,_stage,_clock.ElapsedMilliseconds,BrokerStartup.SafeCode(ex),exit??_lastHelperExit,cleaned);RecordFailure();throw new BrokerStartupException(LastFailure,ex);}
         finally {_gate.Release();}
     }
     // Internal headless acceptance only; never called by normal UI commands.
@@ -155,7 +166,7 @@ public sealed class BrokerClient : IAsyncDisposable
     private async Task<bool> CleanupAsync()
     {
         _pipe?.Dispose();_pipe=null;
-        if(OperatingSystem.IsWindows() && _evidence is {} evidence){await evidence.DisposeAsync();_evidence=null;}
+        if(OperatingSystem.IsWindows() && _evidence is {} evidence){await evidence.DisposeAsync();_failureEvidence=evidence.Records;_evidence=null;}
         AuthenticatedWorkerIdForAcceptance=0;
         if(OperatingSystem.IsWindows() && _helper is {} helper)
         {
