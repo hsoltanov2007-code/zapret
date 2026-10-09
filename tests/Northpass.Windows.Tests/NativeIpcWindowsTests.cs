@@ -128,6 +128,37 @@ public sealed class NativeIpcWindowsTests
         File.WriteAllText(Path.Combine(Repository(), "TestResults/engine-native-ipc-security.txt"),
             "Actual Windows same-logon wrong-PID client, correct-PID wrong nonce, replayed command and preclaimed pipe rejected. Only original parent authenticated; no unscoped capture permitted.");
     }
+    [Theory]
+    [InlineData("length")]
+    [InlineData("encoding")]
+    [InlineData("command")]
+    public async Task AuthenticatedMalformedFramesFailClosedWithOwnedCleanup(string malformed)
+    {
+        using var http = new HttpClient(); var manager = Manager(http); var installed = await manager.EnsureInstalledAsync();
+        await using var lease = await manager.AcquireLaunchLeaseAsync(installed.ExecutablePath);
+        string id = NativePipeClient.NewIdentifier(), secret = new string('c', 64);
+        var info = NativeEngine.CreateStartInfo(new(installed.ExecutablePath, NativeCatalog.Idle()), id);
+        info.RedirectStandardInput = info.RedirectStandardOutput = info.RedirectStandardError = true;
+        using var process = Process.Start(info)!; var error = process.StandardError.ReadToEndAsync();
+        try
+        {
+            await process.StandardInput.WriteLineAsync(secret); await process.StandardInput.FlushAsync();
+            using var pipe = await OpenAsync(id); await WriteAsync(pipe, "AUTH 2 " + secret); Assert.Equal("AUTH_OK 2", await ReadAsync(pipe));
+            Assert.Equal("NORTHPASS_READY protocol=1", await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10)));
+            if (malformed == "command") await WriteAsync(pipe, "FILTER 2 1");
+            else
+            {
+                byte[] frame = malformed == "length" ? new byte[4] : new byte[5];
+                BinaryPrimitives.WriteInt32LittleEndian(frame, malformed == "length" ? 2049 : 1); // encoding payload stays NUL
+                await pipe.WriteAsync(frame).AsTask().WaitAsync(TimeSpan.FromSeconds(3));
+            }
+            await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10)); Assert.NotEqual(0, process.ExitCode);
+            Assert.Contains("NORTHPASS_ERROR", await error); string remainder = await process.StandardOutput.ReadToEndAsync();
+            var final = NativeMetrics.Parse(remainder.Split('\n').Last(l => l.StartsWith("NORTHPASS_METRICS ")).Trim());
+            Assert.True(final.FatalErrors > 0); Assert.Equal(0ul, final.Captured); Assert.True(final.KernelLossUnknown);
+        }
+        finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
+    }
     private static async Task<NamedPipeClientStream> OpenAsync(string id)
     {
         for (int i = 0; i < 400; i++)

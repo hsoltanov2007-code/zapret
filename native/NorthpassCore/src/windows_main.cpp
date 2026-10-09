@@ -206,7 +206,8 @@ int run(const Options& options) {
                 (void)forward(packet); // original bytes are reinjected before fallible/read-only observation
                 if (!queue.try_push(packet)) ++metrics.backpressure; // skip observation, never reorder originals or wait on space
                 const auto size = queue.size(); metrics.queue_size = size;
-                auto peak = metrics.queue_peak.load(); while (peak < size && !metrics.queue_peak.compare_exchange_weak(peak, size)) { }
+                const auto actual_peak = queue.peak();
+                auto peak = metrics.queue_peak.load(); while (peak < actual_peak && !metrics.queue_peak.compare_exchange_weak(peak, actual_peak)) { }
             }
         } catch (const std::exception& error) {
             ++metrics.fatal; { std::lock_guard guard(error_mutex); receive_error = error.what(); } SetEvent(stop.get());

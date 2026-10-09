@@ -35,18 +35,19 @@ if (mode is "native-parent" or "native-ipc-parent")
     if (mode == "native-parent") info.ArgumentList.Add("--stdio-control");
     else { info.ArgumentList.Add("--pipe-id"); info.ArgumentList.Add(id); }
     using var child = Process.Start(info)!;
+    NamedPipeClientStream? controlPipe = null;
     if (mode == "native-ipc-parent")
     {
         string secret = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
         await child.StandardInput.WriteLineAsync(secret); await child.StandardInput.FlushAsync();
-        var pipe = await PipeFixture.OpenAsync(id);
-        await PipeFixture.WriteAsync(pipe, "AUTH 2 " + secret);
-        if (await PipeFixture.ReadAsync(pipe) != "AUTH_OK 2") throw new IOException("Fixture IPC authentication failed.");
-        GC.KeepAlive(pipe); // abrupt owner exit below; no orderly disconnect
+        controlPipe = await PipeFixture.OpenAsync(id);
+        await PipeFixture.WriteAsync(controlPipe, "AUTH 2 " + secret);
+        if (await PipeFixture.ReadAsync(controlPipe) != "AUTH_OK 2") throw new IOException("Fixture IPC authentication failed.");
     }
     var ready = await child.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(10));
     if (ready != "NORTHPASS_READY protocol=1") { if (!child.HasExited) child.Kill(); throw new InvalidOperationException("Native parent fixture initialization failed: " + await child.StandardError.ReadToEndAsync()); }
     Console.WriteLine("native-child-pid=" + child.Id);
+    GC.KeepAlive(controlPipe); // preserve control ownership until abrupt exit, not finalizer-driven closure
     // Exit the real owner abruptly while the pipe/driver session is active.
     Environment.Exit(0);
 }

@@ -19,6 +19,12 @@ public sealed class NativePipeClient : IAsyncDisposable
     private uint _sequence;
     public async Task ConnectAsync(Process ownedChild, string id, CancellationToken token)
     {
+        await _gate.WaitAsync(token);
+        try { await ConnectCoreAsync(ownedChild, id, token); }
+        finally { _gate.Release(); }
+    }
+    private async Task ConnectCoreAsync(Process ownedChild, string id, CancellationToken token)
+    {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
         if (!ValidIdentifier(id) || _pipe is not null) throw new InvalidOperationException("Invalid IPC initialization.");
         var secretBytes = RandomNumberGenerator.GetBytes(32);
@@ -33,7 +39,7 @@ public sealed class NativePipeClient : IAsyncDisposable
             var handle = CreateFile("\\\\.\\pipe\\Northpass.Native." + id, 0x00100003, 0, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
             if (!handle.IsInvalid)
             {
-                if (!GetNamedPipeServerProcessId(handle, out uint pid) || pid != ownedChild.Id)
+                if (!GetNamedPipeServerProcessId(handle, out uint pid) || pid != ownedChild.Id || ownedChild.HasExited)
                 { handle.Dispose(); throw new UnauthorizedAccessException("IPC server is not the owned network component."); }
                 _pipe = new NamedPipeClientStream(PipeDirection.InOut, true, true, handle); break;
             }
