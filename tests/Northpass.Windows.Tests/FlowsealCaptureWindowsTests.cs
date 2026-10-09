@@ -69,14 +69,17 @@ public sealed class FlowsealCaptureWindowsTests
             var logs = new ConcurrentQueue<string>();
             var output = Task.Run(async () => { while (await process.StandardOutput.ReadLineAsync() is { } line) { if (line == FlowsealCaptureObserver.ReadyLine) ready.TrySetResult(); if (logs.Count < 32) logs.Enqueue(line); } });
             var errors = process.StandardError.ReadToEndAsync();
-            int loopTcp = 0, loopUdp = 0, transformedPackets = 0; bool ownHandle = false;
+            int loopTcp = 0, loopUdp = 0, transformedPackets = 0; bool ownHandle = false, ownHandleClosed = false;
+            var opened = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var reflection = Task.Run(() => {
                 while (api.Receive(reflect.Value, out var packet, out var address))
                 {
                     uint pid = BinaryPrimitives.ReadUInt32LittleEndian(address.AsSpan(24));
                     if (pid == process.Id && address[9] == 8 && BinaryPrimitives.ReadInt32LittleEndian(address.AsSpan(28)) == 0 &&
                         BinaryPrimitives.ReadUInt64LittleEndian(address.AsSpan(32)) == 0 && BinaryPrimitives.ReadInt16LittleEndian(address.AsSpan(40)) == 0)
-                    { ownHandle = true; return; }
+                    { ownHandle = true; opened.TrySetResult(); }
+                    if (pid == process.Id && address[9] == 9 && BinaryPrimitives.ReadInt32LittleEndian(address.AsSpan(28)) == 0)
+                    { ownHandleClosed = true; return; }
                 }
             });
             var observing = Task.Run(() => { while (api.Receive(sniff.Value, out var packet, out var address)) {
@@ -86,7 +89,7 @@ public sealed class FlowsealCaptureWindowsTests
             try
             {
                 await ready.Task.WaitAsync(TimeSpan.FromSeconds(15));
-                await reflection.WaitAsync(TimeSpan.FromSeconds(5)); Assert.True(ownHandle);
+                await opened.Task.WaitAsync(TimeSpan.FromSeconds(5)); Assert.True(ownHandle);
                 using var client = new TcpClient(); var accept = listener.AcceptTcpClientAsync(deadline.Token).AsTask();
                 await client.ConnectAsync(IPAddress.Loopback, tcpPort, deadline.Token); using var server = await accept;
                 byte[] pattern = Enumerable.Range(0, 128).Select(x => (byte)x).ToArray(), received = new byte[128];
@@ -117,6 +120,8 @@ public sealed class FlowsealCaptureWindowsTests
                 reflect.Shutdown(); sniff.Shutdown(); syntheticSniff.Shutdown();
                 await Task.WhenAll(reflection, observing, transformations).WaitAsync(TimeSpan.FromSeconds(5));
             }
+            Assert.True(ownHandleClosed, "Owned WinDivert NETWORK handle did not report closure.");
+            Assert.True(process.HasExited);
             Directory.CreateDirectory(Path.Combine(repo, "TestResults"));
             File.WriteAllText(Path.Combine(repo, "TestResults/engine-flowseal-real-capture.txt"),
                 $"ACTUAL Windows WinDivert: owned winws NETWORK handle observed; real isolated loopback TCP packets={loopTcp} UDP packets={loopUdp}; bidirectional fixed-pattern reconstruction matched. Contained synthetic reviewed UDP any-protocol rule yielded packets={transformedPackets} from one input, all dropped before NIC. Driver capture/UDP transformation evidence is laboratory-only. Loopback passes unchanged by upstream design; no real TLS/QUIC/STUN, Telegram or ISP bypass validated. No debug/raw packet records retained. Known kernel loss is unmeasured. Owned process exit/handles cleaned up.");
