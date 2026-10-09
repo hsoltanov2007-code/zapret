@@ -50,7 +50,9 @@ First launch uses Russian; existing EN/RU/AZ preferences remain. The native-name
 
 Windows UI acceptance includes actual localized splash/main-window transition and close-during-preparation cleanup, visible native language labels/flags, 100/150/200% vector-flag raster checks, language changes through the control, hidden legacy opt-ins, and reduced-motion/loading-clock cleanup. UI endpoint/session outcomes remain fixtures. `TestResults` includes all three locales for Home/About/Settings/Splash; CI annotations carry bounded Russian previews. Real multi-monitor/DPI interaction, tray/UAC/animation-policy changes and live ISP checks remain manual acceptance.
 
-## Native Engine v0.3
+## Native Engine v0.4
+
+Read [Northpass Split](NATIVE_SPLIT.md) before any experimental lab execution. Native module/version/root is 0.4.0 / `Northpass-Native-0.4`; product UI/installer remains 0.7.0. Cloud Linux validates 39 C++ groups with sanitizers and portable .NET diagnostics tests; WPF cross-compilation does not run Windows. Windows builds embed the actual immutable native and broker component manifests before publishing. Hosted Windows Server 2022 and the primary Windows runner execute the protected, loopback-only TLS lab; Windows 10/11 and interactive UAC require the [manual procedures](NATIVE_V04_MANUAL.md). No experimental strategy is exposed through IDpiEngine/broker normal commands.
 
 Run `bash scripts/setup-native-cloud.sh` after cloud .NET setup; source `/workspace/.northpass-tools/native-env.sh` for the checksum-pinned CMake toolchain. Native CTest uses address/undefined sanitizers on Linux; actual Windows interception tests use dedicated loopback sockets only. See [NATIVE_ENGINE.md](NATIVE_ENGINE.md) for restricted scope, immutable offline trust, parent-death/drain behavior, exact Windows build commands, LGPL modification instructions and unverified real-network work. Native code signing, when configured, occurs before generating/embedding its hash manifest.
 

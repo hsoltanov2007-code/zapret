@@ -19,7 +19,7 @@ try {
     if ($prepare.ExitCode -ne 0) { throw "Broker offline installation failed: $($prepare.ExitCode)" }
     foreach ($mode in @('native','flowseal','repair','replay','disconnect-active','parent-death','worker-crash')) {
         if ($mode -eq 'repair') {
-            $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.3'
+            $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.4'
             $selected = (Get-Content (Join-Path $nativeRoot 'selection.json') -Raw | ConvertFrom-Json).Current
             $damaged = Join-Path $nativeRoot ($selected + '/bin/WinDivert.dll')
             [System.IO.File]::WriteAllBytes($damaged, [byte[]]@(0))

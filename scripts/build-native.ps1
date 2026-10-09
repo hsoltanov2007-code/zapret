@@ -27,5 +27,7 @@ try {
     }
     python ./scripts/package-native.py --executable $exe
     if ($LASTEXITCODE -ne 0) { throw 'Native offline manifest packaging failed.' }
-    Write-Host '::notice title=Native Windows unit tests::29 native packet/flow/queue/metrics/IPC/transformation/reliability test groups passed on MSVC Windows x64. Original bytes only; no DPI bypass implemented.'
+    Write-Host "::notice title=Native Windows unit tests::$($report.testsuite.tests) native packet/flow/queue/metrics/IPC/transformation/split test groups passed on MSVC Windows x64. Consumer path is original forwarding; Split is isolated lab-only. No ISP bypass claim."
+    $splitMeasurement = $report.testsuite.testcase | Where-Object { $_.name -in @('native_split_performance','native_split_simulator') } | ForEach-Object { $_.'system-out' }
+    if ($splitMeasurement) { Write-Host "::notice title=Synthetic Split evidence::$($splitMeasurement -join ' ')" }
 } finally { Pop-Location }

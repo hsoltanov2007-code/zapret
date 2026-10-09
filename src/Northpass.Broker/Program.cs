@@ -127,7 +127,7 @@ catch(Exception ex){Console.Error.WriteLine("NORTHPASS_BROKER_ERROR "+ex.Message
 static EngineInstallationManager Manager(string id,HttpClient http,string appRoot)
 {
     using var stream=id=="native"?NativeCatalog.OpenTrustedManifest():FlowsealCatalog.OpenTrustedManifest();
-    string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),id=="native"?"Northpass-Native-0.3":"Northpass-Flowseal");
+    string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),id=="native"?"Northpass-Native-0.4":"Northpass-Flowseal");
     var previous=new List<EngineManifest>();if(id=="zapret1")foreach(var old in FlowsealCatalog.OpenPreviousTrustedManifests())using(old)previous.Add(EngineManifest.Parse(old));
     return new(root,http,new WindowsInstallationSecurity(),EngineManifest.Parse(stream),previous,
         Path.Combine(appRoot,"engine-payload",id=="native"?"native-offline.zip":"flowseal-offline.zip"),

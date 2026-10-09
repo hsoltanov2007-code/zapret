@@ -115,7 +115,7 @@ jobs:
           path: dist/Northpass/
       - uses: actions/upload-artifact@v4
         with:
-          name: NorthpassCore-0.3.0-win-x64
+          name: NorthpassCore-0.4.0-win-x64
           path: |
             dist/native/
             dist/native-build/Release/NorthpassCore.exe
@@ -125,3 +125,32 @@ jobs:
           name: Northpass-0.7.0-installer
           path: dist/installer/Northpass-0.7.0-win-x64-setup.exe
           if-no-files-found: error
+  windows-compatibility:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.425
+      - name: Verify native and actual scoped TLS lab on Windows Server 2022
+        shell: pwsh
+        run: |
+          ./scripts/build-native.ps1
+          dotnet restore tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { throw 'Compatibility restore failed.' }
+          $output = dotnet test tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~NativeSplitLabWindowsTests --logger trx --results-directory TestResults 2>&1
+          $result = $LASTEXITCODE
+          $output | Write-Output
+          if ($result -ne 0) {
+            $message = ($output | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Host "::error title=Actual compatibility lab::$message"
+            exit $result
+          }
+          $summary = $output | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
+          if (!$summary) { throw 'Compatibility lab did not confirm executed tests.' }
+          Write-Host "::notice title=Windows Server 2022 actual lab::$summary"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-2022-lab-results
+          path: TestResults

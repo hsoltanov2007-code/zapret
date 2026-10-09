@@ -24,6 +24,7 @@ Options parse_options(std::span<const std::string_view> args) {
         if (key == "--check") { options.check = true; continue; }
         if (key == "--stdio-control") { control = true; continue; }
         if (key == "--test-capability") { test_capability = true; continue; }
+        if (key == "--lab-split") { options.lab_split = true; continue; }
         if (++i == args.size()) throw std::invalid_argument("Missing option value.");
         const auto value = args[i];
         if (key == "--mode") { mode = true; if (value != "idle" && value != "loopback") throw std::invalid_argument("Only idle/loopback modes exist in v0.3."); options.loopback = value == "loopback"; }
@@ -31,12 +32,19 @@ Options parse_options(std::span<const std::string_view> args) {
         else if (key == "--parent-pid") options.parent_pid = number(value);
         else if (key == "--pipe-id") { if (!valid_pipe_id(value)) throw std::invalid_argument("Invalid named pipe identifier."); options.pipe_id = value; }
         else if (key == "--test-fault") fault = value;
+        else if (key == "--lab-seconds") options.lab_seconds = number(value);
+        else if (key == "--lab-send-failure") options.lab_send_failure = number(value);
         else if (key == "--protocol") { if (value != "tcp" && value != "udp" && value != "both") throw std::invalid_argument("Invalid transport scope."); options.protocol = value; }
         else throw std::invalid_argument("Unknown option; arbitrary filters/strategies are forbidden.");
     }
     if (!mode || options.loopback != (options.port != 0) || (!options.loopback && seen.contains("--protocol"))) throw std::invalid_argument("Invalid mode/port combination.");
     if (!fault.empty()) options.fault = parse_test_fault(fault, options.loopback, test_capability);
-    else if (test_capability) throw std::invalid_argument("Test capability requires a typed fault.");
+    else if (test_capability && !options.lab_split) throw std::invalid_argument("Test capability requires a typed fault or isolated laboratory.");
+    if (options.lab_split) {
+        if (!test_capability || !options.loopback || options.protocol != "tcp" || !control || options.check ||
+            !options.pipe_id.empty() || !fault.empty() || options.lab_seconds < 1 || options.lab_seconds > 20 || options.lab_send_failure > 2)
+            throw std::invalid_argument("Split injection requires explicit test capability, TCP loopback, owned stdin and a 1..20 second hard stop. Broker/IPC cannot enable it.");
+    } else if (seen.contains("--lab-seconds") || seen.contains("--lab-send-failure")) throw std::invalid_argument("Lab-only option without laboratory.");
     if (control && !options.pipe_id.empty()) throw std::invalid_argument("Choose exactly one control transport.");
     if (!options.check && ((!control && options.pipe_id.empty()) || options.parent_pid == 0)) throw std::invalid_argument("Owned parent and authenticated control are required.");
     return options;

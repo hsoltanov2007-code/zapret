@@ -4,10 +4,11 @@ using System.Runtime.InteropServices;
 using Northpass.Models;
 namespace Northpass.Engine.Native;
 
-// The UI/controller depend on IDpiEngine, not C++/driver details. v0.3 never rewrites live packets.
+// The UI/controller expose only pass-through. Split injection is lab-only and
+// cannot be requested through this adapter or the privileged broker.
 public sealed class NativeEngine : IDpiEngine, IEnginePerformanceProvider
 {
-    public static EngineDescriptor Metadata { get; } = new("native", "NorthpassCore 0.3 (experimental pass-through)", "NorthpassCore.exe");
+    public static EngineDescriptor Metadata { get; } = new("native", "NorthpassCore 0.4 (experimental pass-through)", "NorthpassCore.exe");
     private readonly IEngineInstallationManager _installation;
     private readonly IEngineCollisionDetector _collisions;
     private readonly SemaphoreSlim _operations = new(1, 1);
@@ -15,6 +16,8 @@ public sealed class NativeEngine : IDpiEngine, IEnginePerformanceProvider
     private readonly NativePipeClient? _pipe;
     private string? _pipeId;
     private EnginePerformance? _performance;
+    private NorthpassSplitPerformance? _splitPerformance;
+    public NorthpassSplitPerformance? ExperimentalDiagnostics => Volatile.Read(ref _splitPerformance);
     private IAsyncDisposable? _lease;
     private EngineStatus? _failure;
     private bool _disposed;
@@ -30,6 +33,11 @@ public sealed class NativeEngine : IDpiEngine, IEnginePerformanceProvider
             _pipe is null ? null : (child, token) => _pipe.ConnectAsync(child, _pipeId!, token),
             _pipe is null ? null : async token => { await _pipe.RequestAsync("STOP", token); });
         _process.LogReceived += line => {
+            if (line.StartsWith("NORTHPASS_SPLIT_METRICS ", StringComparison.Ordinal))
+            {
+                try { Volatile.Write(ref _splitPerformance, NorthpassSplitMetrics.Parse(line)); }
+                catch (InvalidDataException) { LogReceived?.Invoke("Experimental metrics frame rejected."); return; }
+            }
             if (line.StartsWith("NORTHPASS_METRICS ", StringComparison.Ordinal))
             {
                 try { Volatile.Write(ref _performance, NativeMetrics.Parse(line)); }
@@ -69,9 +77,9 @@ public sealed class NativeEngine : IDpiEngine, IEnginePerformanceProvider
     }
     public static async Task VerifyInstalledVersionAsync(InstalledEngine installed, CancellationToken token)
     {
-        if (installed.EngineId != "native" || installed.Version != "0.3.0") throw new InvalidDataException("Unsupported native build.");
+        if (installed.EngineId != "native" || installed.Version != "0.4.0") throw new InvalidDataException("Unsupported native build.");
         var text = await ProbeAsync(Template(installed.ExecutablePath), ["--version"], token);
-        if (text != "NorthpassCore 0.3.0 protocol=1") throw new InvalidDataException("Native version/protocol mismatch: " + text);
+        if (text != "NorthpassCore 0.4.0 protocol=1") throw new InvalidDataException("Native version/protocol mismatch: " + text);
     }
     private static async Task<string> ProbeAsync(ProcessStartInfo template, IEnumerable<string> args, CancellationToken token)
     {
@@ -104,7 +112,7 @@ public sealed class NativeEngine : IDpiEngine, IEnginePerformanceProvider
             var info = CreateStartInfo(configuration, _pipeId);
             _collisions.Check(); await ReleaseLeaseAsync();
             _lease = await _installation.AcquireLaunchLeaseAsync(configuration.ExecutablePath, token);
-            await VerifyInstalledVersionAsync(new("native", "", "0.3.0", configuration.ExecutablePath), token);
+            await VerifyInstalledVersionAsync(new("native", "", "0.4.0", configuration.ExecutablePath), token);
             var check = await ProbeAsync(info, info.ArgumentList.Append("--check"), token);
             if (!check.StartsWith("NORTHPASS_CHECK protocol=1 mode=", StringComparison.Ordinal)) throw new InvalidDataException("Native preflight handshake mismatch.");
             LogReceived?.Invoke("Native v0.2: original packet pass-through only. DPI bypass and service availability are unverified.");

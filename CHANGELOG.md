@@ -41,6 +41,13 @@
 
 # Changelog
 
+## Native Engine 0.4.0 (desktop remains 0.7.0)
+
+- Original Northpass Split: bounded complete ClientHello parsing, known-handshake TCP segmentation, MTU/checksum/sequence validation and deterministic retransmission handling.
+- ABI 4 immutable segment proposals with exact reconstruction and pre-send rollback; partial/ambiguous sends are explicitly irreversible.
+- Explicit loopback-only, owned, hard-deadline laboratory with real TLS endpoints, separate actual post-injection sniff traces, typed metrics, send-fault/cancellation/recovery tests and a labeled toy DPI simulator.
+- Additional Windows Server 2022 lab, 39 portable native groups, managed diagnostics tests, source/offline packaging and manual Windows 10/11/UAC acceptance procedures. No normal Native transformations or ISP bypass claim; Flowseal and premium localized product remain preserved.
+
 ## 0.4.0 — development
 
 - Graphite WPF redesign with custom window chrome and fully dark controls; a simple Home view with one Connect action and truthful access status.

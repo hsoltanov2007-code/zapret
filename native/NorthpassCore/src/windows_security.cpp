@@ -86,9 +86,9 @@ std::vector<Handle> verify_runtime(const std::filesystem::path& executable) {
     PWSTR folder{};
     if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, nullptr, &folder))) throw std::runtime_error("Program Files location unavailable.");
     const std::filesystem::path program_files(folder); CoTaskMemFree(folder);
-    const auto root = program_files / L"Northpass-Native-0.3";
+    const auto root = program_files / L"Northpass-Native-0.4";
     const auto directory = executable.parent_path();
-    // Exact protected layout: Program Files/Northpass-Native-0.3/<payload id>/bin.
+    // Exact protected layout: Program Files/Northpass-Native-0.4/<payload id>/bin.
     if (directory.filename() != L"bin" || directory.parent_path().parent_path() != root) throw std::runtime_error("Native runtime must use its protected offline installation.");
     acl(program_files, true); acl(root); acl(directory.parent_path()); acl(directory);
     std::vector<Handle> locks;
