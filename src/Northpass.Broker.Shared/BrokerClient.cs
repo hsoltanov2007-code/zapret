@@ -19,6 +19,7 @@ public sealed class BrokerClient : IAsyncDisposable
     private bool OwnedAlive=>OperatingSystem.IsWindows() && _helper is not null && _helperHandle is not null && !BrokerSecurity.HasExited(_helperHandle);
     private List<FileStream>? _leases;
     private uint _sequence;
+    public int AuthenticatedWorkerIdForAcceptance { get; private set; }
     private readonly string? _testHandoff;
     public BrokerClient(string? testHandoff=null) => _testHandoff=testHandoff;
     public event Action<string>? LogReceived;
@@ -53,6 +54,7 @@ public sealed class BrokerClient : IAsyncDisposable
                 using var worker=Process.GetProcessById(BrokerPipe.PeerPid(_pipe,true));
                 try { BrokerSecurity.ValidateWorker(worker,_helper); }
                 catch(UnauthorizedAccessException){_pipe.Disconnect();continue;}
+                AuthenticatedWorkerIdForAcceptance=worker.Id;
                 string secret=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
                 await BrokerProtocol.WriteAsync(_pipe,"HELLO 3 "+secret,startup.Token);
                 string response=await BrokerProtocol.ReadAsync<string>(_pipe,startup.Token);

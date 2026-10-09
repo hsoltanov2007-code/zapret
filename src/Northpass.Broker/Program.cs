@@ -22,7 +22,11 @@ try
         if(!root.StartsWith(program+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new UnauthorizedAccessException("Install the helper under Program Files.");
         SafeArchive.NoLinks(root); new WindowsInstallationSecurity().ProtectDirectory(root);
         BrokerSecurity.ValidateProtectedApplication(root);
-        using var http=new HttpClient();foreach(string id in new[]{"zapret1","native"})await Manager(id,http,root).EnsureInstalledAsync();
+        using var http=new HttpClient();foreach(string id in new[]{"zapret1","native"}) {
+            var manager=Manager(id,http,root);
+            try {await manager.EnsureInstalledAsync();}
+            catch(Exception ex)when(ex is InvalidDataException or FileNotFoundException){await manager.RepairAsync();}
+        }
         return 0;
     }
     bool noTraffic=args.Length==7 && args[6]=="--test-no-traffic";

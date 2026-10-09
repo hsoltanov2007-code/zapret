@@ -23,6 +23,7 @@ public static class BrokerProtocol
         if (r.Command != "START" && (r.Strategy != "" || r.Port is not null || r.Transport != "both" || r.TcpPorts != "12" || r.UdpPorts != "12" || r.Lists is not null))
             throw new InvalidDataException("Unexpected broker command fields.");
         if (r.Command != "START") return;
+        if(r.TcpPorts is null || r.UdpPorts is null || r.TcpPorts.Length>1024 || r.UdpPorts.Length>1024)throw new InvalidDataException("Invalid port configuration size.");
         if (r.Strategy is null || r.Strategy.Length>64) throw new InvalidDataException("Invalid strategy identifier.");
         if (r.Engine == "native")
         {

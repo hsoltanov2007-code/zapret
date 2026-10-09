@@ -17,7 +17,7 @@ try {
     $bootstrap = Join-Path $install 'broker/Northpass.Broker.exe'
     $prepare = Start-Process $bootstrap -ArgumentList '--install' -PassThru -Wait
     if ($prepare.ExitCode -ne 0) { throw "Broker offline installation failed: $($prepare.ExitCode)" }
-    foreach ($mode in @('native','flowseal','repair','replay')) {
+    foreach ($mode in @('native','flowseal','repair','replay','disconnect-active','parent-death','worker-crash')) {
         if ($mode -eq 'repair') {
             $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.3'
             $selected = (Get-Content (Join-Path $nativeRoot 'selection.json') -Raw | ConvertFrom-Json).Current
@@ -42,13 +42,28 @@ try {
         $helper = Start-Process $bootstrap -ArgumentList @('--owner',$owner.Owner,'--created',$owner.Created,'--pipe',$owner.Pipe,'--test-no-traffic') -PassThru
         Set-Content ($handoff + '.pid') $helper.Id -NoNewline
         if (!$intruder.WaitForExit(20000) -or $intruder.ExitCode -ne 0) { throw 'Unauthorized broker peer was not rejected.' }
+        if ($mode -eq 'worker-crash') {
+            $deadline = [DateTime]::UtcNow.AddSeconds(30)
+            while (!(Test-Path ($handoff + '.crash'))) {
+                if ($launcher.HasExited -or [DateTime]::UtcNow -gt $deadline) { throw 'Active owned worker crash request missing.' }
+                Start-Sleep -Milliseconds 50
+            }
+            $owned = Get-Content ($handoff + '.crash') -Raw | ConvertFrom-Json
+            $peer = Get-CimInstance Win32_Process -Filter "ProcessId=$($owned.Worker)"
+            if ($peer.ParentProcessId -ne $helper.Id -or $peer.ExecutablePath -ne (Join-Path $install 'broker/Northpass.Broker.Worker.exe')) { throw 'Crash fixture refuses to stop an unowned process.' }
+            Stop-Process -Id $owned.Worker -Force
+        }
         if (!$launcher.WaitForExit(120000)) { throw 'Medium UI broker acceptance timed out.' }
         if ($launcher.ExitCode -ne 0) { $errorText = if (Test-Path $evidence) { Get-Content $evidence -Raw } else { 'No UI evidence was written.' }; throw "Medium UI failed: $errorText" }
-        if (!$helper.WaitForExit(15000) -or ($mode -ne 'replay' -and $helper.ExitCode -ne 0) -or ($mode -eq 'replay' -and $helper.ExitCode -eq 0)) { throw 'Owned elevated broker did not clean up successfully.' }
+        if (!$helper.WaitForExit(15000)) { throw 'Owned elevated broker did not clean up successfully.' }
+        if ($mode -in @('replay','worker-crash')) { if ($helper.ExitCode -eq 0) { throw 'Fatal security/crash fixture silently succeeded.' } }
+        elseif ($mode -ne 'parent-death' -and $helper.ExitCode -ne 0) { throw "Broker exited unexpectedly: $($helper.ExitCode)" }
         $proof = Get-Content $evidence -Raw | ConvertFrom-Json
         if ($proof.UiAdministrator -or !$proof.AuthenticatedElevatedWorker -or $proof.Ipv6UnchangedDatagrams -ne 64 -or !$proof.Metrics.KernelLossUnknown) { throw 'Real privilege/network evidence is invalid.' }
+        $remaining = Get-Process -Id $proof.NativePid -ErrorAction SilentlyContinue
+        if ($remaining) { throw 'Owned native process survived broker/owner cleanup.' }
         Write-Host "::notice title=Broker $mode integration::Actual medium-integrity published WPF host authenticated the elevated native bootstrap/worker, verified offline components, forwarded 64 unchanged dedicated ::1 UDP datagrams, read numeric metrics and shut down owned children. Flowseal used filter=false. UAC interaction was replaced by a pre-elevated CI handoff; interactive approval/denial remains manual."
-        Remove-Item $handoff,($handoff+'.pid') -Force
+        Remove-Item $handoff,($handoff+'.pid'),($handoff+'.crash') -Force -ErrorAction SilentlyContinue
     }
 } catch {
     $message = $_.ToString().Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')

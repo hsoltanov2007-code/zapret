@@ -32,7 +32,22 @@ internal static class BrokerAcceptance
         }
         await Task.Delay(100);var metrics=await engine.GetPerformanceAsync();
         if(metrics is not {KernelLossUnknown:true,KnownDropped:0} || metrics.Captured<64)throw new IOException("Native reliability metrics failed.");
-        await engine.StopAsync();
+        int nativePid=(await engine.GetStatusAsync()).ProcessId!.Value;
+        if(mode=="disconnect-active")
+        {
+            await client.DisposeAsync();
+            try{await engine.StopAsync();throw new IOException("Disconnected helper unexpectedly accepted STOP.");}
+            catch(IOException){if((await engine.GetStatusAsync()).State!=EngineState.Error)throw;}
+        }
+        else if(mode=="worker-crash")
+        {
+            int handoff=Array.IndexOf(args,"--broker-test-handoff");
+            await File.WriteAllTextAsync(args[handoff+1]+".crash",JsonSerializer.Serialize(new{Worker=client.AuthenticatedWorkerIdForAcceptance,Native=nativePid}));
+            var deadline=DateTime.UtcNow.AddSeconds(15);
+            while((await engine.GetStatusAsync()).State!=EngineState.Error){if(DateTime.UtcNow>=deadline)throw new IOException("Worker crash was not detected.");await Task.Delay(50);}
+            try{await engine.StopAsync();}catch(IOException){ } // failure is reported, never silently re-elevated
+        }
+        else if(mode!="parent-death")await engine.StopAsync();
         if(mode=="flowseal")
         {
             if(!(await client.RequestAsync("STATUS")).NoTrafficTest)throw new IOException("Flowseal acceptance requires verified no-traffic test composition.");
@@ -43,8 +58,9 @@ internal static class BrokerAcceptance
             await checkedEngine.StopAsync(); // only CI --test-no-traffic bootstrap permits this acceptance path
         }
         if(mode=="replay")await client.VerifyReplayRejectionForAcceptanceAsync();
-        var result=new{UiAdministrator=false,AuthenticatedElevatedWorker=true,Mode=mode,Ipv6UnchangedDatagrams=64,Metrics=metrics,
+        var result=new{UiAdministrator=false,AuthenticatedElevatedWorker=true,Mode=mode,NativePid=nativePid,Ipv6UnchangedDatagrams=64,Metrics=metrics,
             Scope="Dedicated loopback only; Flowseal check requires explicit filter=false test bootstrap. No DPI bypass/hardware certification.",Logs=logs};
         int output=Array.IndexOf(args,"--evidence");if(output>=0)await File.WriteAllTextAsync(args[output+1],JsonSerializer.Serialize(result));
+        if(mode=="parent-death")Environment.Exit(0); // deliberately bypass OnExit/finally with active owned engine
     }
 }
