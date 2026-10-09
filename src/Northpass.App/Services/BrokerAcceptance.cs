@@ -42,6 +42,7 @@ internal static class BrokerAcceptance
             if((await checkedEngine.GetStatusAsync()).State!=EngineState.Active)throw new IOException("Broker Flowseal readiness failed.");
             await checkedEngine.StopAsync(); // only CI --test-no-traffic bootstrap permits this acceptance path
         }
+        if(mode=="replay")await client.VerifyReplayRejectionForAcceptanceAsync();
         var result=new{UiAdministrator=false,AuthenticatedElevatedWorker=true,Mode=mode,Ipv6UnchangedDatagrams=64,Metrics=metrics,
             Scope="Dedicated loopback only; Flowseal check requires explicit filter=false test bootstrap. No DPI bypass/hardware certification.",Logs=logs};
         int output=Array.IndexOf(args,"--evidence");if(output>=0)await File.WriteAllTextAsync(args[output+1],JsonSerializer.Serialize(result));

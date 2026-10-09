@@ -26,12 +26,12 @@ public sealed class BrokerClient : IAsyncDisposable
         if(_pipe is {IsConnected:true} && _helper is {HasExited:false})return;
         await CleanupAsync();
         if(_helper is not null)throw new IOException("The owned privileged helper has not exited. Retry cleanup before starting another.");
-        _leases=BrokerSecurity.VerifyHelper();
-        string id=BrokerPipe.NewId();_pipe=BrokerPipe.CreateServer(id);
-        var current=Process.GetCurrentProcess();long creation=current.StartTime.ToUniversalTime().ToFileTimeUtc();
-        string arguments=$"--owner {Environment.ProcessId} --created {creation} --pipe {id}";
         try
         {
+            _leases=BrokerSecurity.VerifyHelper();
+            string id=BrokerPipe.NewId();_pipe=BrokerPipe.CreateServer(id);
+            using var current=Process.GetCurrentProcess();long creation=current.StartTime.ToUniversalTime().ToFileTimeUtc();
+            string arguments=$"--owner {Environment.ProcessId} --created {creation} --pipe {id}";
             if(_testHandoff is null)
                 _helper=Process.Start(new ProcessStartInfo(BrokerSecurity.HelperPath,arguments){UseShellExecute=true,Verb="runas",WindowStyle=ProcessWindowStyle.Hidden}) ?? throw new IOException("Trusted helper did not start.");
             else
@@ -81,6 +81,20 @@ public sealed class BrokerClient : IAsyncDisposable
         }
         catch { await CleanupAsync();throw; }
         finally {_gate.Release();}
+    }
+    // Internal headless acceptance only; never called by normal UI commands.
+    public async Task VerifyReplayRejectionForAcceptanceAsync()
+    {
+        await _gate.WaitAsync();
+        try {
+            if(_pipe is not {IsConnected:true} || _sequence==0)throw new InvalidOperationException("Authenticated session required.");
+            using var timeout=new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await BrokerProtocol.WriteAsync(_pipe,new BrokerRequest(3,_sequence,"STATUS"),timeout.Token);
+            try { _=await BrokerProtocol.ReadAsync<BrokerResponse>(_pipe,timeout.Token);throw new InvalidDataException("Privileged broker accepted replayed sequence."); }
+            catch(EndOfStreamException){ }
+            catch(IOException ex) when(ex is not InvalidDataException){ }
+            await CleanupAsync();
+        } finally {_gate.Release();}
     }
     private async Task CleanupAsync()
     {

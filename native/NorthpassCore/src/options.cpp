@@ -26,7 +26,7 @@ Options parse_options(std::span<const std::string_view> args) {
         if (key == "--test-capability") { test_capability = true; continue; }
         if (++i == args.size()) throw std::invalid_argument("Missing option value.");
         const auto value = args[i];
-        if (key == "--mode") { mode = true; if (value != "idle" && value != "loopback") throw std::invalid_argument("Only idle/loopback modes exist in v0.2."); options.loopback = value == "loopback"; }
+        if (key == "--mode") { mode = true; if (value != "idle" && value != "loopback") throw std::invalid_argument("Only idle/loopback modes exist in v0.3."); options.loopback = value == "loopback"; }
         else if (key == "--port") { const auto port = number(value); if (port < 49152 || port > 65535) throw std::invalid_argument("Only dedicated ephemeral loopback ports 49152..65535 are allowed."); options.port = static_cast<std::uint16_t>(port); }
         else if (key == "--parent-pid") options.parent_pid = number(value);
         else if (key == "--pipe-id") { if (!valid_pipe_id(value)) throw std::invalid_argument("Invalid named pipe identifier."); options.pipe_id = value; }

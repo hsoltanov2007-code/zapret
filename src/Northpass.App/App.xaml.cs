@@ -129,7 +129,7 @@ public partial class App : Application
     {
         // The window has already awaited owned engine shutdown. Closing the
         // channel tells the helper to clean up any remaining owned operations.
-        _broker?.DisposeAsync().AsTask().GetAwaiter().GetResult();_broker=null;
+        if (_broker is not null) Task.Run(async () => await _broker.DisposeAsync()).GetAwaiter().GetResult();_broker=null;
         _http?.Dispose();
         if (_instance is not null) { _instance.ReleaseMutex(); _instance.Dispose(); }
         base.OnExit(e);

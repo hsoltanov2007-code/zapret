@@ -24,6 +24,7 @@ struct PacketView {
     std::uint32_t fragment_id{};
     bool more_fragments{}, atomic_fragment{};
     std::uint8_t extension_count{};
+    std::size_t transport_offset{};
     TlsKind tls{TlsKind::Unknown};
     std::span<const std::uint8_t> payload{};
 };

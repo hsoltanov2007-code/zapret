@@ -11,6 +11,10 @@ std::vector<std::uint8_t> udp(std::size_t length=36) {
     std::vector<std::uint8_t> p(length); p[0]=0x45; p[2]=static_cast<std::uint8_t>(length>>8); p[3]=static_cast<std::uint8_t>(length);
     p[8]=64; p[9]=17; p[20]=200; p[22]=201; p[24]=static_cast<std::uint8_t>((length-20)>>8); p[25]=static_cast<std::uint8_t>(length-20); return p;
 }
+void put_checksum(std::vector<std::uint8_t>& p, std::size_t at, std::span<const std::uint8_t> bytes) {
+    std::uint32_t sum{};for(std::size_t i=0;i<bytes.size();i+=2)sum+=(static_cast<unsigned>(bytes[i])<<8)|(i+1<bytes.size()?bytes[i+1]:0);
+    while(sum>>16)sum=(sum&65535)+(sum>>16);sum=(~sum)&65535;p[at]=static_cast<std::uint8_t>(sum>>8);p[at+1]=static_cast<std::uint8_t>(sum);
+}
 void run(std::string_view name) {
     auto bytes=udp(); TransformConfiguration c{3,TransformScope::Synthetic,TransformCapability::SyntheticByteReplacement,1500};
     if (name=="transformation") {
@@ -40,6 +44,15 @@ void run(std::string_view name) {
         PacketMetadata m{true,true,false,false,false,false,false};
         require(observe_checksum(bytes,m)==ChecksumObservation::OffloadUnverified);
         m.ip_checksum=true; require(observe_checksum(bytes,m)==ChecksumObservation::Invalid);
+        put_checksum(bytes,10,std::span(bytes).first(20));m.udp_checksum=true;
+        std::vector<std::uint8_t> pseudo(bytes.begin()+12,bytes.begin()+20);pseudo.insert(pseudo.end(),{0,17,0,16});pseudo.insert(pseudo.end(),bytes.begin()+20,bytes.end());
+        put_checksum(bytes,26,pseudo);require(observe_checksum(bytes,m)==ChecksumObservation::Valid);
+        bytes[28]^=1;require(observe_checksum(bytes,m)==ChecksumObservation::Invalid);bytes[28]^=1;
+        m.udp_checksum=false;require(observe_checksum(bytes,m)==ChecksumObservation::OffloadUnverified);m.udp_checksum=true;
+        std::vector<std::uint8_t> v6(56);v6[0]=0x60;v6[5]=16;v6[6]=17;v6[7]=64;v6[44]=0;v6[45]=16;
+        auto pseudo6=std::vector<std::uint8_t>(v6.begin()+8,v6.begin()+40);pseudo6.insert(pseudo6.end(),{0,0,0,16,0,0,0,17});pseudo6.insert(pseudo6.end(),v6.begin()+40,v6.end());
+        put_checksum(v6,46,pseudo6);m.ipv6=true;require(observe_checksum(v6,m)==ChecksumObservation::Valid);
+        v6[48]^=1;require(observe_checksum(v6,m)==ChecksumObservation::Invalid);
         m.ipv6=true; require(!metadata_consistent(bytes,m)); m.ipv6=false; m.impostor=true; require(!metadata_consistent(bytes,m));
     } else if (name=="mtu") {
         for (auto size : {std::size_t(68),std::size_t(1500),std::size_t(65535)}) {

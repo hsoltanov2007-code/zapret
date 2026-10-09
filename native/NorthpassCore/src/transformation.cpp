@@ -64,11 +64,29 @@ bool metadata_consistent(std::span<const std::uint8_t> packet, PacketMetadata m)
 ChecksumObservation observe_checksum(std::span<const std::uint8_t> packet, PacketMetadata m) noexcept {
     const auto view = classify(packet);
     if (!metadata_consistent(packet, m) || view.state != ParseState::Parsed) return ChecksumObservation::Unsupported;
-    // Never "fix" an offloaded checksum or change reinjection metadata. Transport
-    // checksums require a separately tested pseudo-header/offload implementation.
+    // Offload validity bits are observational; original bytes and metadata are
+    // always reinjected first. Never repair or recompute live packet checksums.
     if (view.ip_version == 4 && !m.ip_checksum) return ChecksumObservation::OffloadUnverified;
     if (view.ip_version == 4 && !checksum(packet.first(static_cast<std::size_t>(packet[0] & 15) * 4))) return ChecksumObservation::Invalid;
     if ((view.transport == Transport::Tcp && !m.tcp_checksum) || (view.transport == Transport::Udp && !m.udp_checksum)) return ChecksumObservation::OffloadUnverified;
-    return ChecksumObservation::Unsupported; // IP valid, transport checksum not certified
+    if (view.extension_count != 0) return ChecksumObservation::Unsupported; // routing/AH pseudo-header semantics deferred
+    const auto segment = packet.subspan(view.transport_offset);
+    const auto checksum_offset = view.transport == Transport::Udp ? 6u : 16u;
+    if (view.transport == Transport::Udp && segment[checksum_offset] == 0 && segment[checksum_offset+1] == 0)
+        return view.ip_version == 4 ? ChecksumObservation::Unsupported : ChecksumObservation::Invalid; // IPv4 checksum optional
+    std::vector<std::uint8_t> pseudo;
+    try {
+        if (view.ip_version == 4) {
+            pseudo.insert(pseudo.end(),packet.begin()+12,packet.begin()+20);
+            pseudo.push_back(0);pseudo.push_back(static_cast<std::uint8_t>(view.transport));
+            pseudo.push_back(static_cast<std::uint8_t>(segment.size()>>8));pseudo.push_back(static_cast<std::uint8_t>(segment.size()));
+        } else {
+            pseudo.insert(pseudo.end(),packet.begin()+8,packet.begin()+40);
+            for(int shift:{24,16,8,0})pseudo.push_back(static_cast<std::uint8_t>(segment.size()>>shift));
+            pseudo.insert(pseudo.end(),{0,0,0,static_cast<std::uint8_t>(view.transport)});
+        }
+        pseudo.insert(pseudo.end(),segment.begin(),segment.end());
+        return checksum(pseudo) ? ChecksumObservation::Valid : ChecksumObservation::Invalid;
+    } catch (...) { return ChecksumObservation::Unsupported; }
 }
 }

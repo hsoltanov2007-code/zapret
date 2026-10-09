@@ -18,7 +18,13 @@ try {
     $bootstrap = Join-Path $install 'broker/Northpass.Broker.exe'
     $prepare = Start-Process $bootstrap -ArgumentList '--install' -PassThru -Wait
     if ($prepare.ExitCode -ne 0) { throw "Broker offline installation failed: $($prepare.ExitCode)" }
-    foreach ($mode in @('native','flowseal','repair')) {
+    foreach ($mode in @('native','flowseal','repair','replay')) {
+        if ($mode -eq 'repair') {
+            $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.3'
+            $selected = (Get-Content (Join-Path $nativeRoot 'selection.json') -Raw | ConvertFrom-Json).Current
+            $damaged = Join-Path $nativeRoot ($selected + '/bin/WinDivert.dll')
+            [System.IO.File]::WriteAllBytes($damaged, [byte[]]@(0))
+        }
         $handoff = Join-Path $env:TEMP ('northpass-handoff-' + [guid]::NewGuid().ToString('N') + '.json')
         $evidence = Join-Path $results ('broker-' + $mode + '.json')
         $fixture = Join-Path $root 'tests/Northpass.TestChild/bin/Release/net8.0/Northpass.TestChild.dll'
@@ -34,7 +40,7 @@ try {
         Set-Content ($handoff + '.pid') $helper.Id -NoNewline
         if (!$launcher.WaitForExit(120000)) { throw 'Medium UI broker acceptance timed out.' }
         if ($launcher.ExitCode -ne 0) { $errorText = if (Test-Path $evidence) { Get-Content $evidence -Raw } else { 'No UI evidence was written.' }; throw "Medium UI failed: $errorText" }
-        if (!$helper.WaitForExit(15000) -or $helper.ExitCode -ne 0) { throw 'Owned elevated broker did not clean up successfully.' }
+        if (!$helper.WaitForExit(15000) -or ($mode -ne 'replay' -and $helper.ExitCode -ne 0) -or ($mode -eq 'replay' -and $helper.ExitCode -eq 0)) { throw 'Owned elevated broker did not clean up successfully.' }
         $proof = Get-Content $evidence -Raw | ConvertFrom-Json
         if ($proof.UiAdministrator -or !$proof.AuthenticatedElevatedWorker -or $proof.Ipv6UnchangedDatagrams -ne 64 -or !$proof.Metrics.KernelLossUnknown) { throw 'Real privilege/network evidence is invalid.' }
         Write-Host "::notice title=Broker $mode integration::Actual medium-integrity published WPF host authenticated the elevated native bootstrap/worker, verified offline components, forwarded 64 unchanged dedicated ::1 UDP datagrams, read numeric metrics and shut down owned children. Flowseal used filter=false. UAC interaction was replaced by a pre-elevated CI handoff; interactive approval/denial remains manual."

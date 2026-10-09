@@ -29,7 +29,10 @@ public sealed class BrokerInstallation(BrokerClient client,string engineId) : IE
                 if(stream.Length>2048)throw new InvalidDataException("Installation selection exceeds bounds.");
                 using var state=await JsonDocument.ParseAsync(stream,cancellationToken:token);
                 var manifest=Catalog(engineId);
-                if(state.RootElement.GetProperty("Current").GetString()!=manifest.Revision)throw new InvalidDataException("Installed revision is not authorized by this application.");
+                string? selected=state.RootElement.GetProperty("Current").GetString();
+                if(selected!=manifest.Revision && engineId=="zapret1")
+                    foreach(var old in FlowsealCatalog.OpenPreviousTrustedManifests()) using(old) { var trusted=EngineManifest.Parse(old);if(trusted.Revision==selected)manifest=trusted; }
+                if(selected!=manifest.Revision)throw new InvalidDataException("Installed revision is not authorized by this application.");
                 string directory=Path.Combine(root,manifest.Revision);security.ValidateDirectory(directory);
                 var expected=manifest.Components.ToDictionary(c=>c.Path,StringComparer.OrdinalIgnoreCase);
                 async Task Walk(string folder)
@@ -107,7 +110,7 @@ public sealed class BrokerEngine : IDpiEngine,IEnginePerformanceProvider
     public async Task<EngineStatus> GetStatusAsync(CancellationToken token=default)
     {
         if(_started)try{var r=await _client.RequestAsync("STATUS",_id,token:token);_status=r.Status??throw new InvalidDataException("Missing component status.");}
-        catch(Exception ex){_status=new(EngineState.Error,Error:ex.Message);}
+        catch(Exception ex) when (ex is not OperationCanceledException){_status=new(EngineState.Error,Error:ex.Message);}
         return _status;
     }
     public async Task<EnginePerformance?> GetPerformanceAsync(CancellationToken cancellationToken=default)=>_started?(await _client.RequestAsync("METRICS",_id,token:cancellationToken)).Performance:null;

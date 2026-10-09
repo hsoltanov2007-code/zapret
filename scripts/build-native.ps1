@@ -24,5 +24,5 @@ try {
     }
     python ./scripts/package-native.py --executable $exe
     if ($LASTEXITCODE -ne 0) { throw 'Native offline manifest packaging failed.' }
-    Write-Host '::notice title=Native Windows unit tests::22 native packet/flow/queue/metrics/IPC codec test groups passed on MSVC Windows x64. Original bytes only; no DPI bypass implemented.'
+    Write-Host '::notice title=Native Windows unit tests::29 native packet/flow/queue/metrics/IPC/transformation/reliability test groups passed on MSVC Windows x64. Original bytes only; no DPI bypass implemented.'
 } finally { Pop-Location }

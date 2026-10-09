@@ -42,8 +42,12 @@ def package(executable, sdk, output):
         for path in sorted((ROOT / "native").rglob("*")):
             if path.is_file():
                 archive.write(path, path.relative_to(ROOT).as_posix())
-        for name in ("scripts/prepare-native.py", "scripts/package-native.py", "scripts/build-native.ps1", "docs/NATIVE_ENGINE.md"):
+        for name in ("scripts/prepare-native.py", "scripts/package-native.py", "scripts/build-native.ps1", "docs/NATIVE_ENGINE.md", "scripts/build-broker.ps1", "scripts/prepare-broker.py", "scripts/test-broker.ps1"):
             archive.write(ROOT / name, name)
+        for folder in ("src/Northpass.Broker", "src/Northpass.Broker.Shared"):
+            for path in sorted((ROOT / folder).rglob("*")):
+                if path.is_file() and not any(part in ("bin", "obj") for part in path.relative_to(ROOT / folder).parts):
+                    archive.write(path, path.relative_to(ROOT).as_posix())
         archive.writestr("BUILD-REVISION.txt", revision + "\n")
     print(f"Native 0.3.0 offline payload: {len(components)} components; immutable manifest ready for embedding.")
 
