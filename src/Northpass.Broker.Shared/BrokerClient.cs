@@ -133,7 +133,7 @@ public sealed class BrokerClient : IAsyncDisposable
             if(!response.Success)
             {
                 bool cleaned=await CleanupAsync();
-                LastFailure=new(command=="START"?BrokerFailureKind.EngineLaunchFailed:BrokerFailureKind.LaunchFailed,_stage,_clock.ElapsedMilliseconds,response.SafeCode,null,cleaned);
+                LastFailure=new(command=="START"?BrokerFailureKind.EngineLaunchFailed:BrokerFailureKind.LaunchFailed,_stage,_clock.ElapsedMilliseconds,response.SafeCode,_lastHelperExit,cleaned);
                 RecordFailure();
                 // Detail is returned only across the fully authenticated control pipe.
                 LogReceived?.Invoke("BROKER_ENGINE "+response.Error);
