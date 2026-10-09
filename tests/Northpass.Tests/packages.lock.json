@@ -101,6 +101,14 @@
           "xunit.extensibility.core": "[2.9.2]"
         }
       },
+      "northpass.broker.shared": {
+        "type": "Project",
+        "dependencies": {
+          "Northpass.Engine.Native": "[0.7.0, )",
+          "Northpass.Engine.Zapret1": "[0.7.0, )",
+          "Northpass.Services": "[0.7.0, )"
+        }
+      },
       "northpass.core": {
         "type": "Project"
       },

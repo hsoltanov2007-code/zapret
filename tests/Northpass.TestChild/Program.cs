@@ -8,6 +8,11 @@ using System.Text;
 
 // A harmless, real child-process fixture. This is not the production engine or a Windows driver.
 string mode = args.FirstOrDefault() ?? "wait";
+if (mode == "seal-install") {
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+    new Northpass.Desktop.WindowsInstallationSecurity().ProtectDirectory(args[1]);return 0;
+}
+if (mode == "medium-launch") return MediumLauncher.Run(args[1], args[2]);
 if (mode == "exit") { Console.Error.WriteLine("fixture startup error"); return 17; }
 if (mode is "protocol" or "protocol-stderr" or "protocol-hang" or "protocol-error")
 {
@@ -16,6 +21,13 @@ if (mode is "protocol" or "protocol-stderr" or "protocol-hang" or "protocol-erro
     if (mode is "protocol" or "protocol-error") Console.WriteLine("NORTHPASS_READY protocol=1");
     if (await Console.In.ReadLineAsync() == "STOP") { Console.WriteLine("fixture graceful stop"); return mode == "protocol-error" ? 27 : 0; }
     return 18;
+}
+if (mode == "broker-pipe-intruder") {
+    if(!OperatingSystem.IsWindows())throw new PlatformNotSupportedException();
+    using var pipe=await Northpass.Broker.BrokerPipe.ConnectAsync(args[1],default);
+    Console.WriteLine("unauthorized-broker-peer-connected");
+    try { _=await Northpass.Broker.BrokerProtocol.ReadAsync<string>(pipe,default).WaitAsync(TimeSpan.FromSeconds(15));return 31; }
+    catch(IOException){Console.WriteLine("unauthorized-broker-peer-rejected");return 0;}
 }
 if (mode == "native-pipe-intruder")
 {
@@ -100,4 +112,54 @@ static class PipeFixture
     }
     [DllImport("kernel32.dll", EntryPoint = "CreateFileW", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern SafePipeHandle CreateFile(string name, uint access, uint share, IntPtr security, uint creation, uint flags, IntPtr template);
+}
+
+// Launch the actual published UI with a restricted medium-integrity token.
+// This fixture supplies a real Windows token, not a mocked administrator check.
+static class MediumLauncher
+{
+    public static int Run(string image, string arguments)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        IntPtr original=IntPtr.Zero, restricted=IntPtr.Zero, admin=IntPtr.Zero, medium=IntPtr.Zero;
+        try
+        {
+            Check(OpenProcessToken(GetCurrentProcess(),0xf01ff,out original));
+            Check(ConvertStringSidToSid("S-1-5-32-544",out admin));
+            var deny = new SidAttributes { Sid=admin };
+            Check(CreateRestrictedToken(original,1,1,ref deny,0,IntPtr.Zero,0,IntPtr.Zero,out restricted));
+            Check(ConvertStringSidToSid("S-1-16-8192",out medium));
+            var label = new SidAttributes { Sid=medium, Attributes=0x20 };
+            Check(SetTokenInformation(restricted,25,ref label,Marshal.SizeOf<SidAttributes>()+GetLengthSid(medium)));
+            var startup=new StartupInfo { Size=Marshal.SizeOf<StartupInfo>() };
+            var command = new StringBuilder("\""+image+"\" "+arguments);
+            Check(CreateProcessWithTokenW(restricted,1,image,command,0,IntPtr.Zero,Path.GetDirectoryName(image),ref startup,out var process));
+            try
+            {
+                if(WaitForSingleObject(process.Process,120000)!=0)throw new TimeoutException("Actual medium UI timed out.");
+                Check(GetExitCodeProcess(process.Process,out uint code));return checked((int)code);
+            }
+            finally { CloseHandle(process.Thread);CloseHandle(process.Process); }
+        }
+        finally { if(original!=IntPtr.Zero)CloseHandle(original);if(restricted!=IntPtr.Zero)CloseHandle(restricted);if(admin!=IntPtr.Zero)LocalFree(admin);if(medium!=IntPtr.Zero)LocalFree(medium); }
+    }
+    private static void Check(bool success){if(!success)throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());}
+    [StructLayout(LayoutKind.Sequential)] struct SidAttributes { public IntPtr Sid;public uint Attributes; }
+    [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)] struct StartupInfo {
+        public int Size;public string? Reserved;public string? Desktop;public string? Title;
+        public uint X,Y,XSize,YSize,XCountChars,YCountChars,FillAttribute,Flags;public ushort ShowWindow,Reserved2Size;
+        public IntPtr Reserved2,Input,Output,Error;
+    }
+    [StructLayout(LayoutKind.Sequential)] struct ProcessInfo {public IntPtr Process,Thread;public uint ProcessId,ThreadId;}
+    [DllImport("kernel32.dll")] static extern IntPtr GetCurrentProcess();
+    [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
+    [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr handle);
+    [DllImport("kernel32.dll")] static extern uint WaitForSingleObject(IntPtr handle,uint timeout);
+    [DllImport("kernel32.dll",SetLastError=true)] static extern bool GetExitCodeProcess(IntPtr handle,out uint code);
+    [DllImport("advapi32.dll",SetLastError=true)] static extern bool OpenProcessToken(IntPtr process,uint access,out IntPtr token);
+    [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool ConvertStringSidToSid(string text,out IntPtr sid);
+    [DllImport("advapi32.dll")] static extern int GetLengthSid(IntPtr sid);
+    [DllImport("advapi32.dll",SetLastError=true)] static extern bool CreateRestrictedToken(IntPtr token,uint flags,uint disabled,ref SidAttributes sids,uint removed,IntPtr privileges,uint restricted,IntPtr restrictedSids,out IntPtr result);
+    [DllImport("advapi32.dll",SetLastError=true)] static extern bool SetTokenInformation(IntPtr token,int kind,ref SidAttributes data,int length);
+    [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool CreateProcessWithTokenW(IntPtr token,uint flags,string application,StringBuilder command,uint creation,IntPtr environment,string? directory,ref StartupInfo startup,out ProcessInfo process);
 }

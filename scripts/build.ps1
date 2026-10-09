@@ -25,6 +25,7 @@ try {
     $nativeBuildOptions = @{ TimestampUrl = $TimestampUrl }
     if ($SignCertificateThumbprint) { $nativeBuildOptions.SignCertificateThumbprint = $SignCertificateThumbprint }
     ./scripts/build-native.ps1 @nativeBuildOptions
+    ./scripts/build-broker.ps1
     Write-Host 'Publishing Northpass 0.7 for Windows x64...'
     dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }

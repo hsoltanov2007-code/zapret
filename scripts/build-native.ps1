@@ -15,6 +15,9 @@ try {
     New-Item -ItemType Directory -Force TestResults | Out-Null
     ctest --test-dir dist/native-build -C Release --output-on-failure --output-junit "$root/TestResults/native-windows.xml"
     if ($LASTEXITCODE -ne 0) { throw 'Native packet unit tests failed.' }
+    [xml]$report = Get-Content "$root/TestResults/native-windows.xml" -Raw
+    $measurement = $report.testsuite.testcase | Where-Object { $_.name -eq 'native_benchmark' } | ForEach-Object { $_.'system-out' }
+    if ($measurement) { Write-Host "::notice title=Synthetic native benchmark::$measurement" }
     $exe = Join-Path $root 'dist/native-build/Release/NorthpassCore.exe'
     if ($SignCertificateThumbprint) {
         signtool sign /sha1 $SignCertificateThumbprint /fd SHA256 /tr $TimestampUrl /td SHA256 $exe
@@ -24,5 +27,5 @@ try {
     }
     python ./scripts/package-native.py --executable $exe
     if ($LASTEXITCODE -ne 0) { throw 'Native offline manifest packaging failed.' }
-    Write-Host '::notice title=Native Windows unit tests::22 native packet/flow/queue/metrics/IPC codec test groups passed on MSVC Windows x64. Original bytes only; no DPI bypass implemented.'
+    Write-Host '::notice title=Native Windows unit tests::29 native packet/flow/queue/metrics/IPC/transformation/reliability test groups passed on MSVC Windows x64. Original bytes only; no DPI bypass implemented.'
 } finally { Pop-Location }

@@ -13,10 +13,11 @@
     <ProjectReference Include="../../src/Northpass.Engine.Zapret1/Northpass.Engine.Zapret1.csproj" />
     <ProjectReference Include="../../src/Northpass.Engine.Native/Northpass.Engine.Native.csproj" />
     <ProjectReference Include="../Northpass.TestChild/Northpass.TestChild.csproj" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="../../src/Northpass.Broker.Shared/Northpass.Broker.Shared.csproj" />
     <Using Include="Xunit" />
   </ItemGroup>
   <Target Name="CopyTestChild" AfterTargets="Build">
-    <ItemGroup><Fixture Include="../Northpass.TestChild/bin/$(Configuration)/net8.0/Northpass.TestChild.*" /></ItemGroup>
+    <ItemGroup><Fixture Include="../Northpass.TestChild/bin/$(Configuration)/net8.0/*" /></ItemGroup>
     <Copy SourceFiles="@(Fixture)" DestinationFolder="$(OutDir)fixture" />
   </Target>
 </Project>

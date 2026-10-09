@@ -3,6 +3,7 @@
 #include "northpass/windows_security.hpp"
 #include "northpass/windows_ipc.hpp"
 #include "northpass/queue.hpp"
+#include "northpass/transformation.hpp"
 #include <psapi.h>
 #include <algorithm>
 #include <cstring>
@@ -148,15 +149,21 @@ int run(const Options& options) {
     reduce_worker_privileges();
     Divert divert(executable_path().parent_path() / L"WinDivert.dll");
     const auto filter = options.filter();
+    if (options.fault == TestFault::DriverOpen) throw std::runtime_error(windows_error("Injected scoped driver initialization failure", ERROR_GEN_FAILURE));
     divert.handle = divert.open(filter.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
     if (divert.handle == INVALID_HANDLE_VALUE) throw std::runtime_error(windows_error("Scoped driver initialization", GetLastError()));
     for (const auto& [name, value] : std::array<std::pair<WINDIVERT_PARAM, UINT64>, 3>{ {{WINDIVERT_PARAM_QUEUE_LENGTH, 512}, {WINDIVERT_PARAM_QUEUE_SIZE, 1048576}, {WINDIVERT_PARAM_QUEUE_TIME, 1000}} })
         if (!divert.parameter(divert.handle, name, value)) throw std::runtime_error(windows_error("Bounded driver queue setup", GetLastError()));
     std::mutex send_mutex, error_mutex; std::string receive_error;
+    std::uint64_t checksum_invalid{}, offload_unverified{}, metadata_invalid{}, oversize{};
+    bool send_fault_used = false;
     const auto forward = [&](const QueuedPacket& packet) {
         WINDIVERT_ADDRESS address{}; static_assert(sizeof(address) <= 80);
         std::memcpy(&address, packet.metadata.data(), sizeof(address)); UINT sent{};
         std::lock_guard guard(send_mutex);
+        if (options.fault == TestFault::Send && !send_fault_used) {
+            send_fault_used = true; ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get()); return false;
+        }
         if (!divert.send(divert.handle, packet.bytes.data(), static_cast<UINT>(packet.length), &sent, &address) || sent != packet.length) {
             ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get()); return false;
         }
@@ -203,6 +210,7 @@ int run(const Options& options) {
                     ++metrics.dropped_known; throw std::runtime_error("Unexpected driver framing; captured packet could not be reinjected.");
                 }
                 packet.length = length; packet.captured_ns = monotonic_ns(); std::memcpy(packet.metadata.data(), &address, sizeof(address));
+                if (options.fault == TestFault::Crash) TerminateProcess(GetCurrentProcess(), 91);
                 (void)forward(packet); // original bytes are reinjected before fallible/read-only observation
                 if (!queue.try_push(packet)) ++metrics.backpressure; // skip observation, never reorder originals or wait on space
                 const auto size = queue.size(); metrics.queue_size = size;
@@ -222,10 +230,22 @@ int run(const Options& options) {
             << " udp=" << metrics.udp.load() << " tls=" << metrics.tls.load() << " malformed=" << metrics.malformed.load()
             << " fragments=" << metrics.fragments.load() << " flows=" << metrics.active_flows.load() << '\n';
         std::cout << resources.sample(metrics) << '\n' << std::flush;
+        std::cout << "NORTHPASS_METADATA checksum_invalid=" << checksum_invalid << " offload_unverified=" << offload_unverified
+            << " metadata_invalid=" << metadata_invalid << " over_1500_bytes=" << oversize << '\n' << std::flush;
     };
     auto last_report = Clock::now(); QueuedPacket packet;
     while (!queue.drained()) {
         if (queue.pop(packet, std::chrono::milliseconds(100))) {
+            if (options.fault == TestFault::ObserveDelay) WaitForSingleObject(stop.get(), 20);
+            WINDIVERT_ADDRESS address{}; std::memcpy(&address, packet.metadata.data(), sizeof(address));
+            const PacketMetadata metadata{address.Outbound != 0, address.Loopback != 0, address.Impostor != 0, address.IPv6 != 0,
+                address.IPChecksum != 0, address.TCPChecksum != 0, address.UDPChecksum != 0};
+            const auto bytes = std::span(packet.bytes).first(packet.length);
+            if (!metadata_consistent(bytes, metadata)) ++metadata_invalid;
+            const auto checksum = observe_checksum(bytes, metadata);
+            if (checksum == ChecksumObservation::Invalid) ++checksum_invalid;
+            if (checksum == ChecksumObservation::OffloadUnverified) ++offload_unverified;
+            if (bytes.size() > 1500) ++oversize;
             (void)processor.process(std::span(packet.bytes).first(packet.length), Clock::now());
             metrics.record_latency(monotonic_ns() - packet.captured_ns);
         }
@@ -249,7 +269,7 @@ int main(int argc, char** argv) {
         std::vector<std::string_view> arguments;
         for (int i = 1; i < argc; ++i) arguments.emplace_back(argv[i]);
         const auto options = northpass::parse_options(arguments);
-        if (options.version) { std::cout << "NorthpassCore 0.2.0 protocol=1\n"; return 0; }
+        if (options.version) { std::cout << "NorthpassCore 0.3.0 protocol=1\n"; return 0; }
         return run(options);
     } catch (const std::exception& error) { std::cerr << "NORTHPASS_ERROR " << error.what() << '\n'; return 1; }
 }

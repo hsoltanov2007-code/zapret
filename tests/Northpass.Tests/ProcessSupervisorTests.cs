@@ -90,8 +90,12 @@ public sealed class ProcessSupervisorTests
     public async Task CancelledStartupDoesNotLeaveAnOwnedProcess()
     {
         await using var supervisor = new ProcessSupervisor();
-        using var cancel = new CancellationTokenSource(100);
+        using var cancel = new CancellationTokenSource();int owned=0;
+        // Cancel synchronously after the real PID is owned, not through a timer
+        // whose callback can be delayed beyond startup on a loaded runner.
+        supervisor.StatusChanged += status => { if(owned==0 && status.State==EngineState.Connecting && status.ProcessId is int pid){owned=pid;cancel.Cancel();} };
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => supervisor.StartAsync(Child(), cancel.Token));
+        Assert.True(owned>0);Assert.False(Alive(owned));
         Assert.Null((await supervisor.GetStatusAsync()).ProcessId);
         await supervisor.StartAsync(Child());
     }

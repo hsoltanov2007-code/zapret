@@ -1,5 +1,13 @@
 # Northpass Native Engine v0.1 (on v0.7)
 
+## Native Engine 0.3.0 (desktop remains 0.7.0)
+
+- Added protected native elevation bootstrap, verified managed network worker and authenticated versioned local IPC. Default WPF launch is unelevated after the actual medium-integrity Windows acceptance gate passed. Per-user startup migrates away from elevated tasks.
+- Added synthetic-only immutable packet transactions, typed proposals, capability/MTU validation and commit/rollback lifecycle tests. No live transformations or native DPI bypass.
+- Added checksum/offload metadata observations, bounded synthetic flow benchmark and scoped driver/send/queue/crash fault tests.
+- Preserved reviewed Flowseal consumer engine, premium localized UI, offline payloads and legal/source distribution.
+- Added broker/security/validation documentation. Interactive UAC and clean-machine hardware/ISP validation remain separate from CI fixtures.
+
 - Original C++20/CMake NorthpassCore with read-only IPv4/IPv6, TCP/UDP/TLS framing classification, bounded bidirectional flow tracking and extensible pass-through strategy interface.
 - Independently pinned/verified official WinDivert SDK, protected offline payload/catalog, native ACL/hash/file leases and restricted idle/dedicated-loopback scope; no DPI bypass or traffic modification.
 - IDpiEngine adapter, actual readiness protocol, graceful drain/owned cancellation/parent-death cleanup; existing Flowseal production fallback and premium RU/EN/AZ UI remain.

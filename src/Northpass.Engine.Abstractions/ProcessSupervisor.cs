@@ -84,6 +84,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                 await Task.WhenAll(output, error);
                 throw new InvalidOperationException($"Engine exited during startup (code {process.ExitCode}). " + string.Join("\n", recent));
             }
+            token.ThrowIfCancellationRequested();
             SetStatus(new(EngineState.Active, process.Id, DateTimeOffset.UtcNow));
             LogReceived?.Invoke($"Engine process started (PID {process.Id}). Website reachability is unverified.");
         }

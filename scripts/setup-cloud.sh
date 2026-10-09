@@ -42,4 +42,5 @@ source "$tools_root/env.sh"
 cd "$repo_root"
 dotnet restore tests/Northpass.Tests/Northpass.Tests.csproj --locked-mode
 dotnet restore tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj --locked-mode
+dotnet restore src/Northpass.Broker/Northpass.Broker.csproj --locked-mode
 dotnet build Northpass.sln -c Release --no-restore --nologo

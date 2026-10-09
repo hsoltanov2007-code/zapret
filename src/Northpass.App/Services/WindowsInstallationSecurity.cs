@@ -5,6 +5,7 @@ using Northpass.Services.Installation;
 namespace Northpass.Desktop;
 
 // Does not change UAC, AV, firewall, boot configuration or driver signing policy.
+[System.Runtime.Versioning.SupportedOSPlatform("windows")]
 public sealed class WindowsInstallationSecurity : IInstallationSecurity
 {
     private static readonly SecurityIdentifier Administrators = new(WellKnownSidType.BuiltinAdministratorsSid, null);

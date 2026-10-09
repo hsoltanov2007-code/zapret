@@ -115,6 +115,7 @@ PacketView classify(std::span<const std::uint8_t> data) noexcept {
         view.transport = Transport::Udp;
         view.payload = data.subspan(offset + 8, length - 8);
     } else { view.state = ParseState::Unsupported; return view; }
+    view.transport_offset = offset;
     view.source.port = u16(data, offset); view.destination.port = u16(data, offset + 2);
     view.state = ParseState::Parsed;
     return view;

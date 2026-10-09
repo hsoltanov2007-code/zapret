@@ -26,7 +26,7 @@ try {
     $app = Join-Path $install 'Northpass.exe'
     if (!(Test-Path $app)) { throw 'Installer did not install the application.' }
     if ((Get-Item $app).VersionInfo.ProductVersion -notlike '0.7.0*') { throw 'Installed version is incorrect.' }
-    foreach ($required in @('engine-payload/flowseal-offline.zip', 'engine-payload/native-offline.zip', 'Northpass.Engine.Native.dll', 'THIRD_PARTY_NOTICES.md', 'docs/third-party-source', 'docs/native-source/NorthpassCore-source.zip', 'docs/native-source/windivert-2.2.2-source.zip', 'docs/licenses/WinDivert-README.txt', 'docs/licenses/dotnet')) {
+    foreach ($required in @('engine-payload/flowseal-offline.zip', 'engine-payload/native-offline.zip', 'Northpass.Engine.Native.dll', 'THIRD_PARTY_NOTICES.md', 'docs/third-party-source', 'docs/native-source/NorthpassCore-source.zip', 'docs/native-source/windivert-2.2.2-source.zip', 'docs/licenses/WinDivert-README.txt', 'docs/licenses/dotnet', 'broker/Northpass.Broker.exe', 'broker/Northpass.Broker.Worker.exe')) {
         if (!(Test-Path (Join-Path $install $required))) { throw "Bundled distribution content is missing: $required" }
     }
     foreach ($removed in @('Northpass.Engine.Zapret2.dll', 'engine-payload/zapret2-offline.zip', 'profiles/zapret2-reviewed-example.json', 'profiles/example-template.json', 'docs/third-party-source/zapret2-1.0.5.2-source.zip')) {
@@ -37,7 +37,7 @@ try {
     Invoke-Checked $app @('--native-check')
     Invoke-Checked $app @('--native-ipc-check')
     $nativeManifest = Get-Content (Join-Path $root 'dist/native/native-manifest.json') -Raw | ConvertFrom-Json
-    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.2'
+    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.3'
     foreach ($component in $nativeManifest.components) {
         $path = Join-Path (Join-Path $nativeRoot $nativeManifest.revision) $component.path
         if ((Get-Item $path).Length -ne $component.size -or (Get-FileHash $path -Algorithm SHA256).Hash -ne $component.sha256 -or !(Get-Acl $path).AreAccessRulesProtected) { throw "Native published installation failed integrity/ACL verification: $($component.path)" }
@@ -84,9 +84,24 @@ try {
         }
         Invoke-Checked $app @('--installation-check')
     }
-    $evidence = 'One-file installer installed the self-contained x64 app, Flowseal fallback and original native pass-through payloads, licences and corresponding sources; obsolete named fixture files were removed. Published app verified/reused Flowseal and native protected components, rejected missing components, verified restoration, and initialized/stopped the native idle driver through IDpiEngine on both owned stdin and authenticated named-pipe paths. No internet traffic or ISP bypass test was performed.'
+    # Actual EXE repair/reinstall, not just restoring bytes in this test script.
+    [IO.File]::WriteAllBytes($nativeDll, [byte[]]@(0))
+    Invoke-Checked $setup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"", "/LOG=`"$(Join-Path $results 'installer-repair.log')`"")
+    Invoke-Checked $app @('--native-check')
+    $expectedDll = $nativeManifest.components | Where-Object { $_.path -eq 'bin/WinDivert.dll' }
+    if ((Get-FileHash $nativeDll -Algorithm SHA256).Hash -ne $expectedDll.sha256) { throw 'Actual installer repair did not restore the reviewed component.' }
+    $evidence = 'One-file installer installed the self-contained x64 app, Flowseal fallback and original native pass-through payloads, licences and corresponding sources; obsolete named fixture files were removed. Published app verified/reused Flowseal and native protected components, rejected missing components, verified restoration, and initialized/stopped the native idle driver through IDpiEngine through the default authenticated broker/native named-pipe path. Actual repeat installer execution repaired a deliberately corrupted native DLL from the bundled offline payload. Direct stdin control was separately tested in the Windows integration suite. No internet traffic or ISP bypass test was performed.'
     Set-Content (Join-Path $results 'installer-evidence.txt') $evidence
     Write-Host "::notice title=Installed application acceptance::$evidence"
+} catch {
+    $message = $_.ToString().Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+    Write-Host "::error title=Installer primary failure::$message"
+    $log = Join-Path $results 'installer-install.log'
+    if (Test-Path $log) {
+        $tail = (Get-Content $log | Select-Object -Last 30 | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+        Write-Host "::error title=Installer log tail::$tail"
+    }
+    throw
 } finally {
     $uninstall = Join-Path $install 'unins000.exe'
     if (Test-Path $uninstall) {

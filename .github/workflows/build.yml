@@ -88,49 +88,19 @@ jobs:
             Write-Host "::notice title=$($_.BaseName)::$evidence"
           }
       - shell: pwsh
-        name: Publish bounded UI review preview
+        name: Build protected product and offline installer
         run: |
-          $preview = Get-Content TestResults/ui-preview.txt -Raw
-          # GitHub allows ten notices per step, each at most 4096 characters.
-          # Full-resolution Home/About/Settings/Splash EN/RU/AZ images are always in windows-test-results.
-          if ($preview.Length -gt 40000) { throw 'UI annotation preview exceeds its bounded size.' }
-          for ($offset = 0; $offset -lt $preview.Length; $offset += 4000) {
-            $part = $preview.Substring($offset, [Math]::Min(4000, $preview.Length - $offset))
-            $index = [int]($offset / 4000)
-            Write-Host "::notice title=Northpass UI preview $index::$part"
+          $output = & ./scripts/build.ps1 -Installer 2>&1
+          $result = $LASTEXITCODE
+          $output | Write-Output
+          if ($result -ne 0) {
+            $message = ($output | Select-Object -Last 45 | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Host "::error title=Protected product build::$message"
+            exit $result
           }
       - shell: pwsh
-        name: Publish bounded About review preview
-        run: |
-          $preview = Get-Content TestResults/about-preview.txt -Raw
-          if ($preview.Length -gt 40000) { throw 'About annotation preview exceeds its bounded size.' }
-          for ($offset = 0; $offset -lt $preview.Length; $offset += 4000) {
-            $part = $preview.Substring($offset, [Math]::Min(4000, $preview.Length - $offset))
-            $index = [int]($offset / 4000)
-            Write-Host "::notice title=Northpass About preview $index::$part"
-          }
-      - shell: pwsh
-        name: Publish bounded Settings review preview
-        run: |
-          $preview = Get-Content TestResults/settings-preview.txt -Raw
-          if ($preview.Length -gt 40000) { throw 'Settings annotation preview exceeds its bounded size.' }
-          for ($offset = 0; $offset -lt $preview.Length; $offset += 4000) {
-            $part = $preview.Substring($offset, [Math]::Min(4000, $preview.Length - $offset))
-            $index = [int]($offset / 4000)
-            Write-Host "::notice title=Northpass Settings preview $index::$part"
-          }
-      - shell: pwsh
-        name: Publish bounded Splash review preview
-        run: |
-          $preview = Get-Content TestResults/splash-preview.txt -Raw
-          if ($preview.Length -gt 40000) { throw 'Splash annotation preview exceeds its bounded size.' }
-          for ($offset = 0; $offset -lt $preview.Length; $offset += 4000) {
-            $part = $preview.Substring($offset, [Math]::Min(4000, $preview.Length - $offset))
-            $index = [int]($offset / 4000)
-            Write-Host "::notice title=Northpass Splash preview $index::$part"
-          }
-      - shell: pwsh
-        run: ./scripts/build.ps1 -Installer
+        name: Real medium UI and elevated broker integration
+        run: ./scripts/test-broker.ps1
       - shell: pwsh
         name: Install and verify the published application
         run: ./scripts/test-installer.ps1
@@ -145,7 +115,7 @@ jobs:
           path: dist/Northpass/
       - uses: actions/upload-artifact@v4
         with:
-          name: NorthpassCore-0.2.0-win-x64
+          name: NorthpassCore-0.3.0-win-x64
           path: |
             dist/native/
             dist/native-build/Release/NorthpassCore.exe
