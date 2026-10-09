@@ -51,8 +51,8 @@ try
     var flowseal=Manager("zapret1",client,root);var native=Manager("native",client,root);
     var security=new WindowsInstallationSecurity();
     string dataRoot=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Northpass-BrokerData");security.PrepareRoot(dataRoot);
-    string session=Path.Combine(dataRoot,"owner-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(session);security.ProtectDirectory(session);
-    var store=new DataListStore(session); var data=new ProtectedEngineDataProvider(store,Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"Northpass-StrategyData"),security);
+    string session=Path.Combine(dataRoot,"owner-"+args[5]);Directory.CreateDirectory(session);security.ProtectDirectory(session);
+    var store=new DataListStore(session); var data=new ProtectedEngineDataProvider(store,Path.Combine(session,"snapshots"),security);
     var registry=new EngineRegistry();registry.Register(NativeEngine.Metadata,()=>new NativeEngine(native,useNamedPipe:true));
     registry.Register(Zapret1Engine.Metadata,()=>new Zapret1Engine(flowseal,data,noTrafficCapture: noTraffic));
     await using var controller=new EngineController(registry);

@@ -58,6 +58,8 @@ try {
         if (!$helper.WaitForExit(15000)) { throw 'Owned elevated broker did not clean up successfully.' }
         if ($mode -in @('replay','worker-crash')) { if ($helper.ExitCode -eq 0) { throw 'Fatal security/crash fixture silently succeeded.' } }
         elseif ($mode -ne 'parent-death' -and $helper.ExitCode -ne 0) { throw "Broker exited unexpectedly: $($helper.ExitCode)" }
+        $session = Join-Path $env:ProgramFiles ('Northpass-BrokerData/owner-' + $owner.Pipe)
+        if (Test-Path $session) { throw 'Owned protected session files survived broker cleanup.' }
         $proof = Get-Content $evidence -Raw | ConvertFrom-Json
         if ($proof.UiAdministrator -or !$proof.AuthenticatedElevatedWorker -or $proof.Ipv6UnchangedDatagrams -ne 64 -or !$proof.Metrics.KernelLossUnknown) { throw 'Real privilege/network evidence is invalid.' }
         $remaining = Get-Process -Id $proof.NativePid -ErrorAction SilentlyContinue
