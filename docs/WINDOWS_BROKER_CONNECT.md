@@ -1,5 +1,8 @@
 # Windows broker connection failure: evidence and acceptance
 
+See [WorkerOwner follow-up](WORKER_OWNER_VALIDATION.md) for the newer real-user
+evidence and per-check instrumentation. The original diagnosis below predates it.
+
 ## What was demonstrated
 
 The reported desktop failure has **not** been reproduced on that desktop. A 15–25 second delay matches the 15-second IPC deadline plus up to eight seconds of cleanup, but cannot establish why the worker failed. Successful independent HTTPS probes do not validate the broker or Flowseal startup.

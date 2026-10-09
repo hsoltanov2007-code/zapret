@@ -134,7 +134,7 @@ try
     }
     return 0;
 }
-catch(Exception ex){evidence?.Report(stage,BrokerStartup.SafeCode(ex));Console.Error.WriteLine($"NORTHPASS_BROKER_ERROR stage={stage} code={BrokerStartup.SafeCode(ex)}");int kind=ex switch {UnauthorizedAccessException=>2,InvalidDataException=>3,TimeoutException=>4,_=>1};return 0x4e500000|((int)stage<<8)|kind;}
+catch(Exception ex){evidence?.Report(stage,BrokerStartup.SafeCode(ex),(ex as BrokerSecurityException)?.Detail);Console.Error.WriteLine($"NORTHPASS_BROKER_ERROR stage={stage} code={BrokerStartup.SafeCode(ex)}");int kind=ex switch {UnauthorizedAccessException=>2,InvalidDataException=>3,TimeoutException=>4,_=>1};return 0x4e500000|((int)stage<<8)|kind;}
 finally {evidence?.Dispose();}
 
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]

@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="Northpass.Windows.Tests" />
+    <InternalsVisibleTo Include="Northpass.Tests" />
     <ProjectReference Include="../Northpass.Engine.Native/Northpass.Engine.Native.csproj" />
     <ProjectReference Include="../Northpass.Engine.Zapret1/Northpass.Engine.Zapret1.csproj" />
     <ProjectReference Include="../Northpass.Services/Northpass.Services.csproj" />

@@ -84,7 +84,7 @@ public sealed class BrokerClient : IAsyncDisposable
                 Stage(BrokerStage.PeerIdentity);
                 bool ownedOrigin=false;
                 try { BrokerSecurity.ValidateWorkerOrigin(worker,_helper);ownedOrigin=true;BrokerSecurity.ValidateWorker(worker,_helper); }
-                catch(UnauthorizedAccessException ex){LogReceived?.Invoke($"BROKER_PEER rejected code={BrokerStartup.SafeCode(ex)}");_pipe.Disconnect();if(ownedOrigin)throw;continue;}
+                catch(UnauthorizedAccessException ex){LogReceived?.Invoke($"BROKER_PEER rejected code={BrokerStartup.SafeCode(ex)} detail={(ex as BrokerSecurityException)?.Detail?.Diagnostic??"unavailable"}");_pipe.Disconnect();if(ownedOrigin)throw;continue;}
                 AuthenticatedWorkerIdForAcceptance=worker.Id;
                 Stage(BrokerStage.Authentication);
                 string secret=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
@@ -101,6 +101,7 @@ public sealed class BrokerClient : IAsyncDisposable
         catch(Exception ex)
         {
             int? exit=_helperHandle is null?null:BrokerSecurity.ExitCode(_helperHandle);
+            if(exit is not null && _evidence is {} completed)await completed.DrainExitedAsync();
             var detail=_evidence?.Last;
             BrokerFailureKind kind=BrokerStartup.Classify(ex,token.IsCancellationRequested,_stage,exit);
             var stage=detail?.Stage??_stage;
@@ -108,7 +109,7 @@ public sealed class BrokerClient : IAsyncDisposable
             stage=BrokerStartup.ExitStage(exit)??stage;
             long elapsed=_clock.ElapsedMilliseconds;
             bool cleaned=await CleanupAsync();
-            LastFailure=new(kind,stage,elapsed,detail is {Code:not 0}?detail.Code:BrokerStartup.SafeCode(ex),exit??_lastHelperExit,cleaned);
+            LastFailure=new(kind,stage,elapsed,detail is {Code:not 0}?detail.Code:BrokerStartup.SafeCode(ex),exit??_lastHelperExit,cleaned,(ex as BrokerSecurityException)?.Detail??detail?.Security);
             RecordFailure();
             throw new BrokerStartupException(LastFailure,ex);
         }
@@ -177,7 +178,7 @@ public sealed class BrokerClient : IAsyncDisposable
             if(!await BrokerSecurity.WaitForExitAsync(_helperHandle,TimeSpan.FromSeconds(8)))
                 LogReceived?.Invoke("Privileged helper cleanup timed out; PID "+helper.Id+" remains owned until it exits.");
             if(BrokerSecurity.HasExited(_helperHandle)){_lastHelperExit=BrokerSecurity.ExitCode(_helperHandle);_helperHandle.Dispose();_helperHandle=null;helper.Dispose();_helper=null;}
-            } catch(Exception ex)when(ex is Win32Exception or IOException){LogReceived?.Invoke($"BROKER_CLEANUP observation_failed code={BrokerStartup.SafeCode(ex)} pid={helper.Id}; ownership and leases retained");}
+            } catch(Exception ex)when(ex is Win32Exception or IOException or UnauthorizedAccessException){LogReceived?.Invoke($"BROKER_CLEANUP observation_failed code={BrokerStartup.SafeCode(ex)} pid={helper.Id}; ownership and leases retained");}
         }
         if(_helper is null && _leases is {} leases){foreach(var lease in leases)lease.Dispose();_leases=null;}
         LogReceived?.Invoke("BROKER_CLEANUP completed="+(_helper is null));
