@@ -12,6 +12,8 @@ New installations open in Russian. Saved EN/RU/AZ preferences are preserved; the
 
 ## Production engine and native preview
 
+[Native v0.4 validation](docs/NATIVE_V04_VALIDATION.md) separates synthetic tests, actual Windows loopback/installer acceptance and remaining manual/security/ISP limitations.
+
 v0.6 removes the old Zapret2 adapter, catalog, bundled profiles, installer payload, executable picker and engine switching. The pinned Flowseal-derived Zapret1 module remains the consumer default/fallback. Five reviewed typed strategies preserve argument ordering, repeated options and YouTube/Discord/voice filters without running BAT files or upstream service scripts. The protected install, integrity verification, safe extraction, data-list snapshots, repair/rollback and owned-child lifecycle remain intact. `IDpiEngine` and installer/data interfaces remain replaceable internally.
 
 **Northpass Native Engine v0.4** adds original Northpass Split: strictly validated TCP/ClientHello segment proposals, immutable originals, pre-send rollback and a hard-deadline loopback TLS laboratory with actual packet traces and a toy DPI simulator. Experimental injection cannot be enabled through the UI or privileged broker; normal Native behavior remains pass-through and Flowseal remains the consumer engine. Simulator and local TLS success are **not evidence of ISP bypass**. The offline installer preserves verification, licences and corresponding sources. Read [Split architecture and laboratory](docs/NATIVE_SPLIT.md), [broker security](docs/BROKER_SECURITY.md) and [unexecuted manual desktop/UAC procedures](docs/NATIVE_V04_MANUAL.md).
