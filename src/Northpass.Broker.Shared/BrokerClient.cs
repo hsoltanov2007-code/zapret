@@ -92,7 +92,7 @@ public sealed class BrokerClient : IAsyncDisposable
             await BrokerProtocol.WriteAsync(_pipe,new BrokerRequest(3,_sequence,"STATUS"),timeout.Token);
             try { _=await BrokerProtocol.ReadAsync<BrokerResponse>(_pipe,timeout.Token);throw new InvalidDataException("Privileged broker accepted replayed sequence."); }
             catch(EndOfStreamException){ }
-            catch(IOException ex) when(ex is not InvalidDataException){ }
+            catch(IOException){ }
             await CleanupAsync();
         } finally {_gate.Release();}
     }

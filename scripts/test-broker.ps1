@@ -8,10 +8,9 @@ $results = Join-Path $root 'TestResults'
 New-Item -ItemType Directory -Force $install,$results | Out-Null
 Copy-Item (Join-Path $root 'dist/Northpass/*') $install -Recurse -Force
 function Seal-Installation([string]$Directory) {
-    & "$env:SystemRoot/System32/icacls.exe" $Directory /inheritance:r /grant:r '*S-1-5-32-544:(OI)(CI)F' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-545:(OI)(CI)RX' /T | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Protected application ACL failed.' }
-    & "$env:SystemRoot/System32/icacls.exe" $Directory /setowner '*S-1-5-32-544' /T | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'Protected application ownership failed.' }
+    $fixture = Join-Path $root 'tests/Northpass.TestChild/bin/Release/net8.0/Northpass.TestChild.dll'
+    dotnet $fixture seal-install $Directory
+    if ($LASTEXITCODE -ne 0) { throw 'Protected application ownership/ACL sealing failed.' }
 }
 try {
     Seal-Installation $install
@@ -52,5 +51,5 @@ try {
     throw
 } finally {
     # Remove only the private app checkout after owned processes have exited.
-    if (Test-Path $install) { Remove-Item $install -Recurse -Force }
+    if (Test-Path $install) { Remove-Item $install -Recurse -Force -ErrorAction Continue }
 }

@@ -17,7 +17,7 @@
     <Using Include="Xunit" />
   </ItemGroup>
   <Target Name="CopyTestChild" AfterTargets="Build">
-    <ItemGroup><Fixture Include="../Northpass.TestChild/bin/$(Configuration)/net8.0/Northpass.TestChild.*" /></ItemGroup>
+    <ItemGroup><Fixture Include="../Northpass.TestChild/bin/$(Configuration)/net8.0/*" /></ItemGroup>
     <Copy SourceFiles="@(Fixture)" DestinationFolder="$(OutDir)fixture" />
   </Target>
 </Project>

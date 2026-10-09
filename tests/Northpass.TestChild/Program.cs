@@ -8,6 +8,10 @@ using System.Text;
 
 // A harmless, real child-process fixture. This is not the production engine or a Windows driver.
 string mode = args.FirstOrDefault() ?? "wait";
+if (mode == "seal-install") {
+    if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+    new Northpass.Desktop.WindowsInstallationSecurity().ProtectDirectory(args[1]);return 0;
+}
 if (mode == "medium-launch") return MediumLauncher.Run(args[1], args[2]);
 if (mode == "exit") { Console.Error.WriteLine("fixture startup error"); return 17; }
 if (mode is "protocol" or "protocol-stderr" or "protocol-hang" or "protocol-error")
