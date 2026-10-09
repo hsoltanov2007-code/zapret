@@ -19,6 +19,12 @@ public sealed class BrokerClient : IAsyncDisposable
     private bool OwnedAlive=>OperatingSystem.IsWindows() && _helper is not null && _helperHandle is not null && !BrokerSecurity.HasExited(_helperHandle);
     private List<FileStream>? _leases;
     private uint _sequence;
+    private BrokerStartupEvidence? _evidence;
+    private readonly Stopwatch _clock=new();
+    private BrokerStage _stage;
+    private int? _lastHelperExit;
+    public BrokerFailure? LastFailure { get; private set; }
+    private void Stage(BrokerStage stage) { _stage=stage; LogReceived?.Invoke($"BROKER_CLIENT stage={stage} elapsed_ms={_clock.ElapsedMilliseconds}"); }
     public int AuthenticatedWorkerIdForAcceptance { get; private set; }
     private readonly string? _testHandoff;
     public BrokerClient(string? testHandoff=null) => _testHandoff=testHandoff;
@@ -29,42 +35,72 @@ public sealed class BrokerClient : IAsyncDisposable
     {
         if(_pipe is {IsConnected:true} && OwnedAlive)return;
         await CleanupAsync();
-        if(_helper is not null)throw new IOException("The owned privileged helper has not exited. Retry cleanup before starting another.");
+        if(_helper is not null){LastFailure=new(BrokerFailureKind.CleanupIncomplete,BrokerStage.Cleanup,0,0,null,false);throw new BrokerStartupException(LastFailure);}
+        _clock.Restart();LastFailure=null;_lastHelperExit=null;
         try
         {
-            _leases=BrokerSecurity.VerifyHelper();
+            token.ThrowIfCancellationRequested();
+            Stage(BrokerStage.Installation);_leases=BrokerSecurity.VerifyHelper();
             string id=BrokerPipe.NewId();_pipe=BrokerPipe.CreateServer(id);
+            _evidence=new BrokerStartupEvidence(id,line=>LogReceived?.Invoke(line));
             using var current=Process.GetCurrentProcess();long creation=current.StartTime.ToUniversalTime().ToFileTimeUtc();
             string arguments=$"--owner {Environment.ProcessId} --created {creation} --pipe {id}";
+            Stage(BrokerStage.Elevation);
+            token.ThrowIfCancellationRequested();
             if(_testHandoff is null)
-                _helper=Process.Start(new ProcessStartInfo(BrokerSecurity.HelperPath,arguments){UseShellExecute=true,Verb="runas",WindowStyle=ProcessWindowStyle.Hidden}) ?? throw new IOException("Trusted helper did not start.");
+                _helper=Process.Start(new ProcessStartInfo(BrokerSecurity.HelperPath,arguments){UseShellExecute=true,Verb="runas",WindowStyle=ProcessWindowStyle.Hidden,WorkingDirectory=Path.GetDirectoryName(BrokerSecurity.HelperPath)!}) ?? throw new IOException("Trusted helper did not start.");
             else
             {
                 // Internal CI handoff: real medium UI + pre-elevated helper. This is
                 // explicitly not interactive UAC approval automation or a trust bypass.
-                await File.WriteAllTextAsync(_testHandoff,JsonSerializer.Serialize(new { Owner=Environment.ProcessId,Created=creation,Pipe=id }),token);
+                File.Delete(_testHandoff+".pid");
+                await File.WriteAllTextAsync(_testHandoff+".pending",JsonSerializer.Serialize(new { Owner=Environment.ProcessId,Created=creation,Pipe=id }),token);
+                File.Move(_testHandoff+".pending",_testHandoff,true);
                 for(int attempt=0;!File.Exists(_testHandoff+".pid");attempt++) { if(attempt>500)throw new TimeoutException("CI helper handoff expired.");await Task.Delay(20,token); }
                 _helper=Process.GetProcessById(int.Parse(await File.ReadAllTextAsync(_testHandoff+".pid",token)));
             }
-            _helperHandle=BrokerSecurity.ObserveProcess(_helper);
-            using var startup=CancellationTokenSource.CreateLinkedTokenSource(token);startup.CancelAfter(TimeSpan.FromSeconds(15));
+            _helperHandle=BrokerSecurity.ObserveProcess(_helper);_evidence.Own(_helper);
+            LogReceived?.Invoke($"BROKER_CLIENT elevation=helper-returned pid={_helper.Id}; interactive approval inferred only on shell runas path");
+            using var observation=new CancellationTokenSource();
+            var exited=ObserveExitAsync(_helperHandle,observation.Token);
+            using var startup=CancellationTokenSource.CreateLinkedTokenSource(token);startup.CancelAfter(TimeSpan.FromSeconds(15));var startupElapsed=Stopwatch.StartNew();
+            try {
             for(int attempt=0;attempt<16;attempt++)
             {
-                await _pipe.WaitForConnectionAsync(startup.Token);
+                Stage(BrokerStage.PipeConnect);
+                await BrokerStartup.AwaitAsync(_pipe.WaitForConnectionAsync(startup.Token),exited,token,TimeSpan.FromSeconds(15)-startupElapsed.Elapsed);
                 using var worker=Process.GetProcessById(BrokerPipe.PeerPid(_pipe,true));
-                try { BrokerSecurity.ValidateWorker(worker,_helper); }
-                catch(UnauthorizedAccessException){_pipe.Disconnect();continue;}
+                Stage(BrokerStage.PeerIdentity);
+                bool ownedOrigin=false;
+                try { BrokerSecurity.ValidateWorkerOrigin(worker,_helper);ownedOrigin=true;BrokerSecurity.ValidateWorker(worker,_helper); }
+                catch(UnauthorizedAccessException ex){LogReceived?.Invoke($"BROKER_PEER rejected code={BrokerStartup.SafeCode(ex)}");_pipe.Disconnect();if(ownedOrigin)throw;continue;}
                 AuthenticatedWorkerIdForAcceptance=worker.Id;
+                Stage(BrokerStage.Authentication);
                 string secret=Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-                await BrokerProtocol.WriteAsync(_pipe,"HELLO 3 "+secret,startup.Token);
-                string response=await BrokerProtocol.ReadAsync<string>(_pipe,startup.Token);
+                await BrokerStartup.AwaitAsync(BrokerProtocol.WriteAsync(_pipe,"HELLO 3 "+secret,startup.Token),exited,token,TimeSpan.FromSeconds(15)-startupElapsed.Elapsed);
+                var reading=BrokerProtocol.ReadAsync<string>(_pipe,startup.Token);
+                await BrokerStartup.AwaitAsync(reading,exited,token,TimeSpan.FromSeconds(15)-startupElapsed.Elapsed);
+                string response=await reading;
                 if(response!="AUTH 3 "+secret)throw new UnauthorizedAccessException("Broker authentication failed.");
                 _sequence=0;return;
             }
             throw new UnauthorizedAccessException("Broker owner authentication attempt limit reached.");
+            } finally {observation.Cancel();try{await exited;}catch(OperationCanceledException){}}
         }
-        catch(Win32Exception ex){await CleanupAsync();throw ElevationError(ex);}
-        catch{await CleanupAsync();throw;}
+        catch(Exception ex)
+        {
+            int? exit=_helperHandle is null?null:BrokerSecurity.ExitCode(_helperHandle);
+            var detail=_evidence?.Last;
+            BrokerFailureKind kind=BrokerStartup.Classify(ex,token.IsCancellationRequested,_stage,exit);
+            var stage=detail?.Stage??_stage;
+            // Worker terminal codes also survive a broken evidence channel.
+            stage=BrokerStartup.ExitStage(exit)??stage;
+            long elapsed=_clock.ElapsedMilliseconds;
+            bool cleaned=await CleanupAsync();
+            LastFailure=new(kind,stage,elapsed,detail is {Code:not 0}?detail.Code:BrokerStartup.SafeCode(ex),exit??_lastHelperExit,cleaned);
+            LogReceived?.Invoke(LastFailure.Diagnostic);
+            throw new BrokerStartupException(LastFailure,ex);
+        }
     }
     public async Task<BrokerResponse> RequestAsync(string command,string engine="zapret1",string strategy="",int? port=null,string transport="both",
         string tcp="12",string udp="12",Dictionary<string,string>? lists=null,CancellationToken token=default)
@@ -78,14 +114,25 @@ public sealed class BrokerClient : IAsyncDisposable
             await ConnectCoreAsync(token);if(_sequence==uint.MaxValue)throw new InvalidDataException("Broker sequence exhausted.");
             var request=new BrokerRequest(3,++_sequence,command,engine,strategy,port,transport,tcp,udp,lists);BrokerProtocol.Validate(request,_sequence);
             using var deadline=CancellationTokenSource.CreateLinkedTokenSource(token);deadline.CancelAfter(TimeSpan.FromSeconds(60));
+            if(command is not("STATUS" or "METRICS"))Stage(command=="START"?BrokerStage.EngineStart:BrokerStage.Preparing);
             await BrokerProtocol.WriteAsync(_pipe!,request,deadline.Token);
             var response=await BrokerProtocol.ReadAsync<BrokerResponse>(_pipe!,deadline.Token);
             if(response.Version!=3 || response.Sequence!=_sequence || response.Error.Length>2048 || response.Logs is {Length:>16})throw new InvalidDataException("Broker response schema rejected.");
             foreach(var line in response.Logs??[])LogReceived?.Invoke(line.Length<=2048?line:line[..2048]);
-            if(!response.Success)throw new IOException(response.Error);
+            if(!response.Success)
+            {
+                bool cleaned=await CleanupAsync();
+                LastFailure=new(command=="START"?BrokerFailureKind.EngineLaunchFailed:BrokerFailureKind.LaunchFailed,_stage,_clock.ElapsedMilliseconds,response.SafeCode,null,cleaned);
+                LogReceived?.Invoke(LastFailure.Diagnostic);
+                // Detail is returned only across the fully authenticated control pipe.
+                LogReceived?.Invoke("BROKER_ENGINE "+response.Error);
+                throw new BrokerStartupException(LastFailure);
+            }
+            if(command is not("STATUS" or "METRICS"))Stage(BrokerStage.Ready);
             return response;
         }
-        catch { await CleanupAsync();throw; }
+        catch(BrokerStartupException){throw;}
+        catch(Exception ex) {int? exit=_helperHandle is null?null:BrokerSecurity.ExitCode(_helperHandle);bool cleaned=await CleanupAsync();LastFailure=new(token.IsCancellationRequested?BrokerFailureKind.Cancelled:BrokerFailureKind.IpcDisconnected,_stage,_clock.ElapsedMilliseconds,BrokerStartup.SafeCode(ex),exit,cleaned);LogReceived?.Invoke(LastFailure.Diagnostic);throw new BrokerStartupException(LastFailure,ex);}
         finally {_gate.Release();}
     }
     // Internal headless acceptance only; never called by normal UI commands.
@@ -102,19 +149,28 @@ public sealed class BrokerClient : IAsyncDisposable
             await CleanupAsync();
         } finally {_gate.Release();}
     }
-    private async Task CleanupAsync()
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    private static async Task ObserveExitAsync(SafeProcessHandle handle,CancellationToken token)
+    {while(!BrokerSecurity.HasExited(handle))await Task.Delay(25,token).ConfigureAwait(false);}
+    private async Task<bool> CleanupAsync()
     {
         _pipe?.Dispose();_pipe=null;
+        if(OperatingSystem.IsWindows() && _evidence is {} evidence){await evidence.DisposeAsync();_evidence=null;}
+        AuthenticatedWorkerIdForAcceptance=0;
         if(OperatingSystem.IsWindows() && _helper is {} helper)
         {
+            try {
             // Medium UI cannot force-kill elevated workers. Pipe/owner closure is
             // the shutdown authority; retain/report the PID if shutdown times out.
             if(_helperHandle is null)_helperHandle=BrokerSecurity.ObserveProcess(helper);
             if(!await BrokerSecurity.WaitForExitAsync(_helperHandle,TimeSpan.FromSeconds(8)))
                 LogReceived?.Invoke("Privileged helper cleanup timed out; PID "+helper.Id+" remains owned until it exits.");
-            if(BrokerSecurity.HasExited(_helperHandle)){_helperHandle.Dispose();_helperHandle=null;helper.Dispose();_helper=null;}
+            if(BrokerSecurity.HasExited(_helperHandle)){_lastHelperExit=BrokerSecurity.ExitCode(_helperHandle);_helperHandle.Dispose();_helperHandle=null;helper.Dispose();_helper=null;}
+            } catch(Exception ex)when(ex is Win32Exception or IOException){LogReceived?.Invoke($"BROKER_CLEANUP observation_failed code={BrokerStartup.SafeCode(ex)} pid={helper.Id}; ownership and leases retained");}
         }
         if(_helper is null && _leases is {} leases){foreach(var lease in leases)lease.Dispose();_leases=null;}
+        LogReceived?.Invoke("BROKER_CLEANUP completed="+(_helper is null));
+        return _helper is null;
     }
     public async ValueTask DisposeAsync(){await _gate.WaitAsync();try{await CleanupAsync();}finally{_gate.Release();}}
 }

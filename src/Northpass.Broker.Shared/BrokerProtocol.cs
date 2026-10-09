@@ -10,7 +10,7 @@ namespace Northpass.Broker;
 public sealed record BrokerRequest(int Version, uint Sequence, string Command, string Engine = "zapret1", string Strategy = "",
     int? Port = null, string Transport = "both", string TcpPorts = "12", string UdpPorts = "12", Dictionary<string,string>? Lists = null);
 public sealed record BrokerResponse(int Version, uint Sequence, bool Success, string Error = "", InstalledEngine? Installed = null,
-    EngineStatus? Status = null, EnginePerformance? Performance = null, string[]? Logs = null, bool NoTrafficTest = false);
+    EngineStatus? Status = null, EnginePerformance? Performance = null, string[]? Logs = null, bool NoTrafficTest = false, int SafeCode = 0);
 public static class BrokerProtocol
 {
     public const int MaximumFrame = 8 * 1024 * 1024;

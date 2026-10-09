@@ -1,3 +1,10 @@
+# Windows broker connection correction (desktop 0.7.0 / native 0.4.0)
+
+- Owned helper exit is detected before the IPC deadline; bounded numeric pre-authentication evidence and terminal stage codes distinguish denial, cancellation, timeout, authorization, setup and engine failures.
+- An owner-held bootstrap liveness pipe allows bounded job cleanup before authentication; unconfirmed cleanup retains process ownership and file leases and blocks duplicate launch.
+- Localized recovery guidance and a shared bounded last-error fingerprint prevent unchanged status polling from repeating failure events.
+- Portable startup/cleanup/schema tests, WPF polling/retry checks, actual Windows early-worker rejection and same-client cancellation/retry fixtures, plus manual secure-desktop UAC acceptance. The reported user's exact failing stage remains unverified until desktop acceptance.
+
 # Northpass Native Engine v0.1 (on v0.7)
 
 ## Native Engine 0.3.0 (desktop remains 0.7.0)

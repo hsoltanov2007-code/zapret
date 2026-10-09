@@ -15,6 +15,28 @@ internal static class BrokerAcceptance
         if(BrokerSecurity.IsAdministrator)throw new IOException("Broker acceptance must run as the actual medium desktop user.");
         int modeIndex=Array.IndexOf(args,"--broker-mode");string mode=modeIndex>=0?args[modeIndex+1]:"native";
         var logs=new List<string>();client.LogReceived+=line=>{logs.Add(line);if(logs.Count>32)logs.RemoveAt(0);};
+        if(mode=="early-worker-exit")
+        {
+            try {await client.RequestAsync("DETECT","native");throw new IOException("Substituted owner image unexpectedly authenticated.");}
+            catch(BrokerStartupException ex)
+            {
+                if(ex.Failure.Kind!=BrokerFailureKind.HelperExited || ex.Failure.Stage!=BrokerStage.WorkerOwner || !ex.Failure.CleanupCompleted || ex.Failure.HelperExitCode is null)throw;
+                int evidence=Array.IndexOf(args,"--evidence");
+                await File.WriteAllTextAsync(args[evidence+1],JsonSerializer.Serialize(new { Failure=ex.Failure,Logs=logs,NoEngineStarted=true }));
+                return;
+            }
+        }
+        if(mode=="startup-retry")
+        {
+            using var cancel=new CancellationTokenSource();
+            void CancelAtWait(string line){if(line.StartsWith("BROKER_CLIENT stage=PipeConnect",StringComparison.Ordinal))cancel.Cancel();}
+            client.LogReceived+=CancelAtWait;
+            try {await client.RequestAsync("DETECT","native",token:cancel.Token);throw new IOException("Startup cancellation unexpectedly succeeded.");}
+            catch(BrokerStartupException ex){if(ex.Failure.Kind!=BrokerFailureKind.Cancelled || !ex.Failure.CleanupCompleted || ex.Failure.HelperExitCode is null)throw;}
+            finally {client.LogReceived-=CancelAtWait;}
+            // Same actual client retries with a fresh nonce/helper/leases.
+            await client.RequestAsync("DETECT","native");
+        }
         if(mode=="repair")await native.RepairAsync();
         var installed=await native.EnsureInstalledAsync();
         using var receiver=new UdpClient(new IPEndPoint(IPAddress.IPv6Loopback,0));

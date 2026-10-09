@@ -49,7 +49,7 @@ public static class BrokerSecurity
     }
     public static void ValidatePeer(Process process,string expectedImage,long expectedStart,bool requireAdmin)
     {
-        if(process.HasExited || process.StartTime.ToUniversalTime().ToFileTimeUtc()!=expectedStart)throw new UnauthorizedAccessException("Broker peer process identity changed.");
+        if(CreationTime(process)!=expectedStart)throw new UnauthorizedAccessException("Broker peer process identity changed.");
         char[] buffer=new char[32768];uint length=(uint)buffer.Length;
         using var queried=OpenProcess(0x1000,false,process.Id);
         if(queried.IsInvalid || !QueryFullProcessImageName(queried,0,buffer,ref length) || !Path.GetFullPath(new string(buffer,0,(int)length)).Equals(Path.GetFullPath(expectedImage),StringComparison.OrdinalIgnoreCase))
@@ -95,27 +95,42 @@ public static class BrokerSecurity
     public static SafeProcessHandle ObserveProcess(Process process)
     {
         var handle=OpenProcess(0x101000,false,process.Id); // synchronize + query limited; no write/control access
-        if(handle.IsInvalid){handle.Dispose();throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error());}
+        if(handle.IsInvalid){int error=Marshal.GetLastWin32Error();handle.Dispose();throw new System.ComponentModel.Win32Exception(error);}
         return handle;
     }
+    public static long CreationTime(Process process)
+    {
+        using var handle=ObserveProcess(process);
+        if(HasExited(handle) || !GetProcessTimes(handle,out long created,out _,out _,out _))throw new UnauthorizedAccessException("Broker peer creation time unavailable or process exited.");
+        return created;
+    }
+    public static int? ExitCode(SafeProcessHandle handle)=>HasExited(handle) && GetExitCodeProcess(handle,out int code)?code:null;
+    [DllImport("kernel32.dll",SetLastError=true)]private static extern bool GetProcessTimes(SafeProcessHandle process,out long created,out long exited,out long kernel,out long user);
+    [DllImport("kernel32.dll",SetLastError=true)]private static extern bool GetExitCodeProcess(SafeProcessHandle process,out int code);
     public static bool HasExited(SafeProcessHandle handle)
     {
         uint state=WaitForSingleObject(handle,0);
         return state switch {0=>true,258=>false,_=>throw new IOException("Owned broker process observation failed.")};
     }
-    public static async Task<bool> WaitForExitAsync(SafeProcessHandle handle,TimeSpan timeout)
-    {
-        var clock=Stopwatch.StartNew();while(!HasExited(handle)) {if(clock.Elapsed>=timeout)return false;await Task.Delay(25).ConfigureAwait(false);}return true;
-    }
+    public static Task<bool> WaitForExitAsync(SafeProcessHandle handle,TimeSpan timeout)=>BrokerStartup.WaitForCleanupAsync(()=>HasExited(handle),timeout);
     [DllImport("kernel32.dll",SetLastError=true)]private static extern uint WaitForSingleObject(SafeProcessHandle process,uint timeout);
     public static void ValidateWorker(Process worker,Process bootstrap)
     {
-        if(bootstrap.HasExited || worker.StartTime<bootstrap.StartTime)throw new UnauthorizedAccessException("Broker bootstrap ownership changed.");
+        ValidateWorkerOrigin(worker,bootstrap);
+        ValidatePeer(worker,Path.Combine(AppContext.BaseDirectory,"broker","Northpass.Broker.Worker.exe"),CreationTime(worker),true);
+    }
+    public static void ValidateWorkerOrigin(Process worker,Process bootstrap)
+    {
+        if(CreationTime(worker)<CreationTime(bootstrap))throw new UnauthorizedAccessException("Broker bootstrap ownership changed.");
         using var snapshot=CreateToolhelp32Snapshot(2,0);
         var entry=new ProcessEntry{Size=(uint)Marshal.SizeOf<ProcessEntry>()};bool matched=false;
         if(Process32First(snapshot,ref entry))do{if(entry.Pid==worker.Id){matched=entry.ParentPid==bootstrap.Id;break;}}while(Process32Next(snapshot,ref entry));
         if(!matched)throw new UnauthorizedAccessException("Broker worker is not the owned bootstrap child.");
-        ValidatePeer(worker,Path.Combine(AppContext.BaseDirectory,"broker","Northpass.Broker.Worker.exe"),worker.StartTime.ToUniversalTime().ToFileTimeUtc(),true);
+        // Advisory evidence needs only held bootstrap ownership and exact image;
+        // it must still be available when subsequent token authorization fails.
+        using var queried=ObserveProcess(worker);char[] image=new char[32768];uint length=(uint)image.Length;
+        if(!QueryFullProcessImageName(queried,0,image,ref length) || !Path.GetFullPath(new string(image,0,(int)length)).Equals(Path.Combine(AppContext.BaseDirectory,"broker","Northpass.Broker.Worker.exe"),StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("Broker worker executable substitution rejected.");
     }
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]private struct ProcessEntry
     {public uint Size,Usage,Pid;public UIntPtr Heap;public uint Module,Threads,ParentPid;public int Priority;public uint Flags;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=260)]public string Name;}

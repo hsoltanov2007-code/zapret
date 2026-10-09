@@ -118,7 +118,7 @@ public sealed class BrokerEngine : IDpiEngine,IEnginePerformanceProvider
     {
         var previous=_status;
         if(_started)try{var r=await _client.RequestAsync("STATUS",_id,token:token);_status=r.Status??throw new InvalidDataException("Missing component status.");}
-        catch(Exception ex) when (ex is not OperationCanceledException){_status=new(EngineState.Error,Error:ex.Message);}
+        catch(Exception ex) when (ex is not OperationCanceledException){_started=false;_status=new(EngineState.Error,Error:ex.Message);}
         if(_status!=previous)StatusChanged?.Invoke(_status); // retain EngineController's bounded recovery notifications
         return _status;
     }

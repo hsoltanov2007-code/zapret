@@ -44,6 +44,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private string _enginePath = "", _language = "ru", _result = "", _log = "";
     private bool _tray = true, _autoStart, _recover, _checkUpdates;
     private EngineStatus _status = new(EngineState.Disconnected);
+    private readonly ConnectionErrorTracker _errors=new();
     private int _pageIndex;
     private readonly bool _developerTools;
     private bool _hasStartedSession;
@@ -270,6 +271,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
 
     private async Task ToggleAsync()
     {
+        _errors.BeginAttempt();
         await CancelDiagnosticsAsync();
         if (SessionOpen) { await _controller.DisconnectAsync(_lifetime.Token); ApplyStatus(await _controller.GetStatusAsync(_lifetime.Token)); BeginDiagnostics(); return; }
         // End any pending crash recovery before preparing a manually requested session.
@@ -551,10 +553,13 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (path is not null) { File.WriteAllText(path, LogText); Log("Diagnostics exported. Review paths and hostnames before sharing."); }
     }
     private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); CancelTestCommand.Refresh(); ServiceProbesCommand.Refresh(); }
-    private void SetMessage(string key) { _messageKey = key; Changed(nameof(UserMessage)); }
+    private void SetMessage(string key) { if(_messageKey==key)return;_messageKey = key; Changed(nameof(UserMessage)); }
     public void Fail(Exception ex, string messageKey = "ActionFailed")
     {
-        ResultText = ex.Message; Log("Error: " + ex.Message);
+        if(_errors.Observe(ex.Message))Log("Error: " + ex.Message);
+        string? brokerKey=Northpass.Broker.BrokerFailureMessage.Key(ex);
+        ResultText = brokerKey is null?ex.Message:Strings[brokerKey];
+        if(brokerKey is not null)messageKey=brokerKey;
         if (messageKey == "InstallationFailed" && (ex is FileNotFoundException ||
             ex is InvalidDataException && (ex.Message.Contains("acquisition.zip", StringComparison.OrdinalIgnoreCase) ||
             ex.Message.Contains("Offline engine payload", StringComparison.OrdinalIgnoreCase)))) messageKey = "ReinstallRequired";
@@ -579,6 +584,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (status.State == EngineState.Active) _hasStartedSession = true;
         foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(ConnectText), nameof(SessionDuration), nameof(ConnectionNote) }) Changed(name);
         if (status.Error is not null) Fail(new IOException(status.Error), "ConnectionFailed");
+        else _errors.Observe(null);
         RefreshCommands();
     }
     public async Task RefreshAsync()

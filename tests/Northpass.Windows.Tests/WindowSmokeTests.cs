@@ -39,7 +39,8 @@ public sealed class WindowSmokeTests
                     var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                     try
                     {
-                        var registry = new EngineRegistry(); registry.Register(Zapret1Engine.Metadata, () => new SessionFixture());
+                        var fixtures=new List<SessionFixture>();
+                        var registry = new EngineRegistry(); registry.Register(Zapret1Engine.Metadata, () => {var fixture=new SessionFixture();fixtures.Add(fixture);return fixture;});
                         var profiles = new ProfileStore(Path.Combine(temporary, "profiles"));
                         profiles.Save(new() { Id = "draft", Name = "Draft", Engine = "ZAPRET2", Arguments = [] });
                         using var http = new HttpClient();
@@ -144,6 +145,27 @@ public sealed class WindowSmokeTests
                         Assert.False(model.SessionOpen); Assert.Equal("Disconnected", model.StatusText);
                         Assert.Equal(0, desktop.Consents); Assert.True(selector.IsEnabled);
                         Assert.Equal(ServiceAvailability.Available, model.ServiceCards[0].Availability);
+                        stage = "failure event deduplication with an explicit session fixture";
+                        var used=fixtures.Last(fixture=>fixture.Starts>0);
+                        var brokerFailure=new Northpass.Broker.BrokerFailure(Northpass.Broker.BrokerFailureKind.HelperExited,Northpass.Broker.BrokerStage.WorkerOwner,52,5,0x4e500601,true);
+                        used.StartError=brokerFailure.Diagnostic;model.ClearLogsCommand.Execute(null);
+                        model.Language="ru";model.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);
+                        for(int poll=0;poll<10;poll++)await model.RefreshAsync();
+                        Assert.Equal(1,model.LogText.Split("Error: "+brokerFailure.Diagnostic,StringSplitOptions.None).Length-1);
+                        Assert.Equal(model.Strings["BrokerExited"],model.UserMessage);
+                        Assert.Equal(model.Strings["BrokerExited"],model.ResultText);
+                        model.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);
+                        await model.RefreshAsync();
+                        Assert.Equal(2,model.LogText.Split("Error: "+brokerFailure.Diagnostic,StringSplitOptions.None).Length-1);
+                        used.StartError="different engine fixture error";model.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);await model.RefreshAsync();
+                        Assert.Equal(1,model.LogText.Split("Error: different engine fixture error",StringSplitOptions.None).Length-1);
+                        used.StartError=null;model.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);
+                        Assert.True(model.SessionOpen);model.ConnectCommand.Execute(null);
+                        await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);Assert.False(model.SessionOpen);
                         stage = "custom modal accept and cancel";
                         foreach (bool accept in new[] { false, true })
                         {
@@ -370,11 +392,14 @@ public sealed class WindowSmokeTests
     private sealed class SessionFixture(EngineDescriptor? metadata = null) : IDpiEngine
     {
         private EngineStatus _status = new(EngineState.Disconnected);
+        public int Starts;public string? StartError;
         public EngineDescriptor Descriptor => metadata ?? Zapret1Engine.Metadata;
         public event Action<string>? LogReceived;
         public event Action<EngineStatus>? StatusChanged;
         public Task StartAsync(EngineConfiguration configuration, CancellationToken token = default)
         {
+            Starts++;
+            if(StartError is {} error){_status=new(EngineState.Error,Error:error);StatusChanged?.Invoke(_status);throw new IOException(error);}
             _status = new(EngineState.Active, 4242, DateTimeOffset.UtcNow);
             LogReceived?.Invoke("UI session fixture only; no process launched.");
             StatusChanged?.Invoke(_status); return Task.CompletedTask;
