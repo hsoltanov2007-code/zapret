@@ -47,6 +47,10 @@ public sealed class FlowsealTests : IDisposable
         using var lease = new FixtureLease(_root);
         var info = Zapret1Engine.CreateStartInfo(new(exe, profile), lease);
         Assert.False(info.UseShellExecute); Assert.Empty(info.Arguments); Assert.Equal(Path.GetFullPath(exe), info.FileName);
+        Assert.Contains(info.ArgumentList, a => a.StartsWith("--wf-tcp=80,443,", StringComparison.Ordinal));
+        Assert.Contains(info.ArgumentList, a => a.StartsWith("--wf-udp=443,", StringComparison.Ordinal));
+        Assert.DoesNotContain(info.ArgumentList, a => a.StartsWith("--wf-raw", StringComparison.Ordinal));
+        Assert.DoesNotContain(info.ArgumentList, a => a.StartsWith("--debug", StringComparison.Ordinal));
         Assert.DoesNotContain("CYGWIN", info.Environment.Keys); Assert.DoesNotContain("LUA_INIT", info.Environment.Keys);
         var noCapture = Zapret1Engine.CreateStartInfo(new(exe, profile), lease, true);
         Assert.Equal("--wf-raw=false", noCapture.ArgumentList[0]); Assert.DoesNotContain(noCapture.ArgumentList, a => a.StartsWith("--wf-tcp="));

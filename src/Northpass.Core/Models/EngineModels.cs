@@ -2,7 +2,7 @@ namespace Northpass.Models;
 
 public enum EngineState { Disconnected, Connecting, Active, Stopping, Error }
 public sealed record EngineStatus(EngineState State, int? ProcessId = null,
-    DateTimeOffset? StartedAt = null, int? ExitCode = null, string? Error = null);
+    DateTimeOffset? StartedAt = null, int? ExitCode = null, string? Error = null, TrafficEvidence? Traffic = null);
 public sealed record EngineConfiguration(string ExecutablePath, StrategyProfile Profile);
 public sealed record ValidationIssue(string Code, string Message);
 public sealed record ValidationResult(IReadOnlyList<ValidationIssue> Issues)
@@ -12,3 +12,9 @@ public sealed record ValidationResult(IReadOnlyList<ValidationIssue> Issues)
     public static ValidationResult Valid { get; } = new(Array.Empty<ValidationIssue>());
 }
 public sealed record EngineDescriptor(string Id, string Name, string ExecutableName);
+
+// No payloads, addresses or fabricated packet counters. Initialized is evidence
+// of an opened capture handle, not evidence that a packet matched a DPI rule.
+public enum CaptureState { Unconfirmed, Initialized, Unavailable, Failed, TestDisabled }
+public sealed record TrafficEvidence(CaptureState Capture, string Strategy, string TcpPorts, string UdpPorts,
+    bool? TrafficMatched = null, bool? TransformationConfirmed = null);

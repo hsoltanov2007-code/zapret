@@ -138,7 +138,7 @@ jobs:
           ./scripts/build-native.ps1
           dotnet restore tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj --locked-mode
           if ($LASTEXITCODE -ne 0) { throw 'Compatibility restore failed.' }
-          $output = dotnet test tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~NativeSplitLabWindowsTests|FullyQualifiedName~BrokerSecurityWindowsTests|FullyQualifiedName~BrokerEvidenceWindowsTests" --logger trx --results-directory TestResults 2>&1
+          $output = dotnet test tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~NativeSplitLabWindowsTests|FullyQualifiedName~BrokerSecurityWindowsTests|FullyQualifiedName~BrokerEvidenceWindowsTests|FullyQualifiedName~FlowsealCaptureWindowsTests" --logger trx --results-directory TestResults 2>&1
           $result = $LASTEXITCODE
           $output | Write-Output
           if ($result -ne 0) {
