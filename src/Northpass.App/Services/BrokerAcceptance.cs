@@ -22,6 +22,7 @@ internal static class BrokerAcceptance
         int port=((IPEndPoint)receiver.Client.LocalEndPoint!).Port;
         if(port is <49152 or >65535)throw new IOException("A dedicated reserved loopback socket is required.");
         await using var engine=new BrokerEngine(client,"native");
+        bool faultNotification=false;engine.StatusChanged+=status=>{if(status.State==EngineState.Error)faultNotification=true;};
         await engine.StartAsync(new(installed.ExecutablePath,NativeCatalog.Loopback(port,"udp")));
         if((await engine.GetStatusAsync()).State!=EngineState.Active)throw new IOException("Real broker/native initialization failed.");
         byte[] original=Enumerable.Range(0,128).Select(i=>(byte)i).ToArray();
@@ -58,6 +59,7 @@ internal static class BrokerAcceptance
             await checkedEngine.StopAsync(); // only CI --test-no-traffic bootstrap permits this acceptance path
         }
         if(mode=="replay")await client.VerifyReplayRejectionForAcceptanceAsync();
+        if(mode is "worker-crash" or "disconnect-active" && !faultNotification)throw new IOException("Owned failure did not notify the replaceable controller.");
         var result=new{UiAdministrator=false,AuthenticatedElevatedWorker=true,Mode=mode,NativePid=nativePid,Ipv6UnchangedDatagrams=64,Metrics=metrics,
             Scope="Dedicated loopback only; Flowseal check requires explicit filter=false test bootstrap. No DPI bypass/hardware certification.",Logs=logs};
         int output=Array.IndexOf(args,"--evidence");if(output>=0)await File.WriteAllTextAsync(args[output+1],JsonSerializer.Serialize(result));

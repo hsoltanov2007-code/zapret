@@ -116,8 +116,10 @@ public sealed class BrokerEngine : IDpiEngine,IEnginePerformanceProvider
     {await _operations.WaitAsync(token);try{return await StatusCoreAsync(token);}finally{_operations.Release();}}
     private async Task<EngineStatus> StatusCoreAsync(CancellationToken token)
     {
+        var previous=_status;
         if(_started)try{var r=await _client.RequestAsync("STATUS",_id,token:token);_status=r.Status??throw new InvalidDataException("Missing component status.");}
         catch(Exception ex) when (ex is not OperationCanceledException){_status=new(EngineState.Error,Error:ex.Message);}
+        if(_status!=previous)StatusChanged?.Invoke(_status); // retain EngineController's bounded recovery notifications
         return _status;
     }
     public async Task<EnginePerformance?> GetPerformanceAsync(CancellationToken cancellationToken=default)
