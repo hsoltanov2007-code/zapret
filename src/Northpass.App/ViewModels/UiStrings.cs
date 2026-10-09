@@ -20,6 +20,7 @@ public sealed class UiStrings(string language)
         ["TelegramTimeout"] = ("Timed out", "Истекло время ожидания", "Gözləmə vaxtı bitdi"),
         ["TelegramTcpError"] = ("TCP connection error", "Ошибка TCP-подключения", "TCP bağlantı xətası"),
         ["TelegramInvalidResponse"] = ("Unexpected initial response", "Неожиданный начальный ответ", "Gözlənilməz ilkin cavab"),
+        ["TelegramInternalError"] = ("Local check error", "Локальная ошибка проверки", "Yerli yoxlama xətası"),
         ["TelegramClosed"] = ("Connection closed", "Соединение закрыто", "Bağlantı bağlandı"),
         ["TelegramProbeCancelled"] = ("Check cancelled", "Проверка отменена", "Yoxlama ləğv edildi"),
         ["EngineRunning"] = ("Engine running", "Движок работает", "Mühərrik işləyir"),

@@ -8,7 +8,7 @@ using Northpass.Models;
 namespace Northpass.Services;
 
 public enum TelegramTransport { Abridged, ObfuscatedAbridged }
-public enum TelegramProbeState { InitialResponse, Timeout, TcpError, InvalidResponse, Closed }
+public enum TelegramProbeState { InitialResponse, Timeout, TcpError, InvalidResponse, Closed, InternalError }
 public sealed record TelegramProbeResult(int Dc, string Family, TelegramTransport Transport,
     TelegramProbeState State, string Stage, int SafeCode, long ElapsedMilliseconds, bool ConfiguredRuleMatch);
 
@@ -23,10 +23,10 @@ public static class TelegramProbe
         var ip = IPAddress.Parse(endpoint.Address); var watch = Stopwatch.StartNew(); string stage = "TCP";
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(token); deadline.CancelAfter(TimeSpan.FromSeconds(4));
         using var client = new TcpClient(ip.AddressFamily);
-        using var session = new TelegramProbeSession(endpoint.Dc, transport);
         TelegramProbeState state; int code = 0;
         try
         {
+            using var session = new TelegramProbeSession(endpoint.Dc, transport);
             await client.ConnectAsync(ip, endpoint.Port, deadline.Token); stage = "MTProto";
             await session.ExchangeAsync(client.GetStream(), deadline.Token); state = TelegramProbeState.InitialResponse;
         }
@@ -35,6 +35,7 @@ public static class TelegramProbe
         catch (EndOfStreamException) { state = TelegramProbeState.Closed; }
         catch (InvalidDataException) { state = TelegramProbeState.InvalidResponse; }
         catch (IOException) { state = TelegramProbeState.TcpError; }
+        catch (CryptographicException ex) { state = TelegramProbeState.InternalError; code = ex.HResult; }
         token.ThrowIfCancellationRequested();
         return new(endpoint.Dc, ip.AddressFamily == AddressFamily.InterNetwork ? "IPv4" : "IPv6", transport, state, stage, code,
             watch.ElapsedMilliseconds, TelegramEndpoints.Matches(ip, endpoint.Port));

@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Net;
+using System.Security.Cryptography;
 using Northpass.Engine.Zapret1;
 using Northpass.Models;
 using Northpass.Services;
@@ -65,20 +66,46 @@ public sealed class TelegramTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>TelegramProbe.ProbeAsync(TelegramEndpoints.Bootstrap[0],TelegramTransport.Abridged,c.Token));
         await Assert.ThrowsAsync<ArgumentException>(()=>TelegramProbe.ProbeAsync(new(1,"127.0.0.1",443),TelegramTransport.Abridged,default));
     }
-    [Fact]
-    public async Task SyntheticAbridgedServerChecksHarmlessRequestAndValidatesInitialReply()
+    [Theory]
+    [InlineData(TelegramTransport.Abridged)]
+    [InlineData(TelegramTransport.ObfuscatedAbridged)]
+    public async Task SyntheticAbridgedServerChecksHarmlessRequestAndValidatesInitialReply(TelegramTransport transport)
     {
         // Explicit memory-stream fixture, not a real Telegram server/network.
-        using var session=new TelegramProbeSession(1,TelegramTransport.Abridged);
+        using var session=new TelegramProbeSession(1,transport);
         using var stream=new ReplyStream();await session.ExchangeAsync(stream,default);
-        Assert.Equal(42,stream.Request!.Length);Assert.Equal(0xef,stream.Request[0]);
-        Assert.Equal(0x60469778u,BinaryPrimitives.ReadUInt32LittleEndian(stream.Request.AsSpan(22)));
-        Assert.All(stream.Request.Skip(2).Take(8),x=>Assert.Equal(0,x));
+        Assert.Equal(transport == TelegramTransport.Abridged ? 42 : 105,stream.Request!.Length);
+        Assert.Equal(0x60469778u,BinaryPrimitives.ReadUInt32LittleEndian(stream.Decoded!.AsSpan(21)));
+        Assert.All(stream.Decoded!.Skip(1).Take(8),x=>Assert.Equal(0,x));
     }
     private sealed class ReplyStream : Stream
     {
-        public byte[]? Request; private MemoryStream? response;
-        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,CancellationToken token=default) { Request=buffer.ToArray();byte[] nonce=Request.AsSpan(26,16).ToArray(),p=Reply(nonce);response=new MemoryStream(new[]{(byte)(p.Length/4)}.Concat(p).ToArray());return ValueTask.CompletedTask; }
+        public byte[]? Request,Decoded; private MemoryStream? response;
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer,CancellationToken token=default)
+        {
+            Request=buffer.ToArray();
+            byte[]? reversed=null;
+            if(Request.Length==42) { Assert.Equal(0xef,Request[0]);Decoded=Request.AsSpan(1).ToArray(); }
+            else {
+                // Independently emulate the synthetic server's AES-CTR stream.
+                byte[] encrypted=Request.ToArray();var key=Request.AsSpan(8,32).ToArray();var iv=Request.AsSpan(40,16).ToArray();
+                reversed=Request.AsSpan(8,48).ToArray();Array.Reverse(reversed);
+                Ctr(encrypted,key,iv);Assert.Equal(0xefefefefu,BinaryPrimitives.ReadUInt32LittleEndian(encrypted.AsSpan(56)));
+                Assert.Equal(1,BinaryPrimitives.ReadInt16LittleEndian(encrypted.AsSpan(60)));Decoded=encrypted.AsSpan(64).ToArray();
+            }
+            byte[] nonce=Decoded.AsSpan(25,16).ToArray(),p=Reply(nonce);byte[] framed=new[]{(byte)(p.Length/4)}.Concat(p).ToArray();
+            if(reversed!=null)Ctr(framed,reversed.AsSpan(0,32).ToArray(),reversed.AsSpan(32,16).ToArray());
+            response=new MemoryStream(framed);return ValueTask.CompletedTask;
+        }
+        private static void Ctr(byte[] data,byte[] key,byte[] iv)
+        {
+            using var aes=Aes.Create();aes.Key=key;
+            for(int offset=0;offset<data.Length;offset+=16) {
+                byte[] block=aes.EncryptEcb(iv,PaddingMode.None);
+                for(int j=0;j<16 && offset+j<data.Length;j++)data[offset+j]^=block[j];
+                for(int j=15;j>=0;j--)if(++iv[j]!=0)break;
+            }
+        }
         public override ValueTask<int> ReadAsync(Memory<byte> buffer,CancellationToken token=default)=>response!.ReadAsync(buffer,token);
         public override bool CanRead=>true;public override bool CanWrite=>true;public override bool CanSeek=>false;
         public override long Length=>throw new NotSupportedException();public override long Position{get=>throw new NotSupportedException();set=>throw new NotSupportedException();}

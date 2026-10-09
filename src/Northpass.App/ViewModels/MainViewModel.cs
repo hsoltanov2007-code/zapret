@@ -180,7 +180,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             var result = await TelegramProbe.ProbeAsync(endpoint,transport,token);
             results.Add($"DC{result.Dc} {result.Family} {result.Transport}: {Strings["Telegram"+result.State]} ({result.ElapsedMilliseconds} ms)");
             string display=string.Join("\n",results)+"\n"+Strings["TelegramProbeScope"];
-            _dispatcher.BeginInvoke(new Action(()=> { if(!_disposed) TelegramResult=display; }));
+            _ = _dispatcher.BeginInvoke(new Action(()=> { if(!_disposed) TelegramResult=display; }));
             EngineLog($"TELEGRAM_PROBE dc={result.Dc} family={result.Family} transport={result.Transport} stage={result.Stage} state={result.State} code={result.SafeCode} elapsed_ms={result.ElapsedMilliseconds} configured_match={result.ConfiguredRuleMatch} capture_init={snapshot.Traffic?.Capture.ToString() ?? "Unconfirmed"} interception=unknown messages=untested");
         }
     }
@@ -513,7 +513,11 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task CancelDiagnosticsAsync()
     {
         _telegramCancellation?.Cancel();
-        if (_telegramTask is { } telegram) { try { await telegram; } catch (OperationCanceledException) { } }
+        if (_telegramTask is { } telegram) {
+            try { await telegram; }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Log("TELEGRAM_PROBE worker_error code="+ex.HResult); } // A side check must never prevent Disconnect/shutdown.
+        }
         InvalidateDiagnostics();
         if (_diagnosticsTask is { } task) await task;
     }
