@@ -9,6 +9,7 @@ using Northpass.Services;
 using Northpass.Services.Installation;
 using Northpass.ViewModels;
 using Northpass.Presentation;
+using Northpass.Broker;
 
 namespace Northpass;
 
@@ -16,6 +17,7 @@ public partial class App : Application
 {
     private Mutex? _instance;
     private HttpClient? _http;
+    private BrokerClient? _broker;
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -38,27 +40,42 @@ public partial class App : Application
             var profiles = new ProfileStore(System.IO.Path.Combine(settings.Folder, "profiles"));
             _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false }) { Timeout = TimeSpan.FromSeconds(15) };
             var dataLists = new DataListStore(Path.Combine(settings.Folder, "lists"));
+            IEngineInstallationManager flowseal;
+            IEngineInstallationManager? native = null;
+#if NORTHPASS_BROKER_PREVIEW
+            int handoff=e.Args.ToList().IndexOf("--broker-test-handoff");
+            _broker=new BrokerClient(handoff>=0 && handoff+1<e.Args.Length?e.Args[handoff+1]:null);
+            flowseal=new BrokerInstallation(_broker,"zapret1");
+            registry.Register(Zapret1Engine.Metadata,()=>new BrokerEngine(_broker,"zapret1",dataLists));
+            if(NativeCatalog.IsBundled){native=new BrokerInstallation(_broker,"native");registry.Register(NativeEngine.Metadata,()=>new BrokerEngine(_broker,"native"));}
+            if(e.Args.Contains("--broker-check"))
+            {
+                if(native is null)throw new IOException("Native offline components missing.");
+                await BrokerAcceptance.CheckAsync(_broker,flowseal,native,e.Args);
+                await _broker.DisposeAsync();_broker=null;Shutdown(0);return;
+            }
+#else
             var data = new ProtectedEngineDataProvider(dataLists,
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-StrategyData"), new WindowsInstallationSecurity());
             using var flowsealManifest = FlowsealCatalog.OpenTrustedManifest();
             var flowsealPrevious = new List<EngineManifest>();
             foreach (var stream in FlowsealCatalog.OpenPreviousTrustedManifests()) using (stream) flowsealPrevious.Add(EngineManifest.Parse(stream));
-            var flowseal = new EngineInstallationManager(
+            flowseal = new EngineInstallationManager(
                 Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Flowseal"),
                 _http, new WindowsInstallationSecurity(), EngineManifest.Parse(flowsealManifest), previous: flowsealPrevious,
                 offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "flowseal-offline.zip"),
                 probe: Zapret1Engine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
             registry.Register(Zapret1Engine.Metadata, () => new Zapret1Engine(flowseal, data));
-            EngineInstallationManager? native = null;
             if (NativeCatalog.IsBundled)
             {
                 using var manifest = NativeCatalog.OpenTrustedManifest();
-                native = new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.2"),
+                native = new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.3"),
                     _http, new WindowsInstallationSecurity(), EngineManifest.Parse(manifest),
                     offlinePayload: Path.Combine(AppContext.BaseDirectory, "engine-payload", "native-offline.zip"),
                     probe: NativeEngine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
                 registry.Register(NativeEngine.Metadata, () => new NativeEngine(native, useNamedPipe: e.Args.Contains("--native-ipc-check")));
             }
+#endif
             // Internal acceptance path; never switches the consumer UI to a non-bypass engine.
             if (e.Args.Contains("--native-check") || e.Args.Contains("--native-ipc-check"))
             {
@@ -97,13 +114,22 @@ public partial class App : Application
             System.Diagnostics.Trace.WriteLine(ex);
             if (model is not null)
             { try { await model.DisposeAsync(); } catch (Exception cleanup) { System.Diagnostics.Trace.WriteLine(cleanup); } }
-            if (!e.Args.Contains("--installation-check") && !e.Args.Contains("--native-check") && !e.Args.Contains("--native-ipc-check"))
+            if(_broker is not null){try{await _broker.DisposeAsync();}catch(Exception cleanup){System.Diagnostics.Trace.WriteLine(cleanup);}_broker=null;}
+            if(e.Args.Contains("--broker-check"))
+            {
+                int output=e.Args.ToList().IndexOf("--evidence");
+                if(output>=0 && output+1<e.Args.Length)File.WriteAllText(e.Args[output+1],ex.ToString());
+            }
+            if (!e.Args.Contains("--installation-check") && !e.Args.Contains("--native-check") && !e.Args.Contains("--native-ipc-check") && !e.Args.Contains("--broker-check"))
                 ProductDialog.Show(MainWindow?.IsVisible == true ? MainWindow : null, strings, strings["StartupFailed"], false);
             Shutdown(1);
         }
     }
     protected override void OnExit(ExitEventArgs e)
     {
+        // The window has already awaited owned engine shutdown. Closing the
+        // channel tells the helper to clean up any remaining owned operations.
+        _broker?.DisposeAsync().AsTask().GetAwaiter().GetResult();_broker=null;
         _http?.Dispose();
         if (_instance is not null) { _instance.ReleaseMutex(); _instance.Dispose(); }
         base.OnExit(e);

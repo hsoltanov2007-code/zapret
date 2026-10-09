@@ -1,0 +1,61 @@
+#include "northpass/transformation.hpp"
+#include "northpass/reliability.hpp"
+#include "northpass/flow.hpp"
+#include <iostream>
+#include <limits>
+#include <stdexcept>
+using namespace northpass;
+namespace {
+void require(bool b) { if (!b) throw std::runtime_error("Foundation assertion failed"); }
+std::vector<std::uint8_t> udp(std::size_t length=36) {
+    std::vector<std::uint8_t> p(length); p[0]=0x45; p[2]=static_cast<std::uint8_t>(length>>8); p[3]=static_cast<std::uint8_t>(length);
+    p[8]=64; p[9]=17; p[20]=200; p[22]=201; p[24]=static_cast<std::uint8_t>((length-20)>>8); p[25]=static_cast<std::uint8_t>(length-20); return p;
+}
+void run(std::string_view name) {
+    auto bytes=udp(); TransformConfiguration c{3,TransformScope::Synthetic,TransformCapability::SyntheticByteReplacement,1500};
+    if (name=="transformation") {
+        PacketTransaction t(bytes,c); bytes[28]=99; require(t.original()[28]==0);
+        require(t.propose({3,{{28,{42,43}}}}) && !t.committed() && t.result()[28]==0);
+        require(t.commit() && t.result()[28]==42 && t.original()[28]==0); t.rollback(); require(t.result()[28]==0);
+        c.scope=TransformScope::Live; c.capabilities=TransformCapability::None; PacketTransaction live(udp(),c);
+        require(!live.propose({3,{{28,{42}}}}) && live.result()[28]==0);
+    } else if (name=="rollback") {
+        PacketTransaction t(bytes,c);
+        for (const auto& p: {TransformProposal{2,{{28,{42}}}}, {3,{{36,{42}}}}, {3,{{std::numeric_limits<std::size_t>::max(),{42}}}},
+             {3,{{28,{42,43}},{29,{44}}}}, {3,{{2,{0,1}}}}, {3,{{28,{}}}}}) {
+            require(t.propose({3,{{28,{7}}}}) && t.commit()); require(!t.propose(p) && !t.committed());
+            require(std::equal(t.result().begin(),t.result().end(),bytes.begin()));
+        }
+    } else if (name=="lifecycle") {
+        struct StrategyTest:TransformStrategy {
+            int initialized{},stopped{}; bool failure{};
+            void initialize(const TransformConfiguration&) override { ++initialized; }
+            TransformProposal propose(std::span<const std::uint8_t>) override { if(failure) throw std::bad_alloc(); return {3,{{28,{7}}}}; }
+            void shutdown() noexcept override { ++stopped; }
+        } s;
+        require(evaluate_synthetic(s,bytes,c)[28]==7 && s.initialized==1 && s.stopped==1);
+        s.failure=true; require(evaluate_synthetic(s,bytes,c)==bytes && s.stopped==2);
+        c.version=99; require(evaluate_synthetic(s,bytes,c)==bytes);
+    } else if (name=="checksums") {
+        PacketMetadata m{true,true,false,false,false,false,false};
+        require(observe_checksum(bytes,m)==ChecksumObservation::OffloadUnverified);
+        m.ip_checksum=true; require(observe_checksum(bytes,m)==ChecksumObservation::Invalid);
+        m.ipv6=true; require(!metadata_consistent(bytes,m)); m.ipv6=false; m.impostor=true; require(!metadata_consistent(bytes,m));
+    } else if (name=="mtu") {
+        for (auto size : {std::size_t(68),std::size_t(1500),std::size_t(65535)}) {
+            auto p=udp(size); c.mtu=size; PacketTransaction t(p,c); require(t.propose({}) && t.commit() && t.result().size()==size);
+        }
+        bool rejected=false; try { c.mtu=1500; PacketTransaction t(udp(1501),c); } catch(const std::invalid_argument&) { rejected=true; } require(rejected);
+    } else if (name=="fault_scope") {
+        require(parse_test_fault("driver-open",false,true)==TestFault::DriverOpen);
+        for(auto fault:{"send","observation-delay","crash","unknown"}) { bool rejected=false;try{parse_test_fault(fault,false,true);}catch(const std::invalid_argument&){rejected=true;}require(rejected); }
+        bool denied=false;try{parse_test_fault("send",true,false);}catch(const std::invalid_argument&){denied=true;}require(denied);
+    } else if (name=="benchmark") {
+        PassThroughStrategy s; PacketProcessor p(s); const auto start=Clock::now();
+        for(int i=0;i<200000;++i) { auto v=bytes; v[20]=static_cast<std::uint8_t>(i>>8);v[21]=static_cast<std::uint8_t>(i); p.process(v,start); }
+        const auto seconds=std::chrono::duration<double>(Clock::now()-start).count();require(seconds<20 && p.flows()<=4096);
+        std::cout<<"SYNTHETIC benchmark packets=200000 seconds="<<seconds<<" packets_per_second="<<200000/seconds<<" tracked="<<p.flows()<<" flow_capacity=4096; no driver/hardware measurement\n";
+    } else throw std::runtime_error("Unknown case");
+}
+}
+int main(int argc,char**argv){try{if(argc!=2)throw std::runtime_error("Group required");run(argv[1]);return 0;}catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}}

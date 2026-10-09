@@ -66,6 +66,8 @@ void verify_hash(HANDLE file, std::string_view expected, DWORD size) {
     if (actual != expected) throw std::runtime_error("Runtime integrity mismatch. Repair installation; do not disable Windows security.");
 }
 }
+void verify_protected_path(const std::filesystem::path& path, bool system_parent) { acl(path, system_parent); }
+void verify_component(HANDLE file, std::string_view hash, DWORD size) { verify_hash(file, hash, size); }
 std::filesystem::path executable_path() {
     std::array<wchar_t, 32768> buffer{};
     const auto size = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
@@ -84,9 +86,9 @@ std::vector<Handle> verify_runtime(const std::filesystem::path& executable) {
     PWSTR folder{};
     if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles, KF_FLAG_DEFAULT, nullptr, &folder))) throw std::runtime_error("Program Files location unavailable.");
     const std::filesystem::path program_files(folder); CoTaskMemFree(folder);
-    const auto root = program_files / L"Northpass-Native-0.2";
+    const auto root = program_files / L"Northpass-Native-0.3";
     const auto directory = executable.parent_path();
-    // Exact protected layout: Program Files/Northpass-Native-0.2/<payload id>/bin.
+    // Exact protected layout: Program Files/Northpass-Native-0.3/<payload id>/bin.
     if (directory.filename() != L"bin" || directory.parent_path().parent_path() != root) throw std::runtime_error("Native runtime must use its protected offline installation.");
     acl(program_files, true); acl(root); acl(directory.parent_path()); acl(directory);
     std::vector<Handle> locks;

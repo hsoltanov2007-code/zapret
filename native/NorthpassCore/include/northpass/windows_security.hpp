@@ -22,4 +22,6 @@ std::filesystem::path executable_path();
 // Holds non-write/non-delete file handles for the complete native session.
 std::vector<Handle> verify_runtime(const std::filesystem::path& executable);
 std::string windows_error(const char* operation, DWORD code);
+void verify_protected_path(const std::filesystem::path&, bool system_parent = false);
+void verify_component(HANDLE, std::string_view hash, DWORD size);
 }

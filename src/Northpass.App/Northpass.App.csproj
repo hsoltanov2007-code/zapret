@@ -12,7 +12,14 @@
     <AssemblyName>Northpass</AssemblyName>
     <RootNamespace>Northpass</RootNamespace>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(NorthpassBrokerPreview)' == 'true'">
+    <ApplicationManifest>broker-preview.manifest</ApplicationManifest>
+    <DefineConstants>$(DefineConstants);NORTHPASS_BROKER_PREVIEW</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
+    <Compile Remove="Services/WindowsInstallationSecurity.cs" />
+    <ProjectReference Include="../Northpass.Broker.Shared/Northpass.Broker.Shared.csproj" />
+    <EmbeddedResource Include="../../dist/broker-manifest.json" Condition="Exists('../../dist/broker-manifest.json')" LogicalName="Northpass.Broker.Manifest" />
     <Resource Include="Assets/Northpass.ico" />
     <Using Remove="System.Drawing" />
     <Using Remove="System.Windows.Forms" />

@@ -130,6 +130,20 @@ jobs:
             Write-Host "::notice title=Northpass Splash preview $index::$part"
           }
       - shell: pwsh
+        name: Build privileged broker preview
+        run: |
+          $output = & ./scripts/build.ps1 -BrokerPreview 2>&1
+          $result = $LASTEXITCODE
+          $output | Write-Output
+          if ($result -ne 0) {
+            $message = ($output | Select-Object -Last 45 | Out-String).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Host "::error title=Broker preview build::$message"
+            exit $result
+          }
+      - shell: pwsh
+        name: Real medium UI and elevated broker integration
+        run: ./scripts/test-broker.ps1
+      - shell: pwsh
         run: ./scripts/build.ps1 -Installer
       - shell: pwsh
         name: Install and verify the published application
@@ -145,7 +159,7 @@ jobs:
           path: dist/Northpass/
       - uses: actions/upload-artifact@v4
         with:
-          name: NorthpassCore-0.2.0-win-x64
+          name: NorthpassCore-0.3.0-win-x64
           path: |
             dist/native/
             dist/native-build/Release/NorthpassCore.exe

@@ -23,7 +23,7 @@ public sealed class NativeIpcWindowsTests
     private static EngineInstallationManager Manager(HttpClient http)
     {
         using var catalog = NativeCatalog.OpenTrustedManifest();
-        return new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.2"), http,
+        return new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.3"), http,
             new WindowsInstallationSecurity(), EngineManifest.Parse(catalog), offlinePayload: Path.Combine(Repository(), "dist/native/native-offline.zip"),
             probe: NativeEngine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
     }

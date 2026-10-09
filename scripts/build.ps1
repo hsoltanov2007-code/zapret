@@ -1,5 +1,6 @@
 param(
     [switch]$Installer,
+    [switch]$BrokerPreview,
     [ValidatePattern('^[A-Fa-f0-9]{40}$')][string]$SignCertificateThumbprint,
     [ValidatePattern('^https://')][string]$TimestampUrl = 'https://timestamp.digicert.com'
 )
@@ -25,8 +26,10 @@ try {
     $nativeBuildOptions = @{ TimestampUrl = $TimestampUrl }
     if ($SignCertificateThumbprint) { $nativeBuildOptions.SignCertificateThumbprint = $SignCertificateThumbprint }
     ./scripts/build-native.ps1 @nativeBuildOptions
+    ./scripts/build-broker.ps1
     Write-Host 'Publishing Northpass 0.7 for Windows x64...'
-    dotnet publish $project -c Release -r win-x64 --self-contained true -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output
+    $preview = if ($BrokerPreview) { 'true' } else { 'false' }
+    dotnet publish $project -c Release -r win-x64 --self-contained true -p:NorthpassBrokerPreview=$preview -p:PublishSingleFile=false -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed: $LASTEXITCODE" }
     Copy-Item (Join-Path $root 'README.md'), (Join-Path $root 'THIRD_PARTY_NOTICES.md'), (Join-Path $root 'CHANGELOG.md') $output -Force
     $docsOutput = Join-Path $output 'docs'

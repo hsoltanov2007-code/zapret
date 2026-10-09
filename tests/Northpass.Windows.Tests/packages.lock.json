@@ -104,6 +104,15 @@
       "Northpass": {
         "type": "Project",
         "dependencies": {
+          "Northpass.Broker.Shared": "[0.7.0, )",
+          "Northpass.Engine.Native": "[0.7.0, )",
+          "Northpass.Engine.Zapret1": "[0.7.0, )",
+          "Northpass.Services": "[0.7.0, )"
+        }
+      },
+      "northpass.broker.shared": {
+        "type": "Project",
+        "dependencies": {
           "Northpass.Engine.Native": "[0.7.0, )",
           "Northpass.Engine.Zapret1": "[0.7.0, )",
           "Northpass.Services": "[0.7.0, )"

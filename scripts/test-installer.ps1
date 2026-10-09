@@ -37,7 +37,7 @@ try {
     Invoke-Checked $app @('--native-check')
     Invoke-Checked $app @('--native-ipc-check')
     $nativeManifest = Get-Content (Join-Path $root 'dist/native/native-manifest.json') -Raw | ConvertFrom-Json
-    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.2'
+    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.3'
     foreach ($component in $nativeManifest.components) {
         $path = Join-Path (Join-Path $nativeRoot $nativeManifest.revision) $component.path
         if ((Get-Item $path).Length -ne $component.size -or (Get-FileHash $path -Algorithm SHA256).Hash -ne $component.sha256 -or !(Get-Acl $path).AreAccessRulesProtected) { throw "Native published installation failed integrity/ACL verification: $($component.path)" }
