@@ -1,4 +1,5 @@
 #include "northpass/options.hpp"
+#include "northpass/ipc_protocol.hpp"
 #include <charconv>
 #include <set>
 #include <stdexcept>
@@ -23,14 +24,16 @@ Options parse_options(std::span<const std::string_view> args) {
         if (key == "--stdio-control") { control = true; continue; }
         if (++i == args.size()) throw std::invalid_argument("Missing option value.");
         const auto value = args[i];
-        if (key == "--mode") { mode = true; if (value != "idle" && value != "loopback") throw std::invalid_argument("Only idle/loopback modes exist in v0.1."); options.loopback = value == "loopback"; }
+        if (key == "--mode") { mode = true; if (value != "idle" && value != "loopback") throw std::invalid_argument("Only idle/loopback modes exist in v0.2."); options.loopback = value == "loopback"; }
         else if (key == "--port") { const auto port = number(value); if (port < 49152 || port > 65535) throw std::invalid_argument("Only dedicated ephemeral loopback ports 49152..65535 are allowed."); options.port = static_cast<std::uint16_t>(port); }
         else if (key == "--parent-pid") options.parent_pid = number(value);
+        else if (key == "--pipe-id") { if (!valid_pipe_id(value)) throw std::invalid_argument("Invalid named pipe identifier."); options.pipe_id = value; }
         else if (key == "--protocol") { if (value != "tcp" && value != "udp" && value != "both") throw std::invalid_argument("Invalid transport scope."); options.protocol = value; }
         else throw std::invalid_argument("Unknown option; arbitrary filters/strategies are forbidden.");
     }
     if (!mode || options.loopback != (options.port != 0) || (!options.loopback && seen.contains("--protocol"))) throw std::invalid_argument("Invalid mode/port combination.");
-    if (!options.check && (!control || options.parent_pid == 0)) throw std::invalid_argument("Owned parent and stdin control are required.");
+    if (control && !options.pipe_id.empty()) throw std::invalid_argument("Choose exactly one control transport.");
+    if (!options.check && ((!control && options.pipe_id.empty()) || options.parent_pid == 0)) throw std::invalid_argument("Owned parent and authenticated control are required.");
     return options;
 }
 std::string Options::filter() const {

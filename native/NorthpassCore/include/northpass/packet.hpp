@@ -19,10 +19,16 @@ struct PacketView {
     Transport transport{Transport::Other};
     Endpoint source{}, destination{};
     std::uint8_t tcp_flags{};
+    std::uint32_t sequence{}, acknowledgement{};
+    std::uint16_t fragment_offset{};
+    std::uint32_t fragment_id{};
+    bool more_fragments{}, atomic_fragment{};
+    std::uint8_t extension_count{};
     TlsKind tls{TlsKind::Unknown};
     std::span<const std::uint8_t> payload{};
 };
-// Observational parsing only; even malformed/unknown packets are forwarded intact.
+// Borrowed views last only until the input buffer is reused. Checksums may be
+// offloaded: structural validation is not authenticity or checksum validation.
 PacketView classify(std::span<const std::uint8_t> packet) noexcept;
 TlsKind classify_tls(std::span<const std::uint8_t> payload) noexcept;
 }

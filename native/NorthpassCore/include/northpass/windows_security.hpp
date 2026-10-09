@@ -11,6 +11,10 @@ public:
     Handle(const Handle&) = delete;
     Handle& operator=(const Handle&) = delete;
     Handle(Handle&& other) noexcept : value_(other.value_) { other.value_ = nullptr; }
+    Handle& operator=(Handle&& other) noexcept {
+        if (this != &other) { if (value_ && value_ != INVALID_HANDLE_VALUE) CloseHandle(value_); value_ = other.value_; other.value_ = nullptr; }
+        return *this;
+    }
     HANDLE get() const noexcept { return value_; }
 private: HANDLE value_;
 };

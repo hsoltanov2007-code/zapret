@@ -126,6 +126,12 @@ public sealed class EngineController(EngineRegistry registry) : IAsyncDisposable
         try { return _engine is null ? new(EngineState.Disconnected) : await _engine.GetStatusAsync(token); }
         finally { _gate.Release(); }
     }
+    public async Task<EnginePerformance?> GetPerformanceAsync(CancellationToken token = default)
+    {
+        await _gate.WaitAsync(token);
+        try { return _engine is IEnginePerformanceProvider provider ? await provider.GetPerformanceAsync(token) : null; }
+        finally { _gate.Release(); }
+    }
     public async ValueTask DisposeAsync()
     {
         if (_disposed) return;

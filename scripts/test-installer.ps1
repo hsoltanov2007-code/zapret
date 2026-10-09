@@ -35,8 +35,9 @@ try {
     # Product startup and this check share the same mandatory-offline manager and Windows ACL policy.
     Invoke-Checked $app @('--installation-check')
     Invoke-Checked $app @('--native-check')
+    Invoke-Checked $app @('--native-ipc-check')
     $nativeManifest = Get-Content (Join-Path $root 'dist/native/native-manifest.json') -Raw | ConvertFrom-Json
-    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native'
+    $nativeRoot = Join-Path $env:ProgramFiles 'Northpass-Native-0.2'
     foreach ($component in $nativeManifest.components) {
         $path = Join-Path (Join-Path $nativeRoot $nativeManifest.revision) $component.path
         if ((Get-Item $path).Length -ne $component.size -or (Get-FileHash $path -Algorithm SHA256).Hash -ne $component.sha256 -or !(Get-Acl $path).AreAccessRulesProtected) { throw "Native published installation failed integrity/ACL verification: $($component.path)" }
@@ -83,7 +84,7 @@ try {
         }
         Invoke-Checked $app @('--installation-check')
     }
-    $evidence = 'One-file installer installed the self-contained x64 app, Flowseal fallback and original native pass-through payloads, licences and corresponding sources; obsolete named fixture files were removed. Published app verified/reused Flowseal and native protected components, rejected missing components, verified restoration, and initialized/stopped the native idle driver through IDpiEngine. No internet traffic or ISP bypass test was performed.'
+    $evidence = 'One-file installer installed the self-contained x64 app, Flowseal fallback and original native pass-through payloads, licences and corresponding sources; obsolete named fixture files were removed. Published app verified/reused Flowseal and native protected components, rejected missing components, verified restoration, and initialized/stopped the native idle driver through IDpiEngine on both owned stdin and authenticated named-pipe paths. No internet traffic or ISP bypass test was performed.'
     Set-Content (Join-Path $results 'installer-evidence.txt') $evidence
     Write-Host "::notice title=Installed application acceptance::$evidence"
 } finally {
