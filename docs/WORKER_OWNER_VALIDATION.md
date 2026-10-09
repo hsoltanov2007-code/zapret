@@ -1,5 +1,10 @@
 # WorkerOwner authentication evidence (PR #12 follow-up)
 
+This records the PR #13 diagnostic release. The affected PC subsequently confirmed
+`AuthenticationId / IdentityMismatch / linked=MatchesPeer`. See the current
+[UAC linked-token correction](UAC_LINKED_TOKEN_AUTH.md) for the authorization fix;
+the diagnostic-only equality policy described below is historical.
+
 ## Report and conclusion
 
 The independent desktop report proves that standard Yes/No UAC consent completed,

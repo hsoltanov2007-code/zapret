@@ -41,14 +41,16 @@ try
     BrokerSecurity.ValidateProtectedApplication(root);
     Stage(BrokerStage.WorkerOwner);
     using var owner=Process.GetProcessById(pid);
-    BrokerSecurity.ValidatePeer(owner,Path.Combine(root,"Northpass.exe"),created,requireAdmin:false);
+    if(BrokerSecurity.ValidatePeer(owner,Path.Combine(root,"Northpass.exe"),created,requireAdmin:false)==BrokerAuthorizationMode.UacLinkedLogon)
+        evidence?.Report(stage,0,new(BrokerSecurityCheck.LinkedIdentity,BrokerSecurityOutcome.Authorized,0));
     using var lifetime=new CancellationTokenSource();
     var monitor=Task.Run(async()=>{try{await owner.WaitForExitAsync(lifetime.Token);lifetime.Cancel();}catch(OperationCanceledException){}});
     Stage(BrokerStage.PipeConnect);
     using var pipe=await BrokerPipe.ConnectAsync(args[5],lifetime.Token);
     Stage(BrokerStage.PeerIdentity);
     if(BrokerPipe.PeerPid(pipe,false)!=pid)throw new UnauthorizedAccessException("Broker pipe server is not the authorized desktop owner.");
-    BrokerSecurity.ValidatePeer(owner,Path.Combine(root,"Northpass.exe"),created,requireAdmin:false);
+    if(BrokerSecurity.ValidatePeer(owner,Path.Combine(root,"Northpass.exe"),created,requireAdmin:false)==BrokerAuthorizationMode.UacLinkedLogon)
+        evidence?.Report(stage,0,new(BrokerSecurityCheck.LinkedIdentity,BrokerSecurityOutcome.Authorized,0));
     Stage(BrokerStage.Authentication);
     using(var startup=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token))
     {
@@ -117,7 +119,8 @@ try
                     case "METRICS":metrics=await controller.GetPerformanceAsync(lifetime.Token);break;
                     case "SHUTDOWN":await controller.DisconnectAsync(lifetime.Token);break;
                 }
-                var recent=new List<string>();while(logs.TryDequeue(out var line))recent.Add(line);
+                var recent=new List<string>();while(logs.TryDequeue(out var line)){recent.Add(line);if(recent.Count>15)recent.RemoveAt(0);}
+                if(request.Command=="START")recent.Add("NORTHPASS_BROKER_START engine="+request.Engine);
                 Stage(BrokerStage.Ready);
                 response=new(3,request.Sequence,true,Installed:installed,Status:status,Performance:metrics,Logs:recent.ToArray(),NoTrafficTest:noTraffic);
             }

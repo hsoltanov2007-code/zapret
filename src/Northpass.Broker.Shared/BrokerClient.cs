@@ -83,7 +83,7 @@ public sealed class BrokerClient : IAsyncDisposable
                 using var worker=Process.GetProcessById(BrokerPipe.PeerPid(_pipe,true));
                 Stage(BrokerStage.PeerIdentity);
                 bool ownedOrigin=false;
-                try { BrokerSecurity.ValidateWorkerOrigin(worker,_helper);ownedOrigin=true;BrokerSecurity.ValidateWorker(worker,_helper); }
+                try { BrokerSecurity.ValidateWorkerOrigin(worker,_helper);ownedOrigin=true;var authorization=BrokerSecurity.ValidateWorker(worker,_helper);LogReceived?.Invoke($"BROKER_IDENTITY direction=DesktopToWorker mode={authorization}"); }
                 catch(UnauthorizedAccessException ex){LogReceived?.Invoke($"BROKER_PEER rejected code={BrokerStartup.SafeCode(ex)} detail={(ex as BrokerSecurityException)?.Detail?.Diagnostic??"unavailable"}");_pipe.Disconnect();if(ownedOrigin)throw;continue;}
                 AuthenticatedWorkerIdForAcceptance=worker.Id;
                 Stage(BrokerStage.Authentication);
@@ -109,7 +109,7 @@ public sealed class BrokerClient : IAsyncDisposable
             stage=BrokerStartup.ExitStage(exit)??stage;
             long elapsed=_clock.ElapsedMilliseconds;
             bool cleaned=await CleanupAsync();
-            LastFailure=new(kind,stage,elapsed,detail is {Code:not 0}?detail.Code:BrokerStartup.SafeCode(ex),exit??_lastHelperExit,cleaned,(ex as BrokerSecurityException)?.Detail??detail?.Security);
+            LastFailure=new(kind,stage,elapsed,detail is {Code:not 0}?detail.Code:BrokerStartup.SafeCode(ex),exit??_lastHelperExit,cleaned,(ex as BrokerSecurityException)?.Detail??(detail?.Security is { Outcome:not BrokerSecurityOutcome.Authorized } security?security:null));
             RecordFailure();
             throw new BrokerStartupException(LastFailure,ex);
         }

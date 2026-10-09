@@ -15,7 +15,7 @@ internal static class BrokerAcceptance
     {
         if(BrokerSecurity.IsAdministrator)throw new IOException("Broker acceptance must run as the actual medium desktop user.");
         int modeIndex=Array.IndexOf(args,"--broker-mode");string mode=modeIndex>=0?args[modeIndex+1]:"native";
-        var logs=new ConcurrentQueue<string>();client.LogReceived+=line=>{logs.Enqueue(line);while(logs.Count>32)logs.TryDequeue(out _);};
+        int flowsealStarts=0;var logs=new ConcurrentQueue<string>();client.LogReceived+=line=>{if(line=="NORTHPASS_BROKER_START engine=zapret1")flowsealStarts++;logs.Enqueue(line);while(logs.Count>32)logs.TryDequeue(out _);};
         if(mode=="early-worker-exit")
         {
             try {await client.RequestAsync("DETECT","native");throw new IOException("Substituted owner image unexpectedly authenticated.");}
@@ -90,9 +90,10 @@ internal static class BrokerAcceptance
                 }
             } finally {Directory.Delete(testLists,true);}
         }
+        if(mode=="flowseal" && flowsealStarts!=2)throw new IOException("Flowseal did not receive both authenticated START requests.");
         if(mode=="replay")await client.VerifyReplayRejectionForAcceptanceAsync();
         if(mode is "worker-crash" or "disconnect-active" && !faultNotification)throw new IOException("Owned failure did not notify the replaceable controller.");
-        var result=new{UiAdministrator=false,AuthenticatedElevatedWorker=true,Mode=mode,NativePid=nativePid,Ipv6UnchangedDatagrams=64,Metrics=metrics,
+        var result=new{UiAdministrator=false,AuthenticatedElevatedWorker=true,FlowsealAuthenticatedStarts=flowsealStarts,Mode=mode,NativePid=nativePid,Ipv6UnchangedDatagrams=64,Metrics=metrics,
             Scope="Dedicated loopback only; Flowseal check requires explicit filter=false test bootstrap. No DPI bypass/hardware certification.",Logs=logs.ToArray()};
         int output=Array.IndexOf(args,"--evidence");if(output>=0)await File.WriteAllTextAsync(args[output+1],JsonSerializer.Serialize(result));
         if(mode=="parent-death")Environment.Exit(0); // deliberately bypass OnExit/finally with active owned engine

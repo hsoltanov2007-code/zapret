@@ -49,7 +49,7 @@ public static class BrokerSecurity
     }
     // All peer queries use one held process handle. TOKEN_QUERY is sufficient;
     // neither PROCESS_ALL_ACCESS nor TOKEN_DUPLICATE is requested.
-    public static void ValidatePeer(Process process,string expectedImage,long expectedStart,bool requireAdmin)
+    public static BrokerAuthorizationMode ValidatePeer(Process process,string expectedImage,long expectedStart,bool requireAdmin)
     {
         using var queried=OpenProcess(0x101000,false,process.Id);
         if(queried.IsInvalid)throw Api(BrokerSecurityCheck.ProcessOpen);
@@ -65,7 +65,17 @@ public static class BrokerSecurity
         using(var currentHandle=ObserveProcess(currentProcess))
         {
             if(!OpenProcessToken(currentHandle,8,out var current))throw Api(BrokerSecurityCheck.CurrentTokenOpen);
-            using(current)ValidateTokenIdentity(token,current,requireAdmin);
+            using(current)
+            {
+                // Only primary tokens obtained from these held process handles
+                // can authorize a peer. Reopen after validation to detect replacement.
+                RequirePrimary(token);RequirePrimary(current);
+                ulong peerId=TokenId(token),currentId=TokenId(current);
+                var mode=ValidateTokenIdentity(token,current,requireAdmin);
+                CheckTokenUnchanged(queried,peerId);CheckTokenUnchanged(currentHandle,currentId);
+                if(HasExited(queried))throw Rejected(BrokerSecurityCheck.ProcessAlive,BrokerSecurityOutcome.ProcessExited);
+                return mode;
+            }
         }
     }
     private static BrokerSecurityException Api(BrokerSecurityCheck check) =>
@@ -81,40 +91,62 @@ public static class BrokerSecurity
             throw Rejected(BrokerSecurityCheck.ImagePath);
     }
     // Internal for actual Windows token regression tests, never an IPC surface.
-    internal static void ValidateTokenIdentity(SafeAccessTokenHandle peer,SafeAccessTokenHandle current,bool requireAdmin)
+    internal static BrokerAuthorizationMode ValidateTokenIdentity(SafeAccessTokenHandle peer,SafeAccessTokenHandle current,bool requireAdmin)
     {
-        var peerUser=User(peer,BrokerSecurityCheck.PeerUserQuery);
-        var currentUser=User(current,BrokerSecurityCheck.CurrentUserQuery);
-        if(peerUser!=currentUser)throw Rejected(BrokerSecurityCheck.UserSid);
-        ulong peerLogon=AuthenticationId(peer,BrokerSecurityCheck.PeerStatisticsQuery);
-        ulong currentLogon=AuthenticationId(current,BrokerSecurityCheck.CurrentStatisticsQuery);
-        int peerSession=IntValue(peer,12,BrokerSecurityCheck.PeerSessionQuery);
-        int currentSession=IntValue(current,12,BrokerSecurityCheck.CurrentSessionQuery);
-        // A linked match is evidence only; equality policy remains fail-closed.
-        BrokerIdentityPolicy.Validate(new(peerUser.Value,peerLogon,peerSession),
-            new(currentUser.Value,currentLogon,currentSession),()=>InspectLinked(current,peerUser,peerLogon,peerSession));
+        var peerIdentity=ReadIdentity(peer,BrokerSecurityCheck.PeerUserQuery,BrokerSecurityCheck.PeerStatisticsQuery,BrokerSecurityCheck.PeerSessionQuery);
+        var currentIdentity=ReadIdentity(current,BrokerSecurityCheck.CurrentUserQuery,BrokerSecurityCheck.CurrentStatisticsQuery,BrokerSecurityCheck.CurrentSessionQuery);
+        var mode=BrokerIdentityPolicy.Validate(peerIdentity,currentIdentity,requireAdmin,()=>InspectLinked(peer,current));
         if(requireAdmin)
         {
             if(IntValue(peer,20,BrokerSecurityCheck.ElevationQuery)!=1)throw Rejected(BrokerSecurityCheck.Elevated);
             if(!IsAdministratorGroupEnabled(peer))throw Rejected(BrokerSecurityCheck.AdministratorGroup);
         }
+        return mode;
     }
-    private static (BrokerLinkedTokenStatus,int) InspectLinked(SafeAccessTokenHandle current,SecurityIdentifier peerUser,ulong peerLogon,int peerSession)
+    private static BrokerTokenIdentity ReadIdentity(SafeAccessTokenHandle token,BrokerSecurityCheck user,BrokerSecurityCheck statistics,BrokerSecurityCheck session)=>
+        new(User(token,user).Value,AuthenticationId(token,statistics),IntValue(token,12,session));
+    private static BrokerTokenSnapshot Snapshot(SafeAccessTokenHandle token,BrokerSecurityCheck check)
     {
-        try
-        {
-            int type=IntValue(current,18,BrokerSecurityCheck.ElevationQuery);
-            if(type==1)return (BrokerLinkedTokenStatus.NotSplit,0);
-            if(type is not(2 or 3))return (BrokerLinkedTokenStatus.QueryFailed,13);
-            byte[] value=Query(current,19,IntPtr.Size,BrokerSecurityCheck.CurrentStatisticsQuery);
-            using var linked=new SafeAccessTokenHandle(IntPtr.Size==8?new IntPtr(BitConverter.ToInt64(value)):new IntPtr(BitConverter.ToInt32(value)));
-            if(linked.IsInvalid)return (BrokerLinkedTokenStatus.QueryFailed,6);
-            bool match=User(linked,BrokerSecurityCheck.CurrentUserQuery)==peerUser &&
-                AuthenticationId(linked,BrokerSecurityCheck.CurrentStatisticsQuery)==peerLogon &&
-                IntValue(linked,12,BrokerSecurityCheck.CurrentSessionQuery)==peerSession;
-            return (match?BrokerLinkedTokenStatus.MatchesPeer:BrokerLinkedTokenStatus.DifferentIdentity,0);
-        }
-        catch(BrokerSecurityException ex){return (BrokerLinkedTokenStatus.QueryFailed,ex.Detail.Code);}
+        var identity=ReadIdentity(token,check,check,check);
+        byte[] stats=Query(token,10,56,check);
+        int elevated=IntValue(token,20,check);
+        if(elevated is not(0 or 1))throw Rejected(check,BrokerSecurityOutcome.InvalidData);
+        return new(identity,BitConverter.ToUInt64(stats),BitConverter.ToInt32(stats,24),
+            IntValue(token,18,check),elevated==1,IsAdministratorGroupEnabled(token));
+    }
+    private static void RequirePrimary(SafeAccessTokenHandle token)
+    {
+        if(IntValue(token,8,BrokerSecurityCheck.TokenTypeQuery)!=1)throw Rejected(BrokerSecurityCheck.TokenTypeQuery);
+    }
+    private static ulong TokenId(SafeAccessTokenHandle token)=>BitConverter.ToUInt64(Query(token,10,56,BrokerSecurityCheck.TokenChanged));
+    private static void CheckTokenUnchanged(SafeProcessHandle process,ulong expected)
+    {
+        if(!OpenProcessToken(process,8,out var fresh))throw Api(BrokerSecurityCheck.TokenChanged);
+        using(fresh)if(TokenId(fresh)!=expected)throw Rejected(BrokerSecurityCheck.TokenChanged);
+    }
+    private static BrokerTokenLink InspectLinked(SafeAccessTokenHandle peer,SafeAccessTokenHandle current)
+    {
+        var peerSnapshot=Snapshot(peer,BrokerSecurityCheck.PeerElevationQuery);
+        var currentSnapshot=Snapshot(current,BrokerSecurityCheck.CurrentElevationQuery);
+        // Reject Default/Full-Full/Limited-Limited before querying links. Both
+        // actual process tokens must participate in an opposite UAC split pair.
+        if((peerSnapshot.ElevationType,currentSnapshot.ElevationType) is not((2,3) or (3,2)))
+            throw Rejected(BrokerSecurityCheck.LinkedDirection);
+        var currentLinked=ReadLinkedSnapshot(current,BrokerSecurityCheck.CurrentLinkedTokenQuery);
+        var peerLinked=ReadLinkedSnapshot(peer,BrokerSecurityCheck.PeerLinkedTokenQuery);
+        if(Snapshot(peer,BrokerSecurityCheck.PeerElevationQuery)!=peerSnapshot ||
+            Snapshot(current,BrokerSecurityCheck.CurrentElevationQuery)!=currentSnapshot)
+            throw Rejected(BrokerSecurityCheck.TokenChanged);
+        return new(peerSnapshot,currentSnapshot,currentLinked,peerLinked);
+    }
+    // Query-only handles; no duplication, impersonation or privilege adjustment.
+    // Internal access supports a real Windows API access-denied regression.
+    internal static BrokerTokenSnapshot ReadLinkedSnapshot(SafeAccessTokenHandle source,BrokerSecurityCheck check)
+    {
+        byte[] value=Query(source,19,IntPtr.Size,check);
+        using var linked=new SafeAccessTokenHandle(IntPtr.Size==8?new IntPtr(BitConverter.ToInt64(value)):new IntPtr(BitConverter.ToInt32(value)));
+        if(linked.IsInvalid)throw Rejected(check,BrokerSecurityOutcome.InvalidData);
+        return Snapshot(linked,check);
     }
     private static byte[] Query(SafeAccessTokenHandle token,int kind,int size,BrokerSecurityCheck check)
     {
@@ -186,10 +218,10 @@ public static class BrokerSecurity
     }
     public static Task<bool> WaitForExitAsync(SafeProcessHandle handle,TimeSpan timeout)=>BrokerStartup.WaitForCleanupAsync(()=>HasExited(handle),timeout);
     [DllImport("kernel32.dll",SetLastError=true)]private static extern uint WaitForSingleObject(SafeProcessHandle process,uint timeout);
-    public static void ValidateWorker(Process worker,Process bootstrap)
+    public static BrokerAuthorizationMode ValidateWorker(Process worker,Process bootstrap)
     {
         ValidateWorkerOrigin(worker,bootstrap);
-        ValidatePeer(worker,Path.Combine(AppContext.BaseDirectory,"broker","Northpass.Broker.Worker.exe"),CreationTime(worker),true);
+        return ValidatePeer(worker,Path.Combine(AppContext.BaseDirectory,"broker","Northpass.Broker.Worker.exe"),CreationTime(worker),true);
     }
     public static void ValidateWorkerOrigin(Process worker,Process bootstrap)
     {

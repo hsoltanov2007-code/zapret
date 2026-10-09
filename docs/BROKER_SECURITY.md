@@ -18,3 +18,12 @@ Acceptance uses a real restricted medium token and actual published WPF/native/d
 # Startup failure evidence
 
 See [Windows broker connection acceptance](WINDOWS_BROKER_CONNECT.md). Bounded auxiliary evidence is advisory and PID/image/job-bound; it does not authorize commands. Closing the owned bootstrap liveness lease stops its owned job during pre-authentication cleanup. Interactive UAC remains a manual acceptance requirement.
+
+
+The confirmed split-token logon correction is documented in
+[UAC_LINKED_TOKEN_AUTH.md](UAC_LINKED_TOKEN_AUTH.md). Different AuthenticationIds
+require fresh bidirectional Windows TokenLinkedToken checks on the held process
+tokens, exact SID/session/logon identity matching, opposite Full/Limited elevation
+with administrator validation, stable token objects and expected direction. No
+diagnostic, journal or IPC field grants authorization. Same-logon checks and all
+process, protected component, challenge/replay and cleanup boundaries remain.

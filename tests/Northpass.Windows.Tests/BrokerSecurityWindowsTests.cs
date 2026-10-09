@@ -38,7 +38,7 @@ public sealed class BrokerSecurityWindowsTests
         }
         BrokerSecurity.ValidateTokenIdentity(identity.AccessToken,identity.AccessToken,false);
     }
-    [Fact] public void RealSplitTokenRelationshipIsRecordedWhenAvailable()
+    [Fact] public void RealSplitTokenRelationshipAcceptsBothDirectionsWhenAvailable()
     {
         using var identity=WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
         byte[] type=new byte[4];Assert.True(GetTokenInformation(identity.AccessToken,18,type,4,out int returned));Assert.Equal(4,returned);
@@ -49,18 +49,31 @@ public sealed class BrokerSecurityWindowsTests
         {
             byte[] bytes=new byte[IntPtr.Size];Assert.True(GetTokenInformation(identity.AccessToken,19,bytes,bytes.Length,out returned));Assert.Equal(bytes.Length,returned);
             using var linked=new SafeAccessTokenHandle(new IntPtr(BitConverter.ToInt64(bytes)));
-            // Linked tokens may have different authentication IDs. This release
-            // records a verified relationship but deliberately still rejects it.
-            try {BrokerSecurity.ValidateTokenIdentity(linked,identity.AccessToken,false);result="Actual linked token pair: existing same-logon policy accepted.";}
-            catch(BrokerSecurityException failure)
-            {
-                Assert.Equal(BrokerSecurityCheck.AuthenticationId,failure.Detail.Check);
-                Assert.Equal(BrokerLinkedTokenStatus.MatchesPeer,failure.Detail.Linked);
-                result="Actual linked token pair: equality policy rejected; Windows linked-token relationship verified. "+failure.Detail.Diagnostic;
-            }
+            int currentType=BitConverter.ToInt32(type);
+            Assert.Contains(BrokerSecurity.ValidateTokenIdentity(linked,identity.AccessToken,currentType==3),new[]{BrokerAuthorizationMode.SameLogon,BrokerAuthorizationMode.UacLinkedLogon});
+            Assert.Contains(BrokerSecurity.ValidateTokenIdentity(identity.AccessToken,linked,currentType==2),new[]{BrokerAuthorizationMode.SameLogon,BrokerAuthorizationMode.UacLinkedLogon});
+            result="Actual OS linked-token pair accepted in both directions with elevated administrator checks. Direct token API test; interactive UAC/process handoff remains manual.";
         }
         string root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,"../../../../../TestResults"));Directory.CreateDirectory(root);
         File.WriteAllText(Path.Combine(root,"engine-broker-token-coverage.txt"),result);
+    }
+    [Fact] public void RealLinkedTokenQueryAccessDeniedFailsClosed()
+    {
+        using var identity=WindowsIdentity.GetCurrent(TokenAccessLevels.Query);
+        using var process=Process.GetCurrentProcess();
+        Assert.True(DuplicateHandle(process.Handle,identity.AccessToken,process.Handle,out var noQuery,0,false,0));
+        using(noQuery)
+        {
+            var failure=Assert.Throws<BrokerSecurityException>(()=>BrokerSecurity.ReadLinkedSnapshot(noQuery,BrokerSecurityCheck.CurrentLinkedTokenQuery));
+            Assert.Equal(BrokerSecurityCheck.CurrentLinkedTokenQuery,failure.Detail.Check);
+            Assert.Equal(BrokerSecurityOutcome.ApiFailure,failure.Detail.Outcome);
+            Assert.Equal(5,failure.Detail.Code);
+        }
+    }
+    [Fact] public void ActualUnrelatedProcessCannotPassWorkerOwnership()
+    {
+        using var process=Process.GetCurrentProcess();
+        Assert.Equal(BrokerSecurityCheck.WorkerParent,Assert.Throws<BrokerSecurityException>(()=>BrokerSecurity.ValidateWorkerOrigin(process,process)).Detail.Check);
     }
     [DllImport("kernel32.dll",SetLastError=true)] private static extern bool DuplicateHandle(IntPtr source,SafeAccessTokenHandle token,IntPtr target,out SafeAccessTokenHandle duplicate,uint access,bool inherit,uint options);
     [DllImport("advapi32.dll",SetLastError=true)] private static extern bool GetTokenInformation(SafeAccessTokenHandle token,int kind,byte[] data,int size,out int returned);
