@@ -186,6 +186,7 @@ int run(const Options& options) {
     if (!stop.get()) throw std::runtime_error("Cancellation event initialization failed.");
     ConsoleCancellation console(stop.get());
     Metrics metrics; ResourceSampler resources;
+    (void)resources.sample(metrics); // prime CPU delta before even a brief lab session
     // Preallocate all queue storage before opening a driver/filter.
     PacketQueue queue(Metrics::queue_capacity);
     std::unique_ptr<Control> stdio;
@@ -238,8 +239,14 @@ int run(const Options& options) {
         const auto* flow = split_flows.observe(view, packet.length, Clock::now());
         if (view.destination.port != options.port || view.payload.empty() || view.payload[0] != 22) return forward(packet);
         const auto started = monotonic_ns(); ++proposed;
-        const auto checksum = observe_checksum(bytes, {true, true, false, address.IPv6 != 0, address.IPChecksum != 0, address.TCPChecksum != 0, address.UDPChecksum != 0});
-        if (checksum == ChecksumObservation::Invalid) { ++rejected; return forward(packet); }
+        const auto checksum = observe_split_input_checksum(bytes, {true, true, false, address.IPv6 != 0, address.IPChecksum != 0, address.TCPChecksum != 0, address.UDPChecksum != 0});
+        if (checksum == ChecksumObservation::Invalid || checksum == ChecksumObservation::Unsupported) {
+            ++rejected;
+            if (proposed <= 64) { std::lock_guard guard(output_mutex); std::cout << "NORTHPASS_LAB_REJECT reason=checksum ip_field="
+                << (view.ip_version == 4 ? (static_cast<unsigned>(bytes[10]) << 8) | bytes[11] : 0)
+                << " tcp_field=" << ((static_cast<unsigned>(bytes[view.transport_offset + 16]) << 8) | bytes[view.transport_offset + 17]) << '\n' << std::flush; }
+            return forward(packet);
+        }
         auto decision = split.propose(bytes, flow);
         if (!decision.proposal) { ++rejected; return forward(packet); }
         SegmentTransaction transaction(bytes, split.transaction_configuration());

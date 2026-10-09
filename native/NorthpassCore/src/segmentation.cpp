@@ -57,6 +57,27 @@ bool calculate_tcp_checksums(std::span<std::uint8_t> bytes) noexcept {
     put16(bytes, tcp + 16, (~sum(bytes.subspan(tcp), sum(std::span(pseudo).first(length)))) & 65535);
     return true;
 }
+ChecksumObservation observe_split_input_checksum(std::span<const std::uint8_t> bytes, PacketMetadata m) noexcept {
+    const auto p = classify(bytes);
+    Endpoint loopback; loopback.address[15] = 1; if (p.ip_version == 4) loopback.address[12] = 127;
+    if (!m.outbound || !m.loopback || m.impostor || !segmentation_layout(bytes) ||
+        p.source.address != loopback.address || p.destination.address != loopback.address)
+        return observe_checksum(bytes, m);
+    const bool absent_ip = p.ip_version == 4 && bytes[10] == 0 && bytes[11] == 0;
+    const bool absent_tcp = bytes[p.transport_offset + 16] == 0 && bytes[p.transport_offset + 17] == 0;
+    if (!absent_ip && !absent_tcp) return observe_checksum(bytes, m);
+    try {
+        auto validation = snapshot(bytes);
+        if (!calculate_tcp_checksums(validation)) return ChecksumObservation::Unsupported;
+        if (p.ip_version == 4 && !absent_ip) { validation[10] = bytes[10]; validation[11] = bytes[11]; }
+        // Any nonzero original TCP checksum is still independently checked.
+        if (!absent_tcp) { validation[p.transport_offset + 16] = bytes[p.transport_offset + 16]; validation[p.transport_offset + 17] = bytes[p.transport_offset + 17]; }
+        if (absent_ip) m.ip_checksum = true;
+        if (absent_tcp) m.tcp_checksum = true;
+        const auto result = observe_checksum(validation, m);
+        return result == ChecksumObservation::Valid ? ChecksumObservation::OffloadUnverified : result;
+    } catch (...) { return ChecksumObservation::Unsupported; }
+}
 std::vector<std::uint8_t> make_tcp_segment(std::span<const std::uint8_t> original,
     std::size_t offset, std::size_t length, std::size_t index, bool last) {
     if (!segmentation_layout(original) || index >= 16) throw std::invalid_argument("Unsupported segmentation layout.");

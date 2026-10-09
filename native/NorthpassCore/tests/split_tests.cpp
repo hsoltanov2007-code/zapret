@@ -92,6 +92,17 @@ void test(std::string_view name) {
             require(std::equal(bytes.begin(), bytes.end(), tx.original().begin()));
         }
     } else if (name == "split_state") {
+        for (bool ipv6 : {false, true}) {
+            auto p = packet(payload, ipv6); const auto original = p; const auto tcp = classify(p).transport_offset;
+            PacketMetadata m{true, true, false, ipv6, true, true, false};
+            require(observe_split_input_checksum(p, m) == ChecksumObservation::Valid);
+            if (!ipv6) p[10] = p[11] = 0;
+            p[tcp + 16] = p[tcp + 17] = 0; const auto absent = p;
+            require(observe_split_input_checksum(p, m) == ChecksumObservation::OffloadUnverified && p == absent);
+            p[tcp + 16] = 1; require(observe_split_input_checksum(p, m) == ChecksumObservation::Invalid);
+            p = absent; m.loopback = false; require(observe_split_input_checksum(p, m) == ChecksumObservation::Invalid);
+            p = original; p[tcp + 16] ^= 1; m.loopback = true; require(observe_split_input_checksum(p, m) == ChecksumObservation::Invalid);
+        }
         require(strategy.propose(bytes, nullptr).rejection == SplitRejection::UnknownState);
         auto bad = *state; bad.tcp = TcpObservation::Traffic; require(!strategy.propose(bytes, &bad).proposal);
         bad = *state; ++bad.syn_sequence[static_cast<std::size_t>(bad.syn_direction)]; require(!strategy.propose(bytes, &bad).proposal);

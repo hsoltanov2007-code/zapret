@@ -81,5 +81,9 @@ struct PacketMetadata {
 };
 enum class ChecksumObservation { Valid, Invalid, OffloadUnverified, Unsupported };
 ChecksumObservation observe_checksum(std::span<const std::uint8_t>, PacketMetadata) noexcept;
+// Windows loopback may omit checksum bytes even with validity metadata. Only
+// exact loopback lab inputs normalize absent fields in a temporary validation
+// copy, never in the immutable original or consumer pass-through packet.
+ChecksumObservation observe_split_input_checksum(std::span<const std::uint8_t>, PacketMetadata) noexcept;
 bool metadata_consistent(std::span<const std::uint8_t>, PacketMetadata) noexcept;
 }

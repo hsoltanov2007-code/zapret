@@ -28,6 +28,17 @@ public sealed class NativeSplitLabWindowsTests
         await p.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(8));
     }
     private static ulong Field(string line, string key) => ulong.Parse(line.Split(' ').Single(x => x.StartsWith(key + "=", StringComparison.Ordinal))[(key.Length + 1)..], CultureInfo.InvariantCulture);
+    private static X509Certificate2 SchannelCertificate(CertificateRequest request)
+    {
+        using var ephemeral = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
+        byte[] pfx = ephemeral.Export(X509ContentType.Pfx);
+        try {
+            // Schannel rejects ephemeral private-key handles. Import only into
+            // the current user's temporary key container; no certificate store
+            // or PersistKeySet. Dispose deletes the imported private key.
+            return new X509Certificate2(pfx, (string?)null, X509KeyStorageFlags.UserKeySet);
+        } finally { CryptographicOperations.ZeroMemory(pfx); }
+    }
     private static async Task Exchange(IPAddress address, int port, TcpListener listener, X509Certificate2 certificate, SslProtocols protocol, int size, CancellationToken token, Func<Task>? duringTraffic = null)
     {
         var accept = listener.AcceptTcpClientAsync(token).AsTask();
@@ -63,8 +74,7 @@ public sealed class NativeSplitLabWindowsTests
         var manager = new EngineInstallationManager(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Northpass-Native-0.4"), http,
             new WindowsInstallationSecurity(), EngineManifest.Parse(catalog), offlinePayload: Path.Combine(repo, "dist/native/native-offline.zip"), probe: NativeEngine.VerifyInstalledVersionAsync, requireOfflinePayload: true);
         var installed = await manager.EnsureInstalledAsync(); using var key = RSA.Create(2048);
-        using var certificate = new CertificateRequest("CN=northpass-lab.invalid", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1)
-            .CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
+        using var certificate = SchannelCertificate(new CertificateRequest("CN=northpass-lab.invalid", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
         var evidence = new List<string>();
         foreach (string mode in new[] { "send-first", "send-second", "cancel-active", "hard-stop" })
         {
@@ -131,8 +141,8 @@ public sealed class NativeSplitLabWindowsTests
         using var key = RSA.Create(2048);
         var certificateRequest = new CertificateRequest("CN=northpass-lab.invalid", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         var san = new SubjectAlternativeNameBuilder(); san.AddDnsName("northpass-lab.invalid"); certificateRequest.CertificateExtensions.Add(san.Build());
-        using var certificate = certificateRequest.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddHours(1));
-        var evidence = new List<object>(); string outputDirectory = Path.Combine(repo, "TestResults"); Directory.CreateDirectory(outputDirectory);
+        using var certificate = SchannelCertificate(certificateRequest);
+        var evidence = new List<object>(); var measurements = new List<string>(); string outputDirectory = Path.Combine(repo, "TestResults"); Directory.CreateDirectory(outputDirectory);
         foreach (var address in new[] { IPAddress.Loopback, IPAddress.IPv6Loopback })
         foreach (var protocol in new[] { SslProtocols.Tls12, SslProtocols.Tls13 })
         foreach (bool split in new[] { false, true })
@@ -184,6 +194,7 @@ public sealed class NativeSplitLabWindowsTests
                 File.WriteAllLines(Path.Combine(outputDirectory, name + "-trace.txt"), lines);
                 evidence.Add(new { name, authenticatedTls = true, reconstruction = "three bidirectional fixed-pattern exchanges matched exactly", sizes = new[] { 1, 4096, 32768 }, metrics,
                     native, wallMilliseconds = watch.Elapsed.TotalMilliseconds, scope = "dedicated loopback only", simulatorIsNotIspEvidence = true });
+                measurements.Add(FormattableString.Invariant($"ACTUAL {name}: accepted={metrics?.Accepted ?? 0} lab_send_successes={metrics?.LabReinjections ?? 0} proposal_latency_us={metrics?.ProcessingLatencyMicroseconds ?? 0:F3} cpu_percent={native.CpuPercent:F3} private_bytes={native.MemoryBytes} known_drops={native.KnownDropped} kernel_loss_unknown=true endpoint_reconstruction=three_exact_bidirectional_exchanges wall_ms={watch.Elapsed.TotalMilliseconds:F3}"));
             }
             catch (Exception failure)
             {
@@ -195,6 +206,6 @@ public sealed class NativeSplitLabWindowsTests
             finally { listener.Stop(); if (!process.HasExited) { process.Kill(); await process.WaitForExitAsync(); } if (output is not null) await output; }
         }
         File.WriteAllText(Path.Combine(outputDirectory, "lab-tls-results.json"), JsonSerializer.Serialize(evidence, new JsonSerializerOptions { WriteIndented = true }));
-        File.WriteAllText(Path.Combine(outputDirectory, "engine-native-split-lab.txt"), "Actual protected NorthpassCore executable/WinDivert loopback lab: IPv4/IPv6 TLS 1.2/1.3 baseline and experimental split authenticated; three bidirectional 1/4096/32768-byte exchanges per session reconstructed exactly. Independent lower-priority sniff handle compared post-injection sequence/length traces with committed proposals. Toy simulator results do not prove any ISP bypass. See lab-tls-results.json and lab-*-trace.txt for numeric CPU/memory/latency and header-only traces.");
+        File.WriteAllText(Path.Combine(outputDirectory, "engine-native-split-lab.txt"), "Actual protected NorthpassCore executable/WinDivert loopback lab: IPv4/IPv6 TLS 1.2/1.3 baseline and experimental split authenticated; three bidirectional 1/4096/32768-byte exchanges per session reconstructed exactly. Independent lower-priority sniff handle compared post-injection sequence/length/checksum traces with committed proposals. Toy simulator results do not prove any ISP bypass. See lab-tls-results.json and lab-*-trace.txt.\n" + string.Join('\n', measurements));
     }
 }
