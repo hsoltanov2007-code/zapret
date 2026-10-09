@@ -32,8 +32,8 @@ public sealed class TelegramTests
         Assert.Equal(original.Take(globals),actual.Take(globals));
         Assert.Equal(FlowsealCatalog.TelegramRule(),actual.Skip(globals).Take(FlowsealCatalog.TelegramRule().Count));
         Assert.Equal(original.Skip(globals),actual.Skip(globals+FlowsealCatalog.TelegramRule().Count+3));
-        Assert.Contains("--ipset-exclude=data/ipset-exclude-user.txt",actual);
-        Assert.Contains("--ipset-exclude=lists/ipset-exclude.txt",actual);
+        Assert.Contains("--ipset-exclude="+Path.Combine("data","ipset-exclude-user.txt"),actual);
+        Assert.Contains("--ipset-exclude="+Path.Combine("lists","ipset-exclude.txt"),actual);
         Assert.Equal(8,FlowsealCatalog.Profile(s).Arguments.Count(a=>a=="--new"));
         Assert.DoesNotContain(actual,a=>a.StartsWith("--wf-raw"));
         Assert.DoesNotContain(FlowsealCatalog.TelegramRule(),a=>a.StartsWith("--filter-udp") || a.Contains("fake") || a.Contains("seqovl"));
