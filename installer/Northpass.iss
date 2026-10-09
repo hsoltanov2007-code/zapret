@@ -73,7 +73,13 @@ begin
       RaiseException('Northpass could not reset installation permissions.');
     if not Exec(ExpandConstant('{sys}\icacls.exe'), Root + ' /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" "*S-1-5-32-545:RX" /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
       RaiseException('Northpass could not protect installation components.');
-    if not Exec(ExpandConstant('{app}\broker\Northpass.Broker.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
-      RaiseException('Northpass could not prepare bundled components. Repair the installation.');
+    if not Exec(ExpandConstant('{app}\broker\Northpass.Broker.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      Log(Format('NORTHPASS_SETUP launch_failed code=%d', [ResultCode]));
+      RaiseException(Format('Northpass component preparation could not start. Windows code: %d. See the setup log.', [ResultCode]));
+    end;
+    Log(Format('NORTHPASS_SETUP helper_exit=%d', [ResultCode]));
+    if ResultCode <> 0 then
+      RaiseException(Format('Northpass could not prepare bundled components. Helper exit: %d. See the setup log.', [ResultCode]));
   end;
 end;

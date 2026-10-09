@@ -36,15 +36,23 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
     }
     private sealed record Selection(string Current, string? Previous);
     private string StatePath => Path.Combine(_root, "selection.json");
-    private Selection? ReadSelection()
+    private Selection? ReadSelection(bool discardUnknownRevision = false)
     {
         if (!File.Exists(StatePath)) return null;
         SafeArchive.NoLinks(StatePath);
         _security.ValidateFile(StatePath);
         if (new FileInfo(StatePath).Length > 2048) throw new InvalidDataException("Engine selection is invalid.");
         var state = JsonSerializer.Deserialize<Selection>(File.ReadAllText(StatePath)) ?? throw new InvalidDataException("Engine selection is empty.");
+        if (string.IsNullOrWhiteSpace(state.Current)) throw new InvalidDataException("Engine selection has no current revision.");
         if (!_catalog.ContainsKey(state.Current) || state.Previous is not null && !_catalog.ContainsKey(state.Previous))
+        {
+            // Explicit repair can supersede a protected selection from an older
+            // app build, never authorize or execute it. Do not carry unknown
+            // revisions into rollback state or use them as filesystem paths.
+            // The original pointer remains intact until verified activation.
+            if (discardUnknownRevision) return null;
             throw new InvalidDataException("Installed engine revision is not trusted by this Northpass build. No downloaded manifest can authorize it.");
+        }
         return state;
     }
     private FileStream LockRoot()
@@ -146,7 +154,7 @@ public sealed class EngineInstallationManager : IEngineInstallationManager
         try
         {
             operation = LockRoot();
-            var state = ReadSelection();
+            var state = ReadSelection(discardUnknownRevision: repair);
             if (state is not null && !repair)
             {
                 await VerifyAsync(_catalog[state.Current], token);
