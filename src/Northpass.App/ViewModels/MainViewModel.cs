@@ -558,6 +558,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (messageKey == "InstallationFailed" && (ex is FileNotFoundException ||
             ex is InvalidDataException && (ex.Message.Contains("acquisition.zip", StringComparison.OrdinalIgnoreCase) ||
             ex.Message.Contains("Offline engine payload", StringComparison.OrdinalIgnoreCase)))) messageKey = "ReinstallRequired";
+        if (ex is Northpass.Broker.ElevationDeclinedException) messageKey = "PermissionDeclined";
         if (ex is EngineConflictException) messageKey = "EngineConflict";
         if (ex is UnauthorizedAccessException) messageKey = "AccessDenied";
         if (messageKey == "ConnectionFailed" && (ex.Message.Contains("driver", StringComparison.OrdinalIgnoreCase) || ex.Message.Contains("windivert", StringComparison.OrdinalIgnoreCase)))

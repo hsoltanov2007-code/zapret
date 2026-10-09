@@ -78,6 +78,7 @@ public sealed class BrokerInstallation(BrokerClient client,string engineId) : IE
 public sealed class BrokerEngine : IDpiEngine,IEnginePerformanceProvider
 {
     private readonly BrokerClient _client;private readonly string _id;private readonly DataListStore? _lists;
+    private readonly SemaphoreSlim _operations=new(1,1);
     private EngineStatus _status=new(EngineState.Disconnected);private bool _started;
     public BrokerEngine(BrokerClient client,string id,DataListStore? lists=null){(_client,_id,_lists)=(client,id,lists);_client.LogReceived+=OnLog;}
     public EngineDescriptor Descriptor=>_id=="native"?NativeEngine.Metadata:Zapret1Engine.Metadata;
@@ -87,6 +88,8 @@ public sealed class BrokerEngine : IDpiEngine,IEnginePerformanceProvider
     public Task<ValidationResult> ValidateConfigurationAsync(EngineConfiguration c,CancellationToken cancellationToken=default)
     {cancellationToken.ThrowIfCancellationRequested();return Task.FromResult(_id=="native"?NativeCatalog.Validate(c):Zapret1ConfigurationValidator.Validate(c));}
     public async Task StartAsync(EngineConfiguration configuration,CancellationToken token=default)
+    {await _operations.WaitAsync(token);try{await StartCoreAsync(configuration,token);}finally{_operations.Release();}}
+    private async Task StartCoreAsync(EngineConfiguration configuration,CancellationToken token)
     {
         if(_started)throw new InvalidOperationException("Disconnect the owned session first.");
         var validation=await ValidateConfigurationAsync(configuration,token);if(!validation.IsValid)throw new InvalidDataException(validation.Summary);
@@ -101,18 +104,23 @@ public sealed class BrokerEngine : IDpiEngine,IEnginePerformanceProvider
         catch(Exception ex){Set(new(EngineState.Error,Error:ex.Message));throw;}
     }
     public async Task StopAsync(CancellationToken token=default)
+    {await _operations.WaitAsync(token);try{await StopCoreAsync(token);}finally{_operations.Release();}}
+    private async Task StopCoreAsync(CancellationToken token)
     {
         if(!_started){Set(new(EngineState.Disconnected));return;}
         try{var r=await _client.RequestAsync("STOP",_id,token:token);_started=false;Set(r.Status??new(EngineState.Disconnected));}
         catch(Exception ex){_started=false;Set(new(EngineState.Error,Error:ex.Message));throw;}
     }
-    public async Task RestartAsync(EngineConfiguration c,CancellationToken token=default){await StopAsync(token);await StartAsync(c,token);}
+    public async Task RestartAsync(EngineConfiguration c,CancellationToken token=default){await _operations.WaitAsync(token);try{await StopCoreAsync(token);await StartCoreAsync(c,token);}finally{_operations.Release();}}
     public async Task<EngineStatus> GetStatusAsync(CancellationToken token=default)
+    {await _operations.WaitAsync(token);try{return await StatusCoreAsync(token);}finally{_operations.Release();}}
+    private async Task<EngineStatus> StatusCoreAsync(CancellationToken token)
     {
         if(_started)try{var r=await _client.RequestAsync("STATUS",_id,token:token);_status=r.Status??throw new InvalidDataException("Missing component status.");}
         catch(Exception ex) when (ex is not OperationCanceledException){_status=new(EngineState.Error,Error:ex.Message);}
         return _status;
     }
-    public async Task<EnginePerformance?> GetPerformanceAsync(CancellationToken cancellationToken=default)=>_started?(await _client.RequestAsync("METRICS",_id,token:cancellationToken)).Performance:null;
+    public async Task<EnginePerformance?> GetPerformanceAsync(CancellationToken cancellationToken=default)
+    {await _operations.WaitAsync(cancellationToken);try{return _started?(await _client.RequestAsync("METRICS",_id,token:cancellationToken)).Performance:null;}finally{_operations.Release();}}
     public async ValueTask DisposeAsync(){try{await StopAsync();}finally{_client.LogReceived-=OnLog;}}
 }

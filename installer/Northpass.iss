@@ -23,6 +23,8 @@ DisableDirPage=yes
 WizardStyle=modern
 SetupLogging=yes
 [InstallDelete]
+; Product-owned helper files are replaced as a unit; user data is elsewhere.
+Type: filesandordirs; Name: "{app}\broker"
 ; Narrow known v0.5 product files only. Keep user preferences and old protected drivers untouched.
 Type: files; Name: "{app}\Northpass.Engine.Zapret2.dll"
 Type: files; Name: "{app}\engine-payload\zapret2-offline.zip"
@@ -50,4 +52,24 @@ begin
   { whoami CSV is "domain\user","S-1-..."; extract the quoted final field. }
   Delete(Result, 1, Pos('","', Result) + 2);
   Result := Copy(Result, 1, Pos('"', Result) - 1);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+  Root: String;
+begin
+  if CurStep = ssPostInstall then
+  begin
+    Root := '"' + ExpandConstant('{app}') + '"';
+    { Set ownership before removing inherited access. Fixed product root only. }
+    if not Exec(ExpandConstant('{sys}\icacls.exe'), Root + ' /setowner *S-1-5-32-544 /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      RaiseException('Northpass could not protect installation ownership.');
+    if not Exec(ExpandConstant('{sys}\icacls.exe'), Root + ' /reset /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      RaiseException('Northpass could not reset installation permissions.');
+    if not Exec(ExpandConstant('{sys}\icacls.exe'), Root + ' /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      RaiseException('Northpass could not protect installation components.');
+    if not Exec(ExpandConstant('{app}\broker\Northpass.Broker.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+      RaiseException('Northpass could not prepare bundled components. Repair the installation.');
+  end;
 end;

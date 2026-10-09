@@ -50,6 +50,6 @@ First launch uses Russian; existing EN/RU/AZ preferences remain. The native-name
 
 Windows UI acceptance includes actual localized splash/main-window transition and close-during-preparation cleanup, visible native language labels/flags, 100/150/200% vector-flag raster checks, language changes through the control, hidden legacy opt-ins, and reduced-motion/loading-clock cleanup. UI endpoint/session outcomes remain fixtures. `TestResults` includes all three locales for Home/About/Settings/Splash; CI annotations carry bounded Russian previews. Real multi-monitor/DPI interaction, tray/UAC/animation-policy changes and live ISP checks remain manual acceptance.
 
-## Native Engine v0.2
+## Native Engine v0.3
 
 Run `bash scripts/setup-native-cloud.sh` after cloud .NET setup; source `/workspace/.northpass-tools/native-env.sh` for the checksum-pinned CMake toolchain. Native CTest uses address/undefined sanitizers on Linux; actual Windows interception tests use dedicated loopback sockets only. See [NATIVE_ENGINE.md](NATIVE_ENGINE.md) for restricted scope, immutable offline trust, parent-death/drain behavior, exact Windows build commands, LGPL modification instructions and unverified real-network work. Native code signing, when configured, occurs before generating/embedding its hash manifest.
