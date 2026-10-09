@@ -130,7 +130,7 @@ public sealed class FlowsealCaptureWindowsTests
     }
 
     // Test-only binding to the HASH-VERIFIED, leased absolute installed DLL.
-    private sealed class Divert : IDisposable
+    internal sealed class Divert : IDisposable
     {
         private readonly IntPtr library;
         [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate IntPtr Open([MarshalAs(UnmanagedType.LPStr)] string filter, int layer, short priority, ulong flags);

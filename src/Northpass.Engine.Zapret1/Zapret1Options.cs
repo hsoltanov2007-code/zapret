@@ -10,7 +10,7 @@ public static class Zapret1Options
     public static readonly IReadOnlySet<string> Known = new[]
     {
         "--wf-tcp", "--wf-udp", "--filter-udp", "--filter-tcp", "--filter-l7", "--hostlist", "--hostlist-domains",
-        "--hostlist-exclude", "--ipset", "--ipset-exclude", "--ip-id", "--dpi-desync", "--dpi-desync-repeats",
+        "--hostlist-exclude", "--ipset-ip", "--ipset", "--ipset-exclude", "--ip-id", "--dpi-desync", "--dpi-desync-repeats",
         "--dpi-desync-fake-quic", "--dpi-desync-fake-discord", "--dpi-desync-fake-stun", "--dpi-desync-split-seqovl",
         "--dpi-desync-split-pos", "--dpi-desync-split-seqovl-pattern", "--dpi-desync-any-protocol", "--dpi-desync-cutoff",
         "--dpi-desync-fake-unknown-udp", "--dpi-desync-fooling", "--dpi-desync-fakedsplit-pattern", "--dpi-desync-fake-tls",

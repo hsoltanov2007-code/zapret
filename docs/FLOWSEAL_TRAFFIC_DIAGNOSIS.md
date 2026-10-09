@@ -1,5 +1,8 @@
 # Production capture and service-access diagnosis
 
+> Historical PR #16 audit: the subsequent Telegram-specific bootstrap TCP extension
+> and its deliberately limited coverage are documented in [Telegram Desktop](TELEGRAM_DESKTOP.md).
+
 The affected PR #15 desktop successfully passed genuine same-account interactive
 UAC. Its engine runs, but all five reviewed strategies failed to restore service
 access. That report proves startup is fixed on that PC, **not** packet interception

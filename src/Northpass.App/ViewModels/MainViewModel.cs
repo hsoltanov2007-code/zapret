@@ -66,6 +66,8 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         ImportListCommand = Command(ImportListAsync, () => CanConfigure && _dataLists is not null);
         SaveInputsCommand = Command(SaveInputsAsync, () => CanConfigure);
         ServiceProbesCommand = new(RefreshServiceDiagnosticsAsync, ex => Fail(ex), () => !_disposed && !_shuttingDown && !DiagnosticsRunning && !Busy);
+        TelegramProbeCommand = new(RunTelegramProbesAsync, ex => Fail(ex), () => !_disposed && !_shuttingDown && !Busy);
+        CancelTelegramProbeCommand = new(() => _telegramCancellation?.Cancel(), () => _telegramCancellation is not null);
         OpenDiagnosticsCommand = new(() => PageIndex = 2);
         TestStrategyCommand = Command(TestStrategyAsync, () => SelectedProfile is not null && _serviceProbes is not null && _testRecords is not null);
         CancelTestCommand = new(() => _testCancellation?.Cancel(), () => _testCancellation is not null);
@@ -147,6 +149,41 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public AsyncRelayCommand ImportListCommand { get; }
     public AsyncRelayCommand SaveInputsCommand { get; }
     public AsyncRelayCommand ServiceProbesCommand { get; }
+    public AsyncRelayCommand TelegramProbeCommand { get; }
+    public RelayCommand CancelTelegramProbeCommand { get; }
+    private CancellationTokenSource? _telegramCancellation;
+    private Task? _telegramTask;
+    private string _telegramResult = "";
+    public string TelegramResult { get => _telegramResult; private set => Set(ref _telegramResult,value); }
+    private async Task RunTelegramProbesAsync()
+    {
+        if (!_desktop.ConfirmTrust(Strings["TelegramProbeConsent"])) return;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+        _telegramCancellation = cancellation; CancelTelegramProbeCommand.Refresh();
+        TelegramResult = Strings["CheckingServices"];
+        // Shutdown may block the STA: the tracked task must never require its
+        // dispatcher to finish socket cleanup. UI updates are advisory posts.
+        var task = Task.Run(async () => {
+            var snapshot = await _controller.GetStatusAsync(cancellation.Token);
+            await TelegramChecksAsync(snapshot,cancellation.Token);
+        }, cancellation.Token); _telegramTask = task;
+        try { await task; }
+        catch (OperationCanceledException) { TelegramResult = Strings["TelegramProbeCancelled"]; }
+        finally { _telegramTask=null; _telegramCancellation=null; CancelTelegramProbeCommand.Refresh(); }
+    }
+    private async Task TelegramChecksAsync(EngineStatus snapshot,CancellationToken token)
+    {
+        var results = new List<string>();
+        foreach(var endpoint in TelegramEndpoints.Bootstrap.Where(e=>e.Dc is 1 or 2).GroupBy(e=> (e.Dc, System.Net.IPAddress.Parse(e.Address).AddressFamily)).Select(g=>g.First()))
+        foreach(var transport in Enum.GetValues<TelegramTransport>())
+        {
+            var result = await TelegramProbe.ProbeAsync(endpoint,transport,token);
+            results.Add($"DC{result.Dc} {result.Family} {result.Transport}: {Strings["Telegram"+result.State]} ({result.ElapsedMilliseconds} ms)");
+            string display=string.Join("\n",results)+"\n"+Strings["TelegramProbeScope"];
+            _ = _dispatcher.BeginInvoke(new Action(()=> { if(!_disposed) TelegramResult=display; }));
+            EngineLog($"TELEGRAM_PROBE dc={result.Dc} family={result.Family} transport={result.Transport} stage={result.Stage} state={result.State} code={result.SafeCode} elapsed_ms={result.ElapsedMilliseconds} configured_match={result.ConfiguredRuleMatch} capture_init={snapshot.Traffic?.Capture.ToString() ?? "Unconfirmed"} interception=unknown messages=untested");
+        }
+    }
     public AsyncRelayCommand TestStrategyCommand { get; }
     public AsyncRelayCommand NextStrategyCommand { get; }
     public RelayCommand CancelTestCommand { get; }
@@ -475,6 +512,12 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     }
     private async Task CancelDiagnosticsAsync()
     {
+        _telegramCancellation?.Cancel();
+        if (_telegramTask is { } telegram) {
+            try { await telegram; }
+            catch (OperationCanceledException) { }
+            catch (Exception ex) { Log("TELEGRAM_PROBE worker_error code="+ex.HResult); } // A side check must never prevent Disconnect/shutdown.
+        }
         InvalidateDiagnostics();
         if (_diagnosticsTask is { } task) await task;
     }
@@ -564,7 +607,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         string? path = _desktop.PickExport("Northpass-diagnostics-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"), "txt");
         if (path is not null) { File.WriteAllText(path, LogText); Log("Diagnostics exported. Review paths and hostnames before sharing."); }
     }
-    private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); CancelTestCommand.Refresh(); ServiceProbesCommand.Refresh(); }
+    private void RefreshCommands() { foreach (var command in _commands) command.Refresh(); CancelTestCommand.Refresh(); ServiceProbesCommand.Refresh(); TelegramProbeCommand.Refresh(); CancelTelegramProbeCommand.Refresh(); }
     private void SetMessage(string key) { if(_messageKey==key)return;_messageKey = key; Changed(nameof(UserMessage)); }
     public void Fail(Exception ex, string messageKey = "ActionFailed")
     {

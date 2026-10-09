@@ -51,9 +51,9 @@ public static class FlowsealCatalog
         Arguments = Templates(strategy).ToList()
     };
     public static IReadOnlyList<string> Templates(FlowsealStrategy strategy) => Compile(strategy,
-        "{ENGINE_DIR}", "{LISTS_DIR}", "{DATA_DIR}", "{GAME_TCP}", "{GAME_UDP}", false);
+        "{ENGINE_DIR}", "{LISTS_DIR}", "{DATA_DIR}", "{GAME_TCP}", "{GAME_UDP}", false, includeTelegram: false);
     public static IReadOnlyList<string> Compile(FlowsealStrategy strategy, string binDirectory, string listsDirectory,
-        string dataDirectory, string tcpPorts, string udpPorts, bool noTrafficCapture = false, string? allIpsPath = null)
+        string dataDirectory, string tcpPorts, string udpPorts, bool noTrafficCapture = false, string? allIpsPath = null, bool includeTelegram = true)
     {
         var result = new List<string>();
         string Resolve(StrategyOption option)
@@ -71,13 +71,21 @@ public static class FlowsealCatalog
         }
         if (noTrafficCapture) result.Add("--wf-raw=false"); // Explicit test composition, never a profile/shell input.
         else result.AddRange(strategy.Global.Select(Resolve));
+        // Telegram comes first ONLY on the compiled exact destination set.
+        // Broad custom game/IP sets must not shadow opaque MTProto handling.
+        if (includeTelegram) { result.AddRange(TelegramRule()); result.Add("--ipset-exclude=" + Join(listsDirectory,"ipset-exclude.txt")); result.Add("--ipset-exclude=" + Join(dataDirectory,"ipset-exclude-user.txt")); }
         for (int rule = 0; rule < strategy.Rules.Count; rule++)
         {
-            if (rule > 0) result.Add("--new");
+            if (rule > 0 || includeTelegram) result.Add("--new");
             result.AddRange(strategy.Rules[rule].Select(Resolve));
         }
         return Array.AsReadOnly(result.ToArray());
     }
+    public static IReadOnlyList<string> TelegramRule() => Array.AsReadOnly(new[] {
+        "--filter-tcp=80,443", "--ipset-ip=" + TelegramEndpoints.IpSet,
+        "--dpi-desync=multisplit", "--dpi-desync-split-pos=1",
+        "--dpi-desync-any-protocol=1", "--dpi-desync-cutoff=d2"
+    });
     private static string Join(string root, string name)
     {
         if (name.Contains('/') || name.Contains('\\') || name.Contains(':') || name is "." or "..") throw new InvalidDataException("Catalog asset name is invalid.");

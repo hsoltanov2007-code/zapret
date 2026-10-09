@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "sourceRevision": "86262333a457f62709726ee4ab9c48fa58824da4",
+  "sourcePath": "Telegram/SourceFiles/mtproto/mtproto_dc_options.cpp",
+  "sourceSha256": "520b5b1c2d7813de49158b0880f3934e8f97ebecdf7f1d7a29ca24462800189e",
+  "sourceSize": 21269,
+  "scope": "production-bootstrap-exact-addresses-only",
+  "endpoints": [
+    {
+      "dc": 1,
+      "address": "149.154.175.50",
+      "port": 443
+    },
+    {
+      "dc": 2,
+      "address": "149.154.167.51",
+      "port": 443
+    },
+    {
+      "dc": 2,
+      "address": "95.161.76.100",
+      "port": 443
+    },
+    {
+      "dc": 3,
+      "address": "149.154.175.100",
+      "port": 443
+    },
+    {
+      "dc": 4,
+      "address": "149.154.167.91",
+      "port": 443
+    },
+    {
+      "dc": 5,
+      "address": "149.154.171.5",
+      "port": 443
+    },
+    {
+      "dc": 1,
+      "address": "2001:0b28:f23d:f001:0000:0000:0000:000a",
+      "port": 443
+    },
+    {
+      "dc": 2,
+      "address": "2001:067c:04e8:f002:0000:0000:0000:000a",
+      "port": 443
+    },
+    {
+      "dc": 3,
+      "address": "2001:0b28:f23d:f003:0000:0000:0000:000a",
+      "port": 443
+    },
+    {
+      "dc": 4,
+      "address": "2001:067c:04e8:f004:0000:0000:0000:000a",
+      "port": 443
+    },
+    {
+      "dc": 5,
+      "address": "2001:0b28:f23f:f005:0000:0000:0000:000a",
+      "port": 443
+    }
+  ]
+}

@@ -72,7 +72,7 @@ public sealed class Zapret1Engine : IDpiEngine
             _preflightFailure = null;
             _capture.Reset(configuration.Profile, _noTrafficCapture);
             var capture = _capture.Evidence;
-            LogReceived?.Invoke($"FLOWSEAL_CONFIG strategy={capture.Strategy} capture={(_noTrafficCapture ? "test-disabled" : "production-ports")} TCP={capture.TcpPorts} UDP={capture.UdpPorts} rules={FlowsealCatalog.Find(capture.Strategy)!.Rules.Count}");
+            LogReceived?.Invoke($"FLOWSEAL_CONFIG strategy={capture.Strategy} capture={(_noTrafficCapture ? "test-disabled" : "production-ports")} TCP={capture.TcpPorts} UDP={capture.UdpPorts} rules={FlowsealCatalog.Find(capture.Strategy)!.Rules.Count + 1} telegram=exact-bootstrap-tcp80,443");
             await _process.StartAsync(info, token);
         }
         catch (Exception ex)
