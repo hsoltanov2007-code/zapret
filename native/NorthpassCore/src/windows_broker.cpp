@@ -5,8 +5,53 @@
 #include <charconv>
 #include <iostream>
 #include <stdexcept>
+#include <string>
+#include <cstdio>
 namespace {
 using namespace northpass;
+class BootstrapWindowsError: public std::runtime_error {
+public: BootstrapWindowsError(const char* message,DWORD code):std::runtime_error(windows_error(message,code)),code_(code){}
+    DWORD code()const noexcept{return code_;}
+private: DWORD code_;
+};
+// One-way bounded evidence. The desktop's exclusive pipe is also a held
+// liveness lease: its closure cancels this job even before worker authentication.
+class BootstrapEvidence {
+public:
+    void open(std::wstring_view id,DWORD owner) {
+        const auto name=L"\\\\.\\pipe\\Northpass.Broker."+std::wstring(id)+L".bootstrap-evidence";
+        for(unsigned attempt=0;attempt<25;++attempt) {
+            pipe_=Handle(CreateFileW(name.c_str(),GENERIC_READ|GENERIC_WRITE,0,nullptr,OPEN_EXISTING,FILE_FLAG_OVERLAPPED,nullptr));
+            if(pipe_.get()!=INVALID_HANDLE_VALUE)break;
+            const auto error=GetLastError();if(error!=ERROR_FILE_NOT_FOUND && error!=ERROR_PIPE_BUSY)throw std::runtime_error("Bootstrap evidence lease unavailable.");
+            Sleep(20);
+        }
+        ULONG pid{};
+        if(pipe_.get()==INVALID_HANDLE_VALUE || !GetNamedPipeServerProcessId(pipe_.get(),&pid) || pid!=owner)throw std::runtime_error("Bootstrap evidence owner rejected.");
+    }
+    void report(unsigned stage,DWORD code=0,DWORD worker=0) noexcept {
+        stage_=stage;
+        if(!pipe_.get() || pipe_.get()==INVALID_HANDLE_VALUE || records_++>=32)return;
+        std::array<char,128> line{};
+        const auto length=std::snprintf(line.data(),line.size(),"NPB1 %u %llu %d %lu\n",stage,static_cast<unsigned long long>(GetTickCount64()-started_),static_cast<std::int32_t>(code),static_cast<unsigned long>(worker));
+        if(length<=0 || static_cast<std::size_t>(length)>=line.size())return;
+        Handle event(CreateEventW(nullptr,TRUE,FALSE,nullptr));OVERLAPPED io{};io.hEvent=event.get();DWORD sent{};
+        if(!event.get())return;
+        if(!WriteFile(pipe_.get(),line.data(),static_cast<DWORD>(length),&sent,&io) && GetLastError()==ERROR_IO_PENDING) {
+            if(WaitForSingleObject(event.get(),200)!=WAIT_OBJECT_0)CancelIoEx(pipe_.get(),&io);
+            GetOverlappedResult(pipe_.get(),&io,&sent,TRUE);
+        }
+    }
+    bool alive() const {
+        DWORD available{};
+        // No messages are accepted on this lease. Closure or unexpected input
+        // can only stop the already owned job, never enable interception.
+        return PeekNamedPipe(pipe_.get(),nullptr,0,nullptr,&available,nullptr)!=FALSE && available==0;
+    }
+    unsigned stage() const noexcept{return stage_;}
+private: Handle pipe_;ULONGLONG started_=GetTickCount64();unsigned stage_=3,records_{};
+};
+BootstrapEvidence evidence;
 std::uint64_t decimal(std::wstring_view value) {
     std::uint64_t result{};
     if(value.empty() || value.size()>20)throw std::runtime_error("Invalid broker identity value.");
@@ -46,12 +91,14 @@ int launch(int argc,wchar_t**argv) {
         if(!pid||pid>MAXDWORD||id.size()!=32)throw std::runtime_error("Invalid broker identity.");
         for(auto c:id)if(!((c>=L'0'&&c<=L'9')||(c>=L'a'&&c<=L'f')))throw std::runtime_error("Invalid broker identifier.");
         if(argc==8 && std::wstring_view(argv[7])!=L"--test-no-traffic")throw std::runtime_error("Unknown broker option.");
+        evidence.open(id,static_cast<DWORD>(pid));evidence.report(3);
         owner=Handle(OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,static_cast<DWORD>(pid)));
         FILETIME creation{},exit{},kernel{},user{};
         if(!owner.get() || !GetProcessTimes(owner.get(),&creation,&exit,&kernel,&user) ||
             ((static_cast<std::uint64_t>(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)!=created || WaitForSingleObject(owner.get(),0)!=WAIT_TIMEOUT)
             throw std::runtime_error("Broker desktop owner identity mismatch.");
     }
+    if(!install)evidence.report(4);
     const auto directory=executable_path().parent_path(), app=directory.parent_path();
     PWSTR raw{};if(FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles,0,nullptr,&raw)))throw std::runtime_error("Program Files unavailable.");
     const std::filesystem::path program(raw);CoTaskMemFree(raw);
@@ -79,16 +126,32 @@ int launch(int argc,wchar_t**argv) {
     limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     if(!job.get() || !SetInformationJobObject(job.get(),JobObjectExtendedLimitInformation,&limits,sizeof(limits)))throw std::runtime_error("Broker ownership job initialization failed.");
     STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION info{};
+    if(!install)evidence.report(5);
     if(!CreateProcessW(worker.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_SUSPENDED|CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW,
-        environment.data(),directory.c_str(),&startup,&info))throw std::runtime_error(windows_error("Verified broker worker creation",GetLastError()));
+        environment.data(),directory.c_str(),&startup,&info))throw BootstrapWindowsError("Verified broker worker creation",GetLastError());
     Handle process(info.hProcess),thread(info.hThread);
     if(!AssignProcessToJobObject(job.get(),process.get())){TerminateProcess(process.get(),1);WaitForSingleObject(process.get(),5000);throw std::runtime_error("Broker worker job assignment failed.");}
     if(ResumeThread(thread.get())==MAXDWORD)throw std::runtime_error("Broker worker resume failed.");
+    if(!install)evidence.report(5,0,info.dwProcessId);
     try {
     if(install) {
         if(WaitForSingleObject(process.get(),120000)!=WAIT_OBJECT_0)throw std::runtime_error("Protected installation helper timed out.");
     } else {
-        const HANDLE events[]{process.get(),owner.get()};const auto event=WaitForMultipleObjects(2,events,FALSE,INFINITE);
+        const HANDLE events[]{process.get(),owner.get()};DWORD event{};
+        do {
+            event=WaitForMultipleObjects(2,events,FALSE,25);
+            if(event==WAIT_TIMEOUT && !evidence.alive()) {
+                // Primary IPC closure normally lets the worker stop gracefully.
+                // Before authentication it may still be waiting for a vanished
+                // pipe. Give it a bounded grace, then close only our owned job.
+                if(WaitForSingleObject(process.get(),2000)!=WAIT_OBJECT_0) {
+                    evidence.report(13,ERROR_CANCELLED,info.dwProcessId);
+                    cleanup_session(job.get(),program,argv[6]);
+                    return 0; // explicit owner cancellation; kernel losses unknown
+                }
+                event=WAIT_OBJECT_0;
+            }
+        } while(event==WAIT_TIMEOUT);
         if(event==WAIT_OBJECT_0+1 && WaitForSingleObject(process.get(),10000)!=WAIT_OBJECT_0)
             throw std::runtime_error("Owner terminated; graceful broker cleanup timed out. Owned job will close; kernel loss is unknown.");
         if(event!=WAIT_OBJECT_0 && event!=WAIT_OBJECT_0+1)throw std::runtime_error("Broker ownership wait failed.");
@@ -103,4 +166,4 @@ int launch(int argc,wchar_t**argv) {
     }
 }
 }
-int wmain(int argc,wchar_t**argv){try{return launch(argc,argv);}catch(const std::exception& e){std::cerr<<"NORTHPASS_BOOTSTRAP_ERROR "<<e.what()<<'\n';return 1;}}
+int wmain(int argc,wchar_t**argv){try{return launch(argc,argv);}catch(const std::exception& e){const auto* windows=dynamic_cast<const BootstrapWindowsError*>(&e);evidence.report(evidence.stage(),windows?windows->code():ERROR_INVALID_DATA);std::cerr<<"NORTHPASS_BOOTSTRAP_ERROR "<<e.what()<<'\n';return static_cast<int>(0x4e510000U|(evidence.stage()<<8)|1U);}}
