@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 using Northpass.Models;
 namespace Northpass.Engine.Native;
 
-// The UI/controller depend on IDpiEngine, not C++/driver details. v0.2 never rewrites packets.
+// The UI/controller depend on IDpiEngine, not C++/driver details. v0.3 never rewrites live packets.
 public sealed class NativeEngine : IDpiEngine, IEnginePerformanceProvider
 {
     public static EngineDescriptor Metadata { get; } = new("native", "NorthpassCore 0.3 (experimental pass-through)", "NorthpassCore.exe");

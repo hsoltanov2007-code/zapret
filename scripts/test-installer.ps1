@@ -84,7 +84,13 @@ try {
         }
         Invoke-Checked $app @('--installation-check')
     }
-    $evidence = 'One-file installer installed the self-contained x64 app, Flowseal fallback and original native pass-through payloads, licences and corresponding sources; obsolete named fixture files were removed. Published app verified/reused Flowseal and native protected components, rejected missing components, verified restoration, and initialized/stopped the native idle driver through IDpiEngine on both owned stdin and authenticated named-pipe paths. No internet traffic or ISP bypass test was performed.'
+    # Actual EXE repair/reinstall, not just restoring bytes in this test script.
+    [IO.File]::WriteAllBytes($nativeDll, [byte[]]@(0))
+    Invoke-Checked $setup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"", "/LOG=`"$(Join-Path $results 'installer-repair.log')`"")
+    Invoke-Checked $app @('--native-check')
+    $expectedDll = $nativeManifest.components | Where-Object { $_.path -eq 'bin/WinDivert.dll' }
+    if ((Get-FileHash $nativeDll -Algorithm SHA256).Hash -ne $expectedDll.sha256) { throw 'Actual installer repair did not restore the reviewed component.' }
+    $evidence = 'One-file installer installed the self-contained x64 app, Flowseal fallback and original native pass-through payloads, licences and corresponding sources; obsolete named fixture files were removed. Published app verified/reused Flowseal and native protected components, rejected missing components, verified restoration, and initialized/stopped the native idle driver through IDpiEngine through the default authenticated broker/native named-pipe path. Actual repeat installer execution repaired a deliberately corrupted native DLL from the bundled offline payload. Direct stdin control was separately tested in the Windows integration suite. No internet traffic or ISP bypass test was performed.'
     Set-Content (Join-Path $results 'installer-evidence.txt') $evidence
     Write-Host "::notice title=Installed application acceptance::$evidence"
 } catch {
