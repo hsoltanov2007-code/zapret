@@ -6,6 +6,15 @@ namespace Northpass.Tests;
 public sealed class BrokerStartupTests
 {
     private static Task Pending()=>new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously).Task;
+    [Theory]
+    [InlineData(0x4e501402,BrokerStage.InstallationProtection)]
+    [InlineData(0x4e501503,BrokerStage.InstallFlowseal)]
+    [InlineData(0x4e501603,BrokerStage.InstallNative)]
+    public void InstallerRejectionsRetainTheirOwnStage(int exit,BrokerStage stage)
+    {
+        Assert.Equal(stage,BrokerStartup.ExitStage(exit));
+        Assert.Equal(BrokerFailureKind.InstallationRejected,BrokerStartup.ExitKind(exit));
+    }
     [Fact] public async Task SuccessfulOperationDoesNotWaitForTheDeadline()=>await BrokerStartup.AwaitAsync(Task.CompletedTask,Pending(),default,TimeSpan.FromSeconds(15));
     [Fact] public async Task EarlyOwnedExitIsNotReportedAsTimeout()
     {

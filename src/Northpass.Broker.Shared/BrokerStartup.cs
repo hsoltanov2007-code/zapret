@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Northpass.Broker;
 
-public enum BrokerStage { Installation=1, Elevation=2, BootstrapOwner=3, BootstrapIntegrity=4, WorkerCreate=5, WorkerOwner=6, PipeConnect=7, PeerIdentity=8, Authentication=9, Preparing=10, EngineStart=11, Ready=12, Cleanup=13 }
+public enum BrokerStage { Installation=1, Elevation=2, BootstrapOwner=3, BootstrapIntegrity=4, WorkerCreate=5, WorkerOwner=6, PipeConnect=7, PeerIdentity=8, Authentication=9, Preparing=10, EngineStart=11, Ready=12, Cleanup=13, InstallationProtection=20, InstallFlowseal=21, InstallNative=22 }
 public enum BrokerFailureKind { UacDenied, Cancelled, StartupTimeout, HelperExited, AuthenticationRejected, InstallationRejected, EngineLaunchFailed, IpcDisconnected, CleanupIncomplete, LaunchFailed }
 public sealed record BrokerFailure(BrokerFailureKind Kind, BrokerStage Stage, long ElapsedMilliseconds, int SafeCode, int? HelperExitCode, bool CleanupCompleted, BrokerSecurityDetail? Security=null)
 {
@@ -51,7 +51,7 @@ public static class BrokerStartup
     {
         var stage=ExitStage(exit);
         if(stage is null || exit is not {} code)return null;
-        if((code&255)==2)return stage==BrokerStage.BootstrapIntegrity?BrokerFailureKind.InstallationRejected:BrokerFailureKind.AuthenticationRejected;
+        if((code&255)==2)return stage is BrokerStage.BootstrapIntegrity or BrokerStage.Installation or BrokerStage.InstallationProtection or BrokerStage.InstallFlowseal or BrokerStage.InstallNative?BrokerFailureKind.InstallationRejected:BrokerFailureKind.AuthenticationRejected;
         if((code&255)==3)return stage is BrokerStage.Authentication or BrokerStage.PeerIdentity?BrokerFailureKind.AuthenticationRejected:BrokerFailureKind.InstallationRejected;
         if((code&255)==4)return BrokerFailureKind.StartupTimeout;
         return null; // crash/arbitrary exit never becomes an inferred rejection

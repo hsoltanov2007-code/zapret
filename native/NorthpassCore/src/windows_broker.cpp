@@ -98,7 +98,7 @@ int launch(int argc,wchar_t**argv) {
             ((static_cast<std::uint64_t>(creation.dwHighDateTime)<<32)|creation.dwLowDateTime)!=created || WaitForSingleObject(owner.get(),0)!=WAIT_TIMEOUT)
             throw std::runtime_error("Broker desktop owner identity mismatch.");
     }
-    if(!install)evidence.report(4);
+    evidence.report(4);
     const auto directory=executable_path().parent_path(), app=directory.parent_path();
     PWSTR raw{};if(FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFiles,0,nullptr,&raw)))throw std::runtime_error("Program Files unavailable.");
     const std::filesystem::path program(raw);CoTaskMemFree(raw);
@@ -126,7 +126,7 @@ int launch(int argc,wchar_t**argv) {
     limits.BasicLimitInformation.LimitFlags=JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     if(!job.get() || !SetInformationJobObject(job.get(),JobObjectExtendedLimitInformation,&limits,sizeof(limits)))throw std::runtime_error("Broker ownership job initialization failed.");
     STARTUPINFOW startup{};startup.cb=sizeof(startup);PROCESS_INFORMATION info{};
-    if(!install)evidence.report(5);
+    evidence.report(5);
     if(!CreateProcessW(worker.c_str(),command.data(),nullptr,nullptr,FALSE,CREATE_SUSPENDED|CREATE_UNICODE_ENVIRONMENT|CREATE_NO_WINDOW,
         environment.data(),directory.c_str(),&startup,&info))throw BootstrapWindowsError("Verified broker worker creation",GetLastError());
     Handle process(info.hProcess),thread(info.hThread);

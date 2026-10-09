@@ -90,6 +90,34 @@ try {
     Invoke-Checked $app @('--native-check')
     $expectedDll = $nativeManifest.components | Where-Object { $_.path -eq 'bin/WinDivert.dll' }
     if ((Get-FileHash $nativeDll -Algorithm SHA256).Hash -ne $expectedDll.sha256) { throw 'Actual installer repair did not restore the reviewed component.' }
+    # Emulate a protected selection left by a prior build not in this build's
+    # catalog. The inert old directory is deliberately never an executable.
+    # This is an upgrade-state regression fixture, not a historical installer.
+    $oldRevision = 'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee'
+    if ($oldRevision -eq $nativeManifest.revision) { throw 'Upgrade fixture collides with current revision.' }
+    $oldDirectory = Join-Path $nativeRoot $oldRevision
+    if (Test-Path $oldDirectory) { throw 'Upgrade fixture directory already exists.' }
+    New-Item -ItemType Directory $oldDirectory | Out-Null
+    $sentinel = Join-Path $oldDirectory 'prior-build-fixture.txt'
+    Set-Content $sentinel 'Never execute or trust this prior-build fixture.'
+    $savedSelection = [IO.File]::ReadAllBytes($nativeSelection)
+    $selectionAcl = Get-Acl $nativeSelection
+    try {
+        [IO.File]::WriteAllText($nativeSelection, (@{Current=$oldRevision; Previous=$null} | ConvertTo-Json -Compress))
+        Set-Acl $nativeSelection $selectionAcl
+        Invoke-Checked $app @('--native-check') 1
+        Invoke-Checked $setup @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$install`"", "/LOG=`"$(Join-Path $results 'installer-upgrade.log')`"")
+        $selectionAfter = Get-Content $nativeSelection -Raw | ConvertFrom-Json
+        if ($selectionAfter.Current -ne $nativeManifest.revision -or $null -ne $selectionAfter.Previous) { throw 'Upgrade authorized an unknown revision or rollback target.' }
+        if (!(Test-Path $sentinel)) { throw 'Upgrade touched an unknown old engine tree.' }
+        Invoke-Checked $app @('--native-check')
+        if (!(Select-String -Path (Join-Path $results 'installer-upgrade.log') -Pattern 'NORTHPASS_SETUP helper_exit=0' -Quiet)) { throw 'Installer did not preserve successful helper status.' }
+        Write-Host '::notice title=Offline upgrade regression::Actual installer replaced an uncatalogued protected prior-build selection using its verified bundled native payload. Old inert tree was untouched, rollback excludes unknown revisions, published native check passed. Synthetic prior-build state; not affected-PC reproduction.'
+    } finally {
+        [IO.File]::WriteAllBytes($nativeSelection, $savedSelection)
+        Set-Acl $nativeSelection $selectionAcl
+        Remove-Item $oldDirectory -Recurse -Force
+    }
     $evidence = 'One-file installer installed the self-contained x64 app, Flowseal fallback and original native pass-through payloads, licences and corresponding sources; obsolete named fixture files were removed. Published app verified/reused Flowseal and native protected components, rejected missing components, verified restoration, and initialized/stopped the native idle driver through IDpiEngine through the default authenticated broker/native named-pipe path. Actual repeat installer execution repaired a deliberately corrupted native DLL from the bundled offline payload. Direct stdin control was separately tested in the Windows integration suite. No internet traffic or ISP bypass test was performed.'
     Set-Content (Join-Path $results 'installer-evidence.txt') $evidence
     Write-Host "::notice title=Installed application acceptance::$evidence"

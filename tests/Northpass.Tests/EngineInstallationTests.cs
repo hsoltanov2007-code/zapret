@@ -10,13 +10,18 @@ public sealed class EngineInstallationTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "northpass-install-tests-" + Guid.NewGuid().ToString("N"));
     private static string Hash(byte[] data) => Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
-    private sealed class TestSecurity : IInstallationSecurity
+    private sealed class TestSecurity(bool rejectSelection = false) : IInstallationSecurity
     {
         public void PrepareRoot(string root) { SafeArchive.NoLinks(root); Directory.CreateDirectory(root); }
         public void ProtectDirectory(string path) => SafeArchive.NoLinks(path);
         public void ValidateDirectory(string path) { SafeArchive.NoLinks(path); if (!Directory.Exists(path)) throw new DirectoryNotFoundException(path); }
         public void ProtectFile(string path) => SafeArchive.NoLinks(path);
-        public void ValidateFile(string path) => SafeArchive.NoLinks(path);
+        public void ValidateFile(string path)
+        {
+            SafeArchive.NoLinks(path);
+            if (rejectSelection && Path.GetFileName(path)=="selection.json")
+                throw new UnauthorizedAccessException("Selection ACL fixture denied.");
+        }
     }
     private sealed class Handler(byte[] archive, HttpStatusCode code = HttpStatusCode.OK) : HttpMessageHandler
     {
@@ -278,6 +283,75 @@ public sealed class EngineInstallationTests : IDisposable
         var manager = Manager(http, fixture.Manifest); await manager.EnsureInstalledAsync();
         await File.WriteAllTextAsync(State, "{\"Current\":\"" + new string('f', 40) + "\"}");
         await Assert.ThrowsAsync<InvalidDataException>(() => manager.DetectAsync());
+    }
+    [Fact]
+    public async Task ExplicitOfflineRepairMigratesUncataloguedPriorBuildWithoutTrustingIt()
+    {
+        var old = Fixture('a', "old engine");
+        using var oldHttp = new HttpClient(new Handler(old.Archive));
+        var previous = await Manager(oldHttp, old.Manifest).EnsureInstalledAsync();
+        var newer = Fixture('b', "new reviewed engine");
+        string payload = Path.Combine(_directory, "upgrade.zip"); await File.WriteAllBytesAsync(payload, newer.Archive);
+        using var handler = new Handler([], HttpStatusCode.ServiceUnavailable); using var http = new HttpClient(handler);
+        var probed = new List<string>();
+        var manager = Manager(http, newer.Manifest, offline: payload, probe: (engine, _) => { probed.Add(engine.Revision); return Task.CompletedTask; });
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.EnsureInstalledAsync());
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.AcquireLaunchLeaseAsync(previous.ExecutablePath));
+        var installed = await manager.RepairAsync();
+        Assert.Equal(newer.Manifest.Revision, installed.Revision);
+        Assert.Equal(installed, await manager.DetectAsync());
+        Assert.Equal(new[] { newer.Manifest.Revision }, probed);
+        Assert.Equal("old engine", await File.ReadAllTextAsync(previous.ExecutablePath));
+        using var state = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(State));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, state.RootElement.GetProperty("Previous").ValueKind);
+        Assert.Equal(0, handler.Requests);
+    }
+    [Fact]
+    public async Task FailedMigrationPreservesUnknownSelectionAndDoesNotProbeOldBytes()
+    {
+        var old = Fixture('a', "old engine"); using var oldHttp = new HttpClient(new Handler(old.Archive));
+        var previous = await Manager(oldHttp, old.Manifest).EnsureInstalledAsync();
+        string selection = await File.ReadAllTextAsync(State);
+        var newer = Fixture('b', "new engine");
+        string payload = Path.Combine(_directory, "corrupt-upgrade.zip"); await File.WriteAllBytesAsync(payload, new byte[newer.Archive.Length]);
+        using var handler = new Handler([]); using var http = new HttpClient(handler); int probes = 0;
+        var manager = Manager(http, newer.Manifest, offline: payload, probe: (_, _) => { probes++; return Task.CompletedTask; });
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.RepairAsync());
+        Assert.Equal(selection, await File.ReadAllTextAsync(State));
+        Assert.Equal("old engine", await File.ReadAllTextAsync(previous.ExecutablePath));
+        Assert.Equal(0, probes); Assert.Equal(0, handler.Requests);
+    }
+    [Fact]
+    public async Task RepairNeverUsesAnUnknownPointerAsAPathOrRollbackTarget()
+    {
+        var fixture = Fixture(); using var http = new HttpClient(new Handler(fixture.Archive));
+        var manager = Manager(http, fixture.Manifest); var installed = await manager.EnsureInstalledAsync();
+        string outside = Path.Combine(_directory, "outside.txt"); await File.WriteAllTextAsync(outside, "untouched");
+        await File.WriteAllTextAsync(State, "{\"Current\":\"../../outside.txt\",\"Previous\":\"../unknown\"}");
+        await Assert.ThrowsAsync<InvalidDataException>(() => manager.DetectAsync());
+        Assert.Equal(installed, await manager.RepairAsync());
+        Assert.Equal("untouched", await File.ReadAllTextAsync(outside));
+        Assert.DoesNotContain("outside", await File.ReadAllTextAsync(State));
+        // Even a stale rollback pointer on an otherwise healthy current build
+        // cannot be carried into a new catalog as an authorized rollback target.
+        await File.WriteAllTextAsync(State, System.Text.Json.JsonSerializer.Serialize(new { Current = fixture.Manifest.Revision, Previous = new string('f', 40) }));
+        Assert.Equal(installed, await manager.RepairAsync());
+        using var state = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(State));
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, state.RootElement.GetProperty("Previous").ValueKind);
+    }
+    [Fact]
+    public async Task RepairCannotDiscardAnUnsafeSelectionFile()
+    {
+        var old = Fixture('a', "old engine"); using var oldHttp = new HttpClient(new Handler(old.Archive));
+        await Manager(oldHttp, old.Manifest).EnsureInstalledAsync();
+        string selection = await File.ReadAllTextAsync(State);
+        var newer = Fixture('b', "new engine");
+        string payload = Path.Combine(_directory, "upgrade.zip"); await File.WriteAllBytesAsync(payload, newer.Archive);
+        using var handler = new Handler([]); using var http = new HttpClient(handler);
+        var manager = new EngineInstallationManager(Path.GetDirectoryName(State)!, http, new TestSecurity(rejectSelection: true), newer.Manifest,
+            offlinePayload: payload, requireOfflinePayload: true);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => manager.RepairAsync());
+        Assert.Equal(selection, await File.ReadAllTextAsync(State)); Assert.Equal(0, handler.Requests);
     }
     [Fact]
     public async Task DownloadFailuresAndCancellationNeverActivate()

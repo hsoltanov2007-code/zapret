@@ -12,19 +12,21 @@ using Northpass.Services.Installation;
 
 if (!OperatingSystem.IsWindows()) return 2;
 string root=Path.GetFullPath(Path.Combine(AppContext.BaseDirectory,".."));
-BrokerEvidenceWriter? evidence=null;BrokerStage stage=BrokerStage.WorkerOwner;
+BrokerEvidenceWriter? evidence=null;BrokerStage stage=args.SequenceEqual(new[]{"--install"})?BrokerStage.Installation:BrokerStage.WorkerOwner;
 void Stage(BrokerStage value){stage=value;evidence?.Report(value);}
 try
 {
     if (!BrokerSecurity.IsAdministrator)throw new UnauthorizedAccessException("The network helper requires Windows elevation.");
     if (args.SequenceEqual(new[]{"--install"}))
     {
+        Stage(BrokerStage.InstallationProtection);
         // Installer-only fixed self location. Never takes an external path/catalog.
         string program=Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         if(!root.StartsWith(program+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new UnauthorizedAccessException("Install the helper under Program Files.");
         SafeArchive.NoLinks(root); new WindowsInstallationSecurity().ProtectDirectory(root);
         BrokerSecurity.ValidateProtectedApplication(root);
         using var http=new HttpClient();foreach(string id in new[]{"zapret1","native"}) {
+            Stage(id=="native"?BrokerStage.InstallNative:BrokerStage.InstallFlowseal);
             var manager=Manager(id,http,root);
             try {await manager.EnsureInstalledAsync();}
             catch(Exception ex)when(ex is InvalidDataException or FileNotFoundException){await manager.RepairAsync();}
