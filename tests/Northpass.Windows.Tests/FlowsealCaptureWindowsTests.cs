@@ -74,7 +74,8 @@ public sealed class FlowsealCaptureWindowsTests
                 while (api.Receive(reflect.Value, out var packet, out var address))
                 {
                     uint pid = BinaryPrimitives.ReadUInt32LittleEndian(address.AsSpan(24));
-                    if (pid == process.Id && address[9] == 8 && BinaryPrimitives.ReadInt32LittleEndian(address.AsSpan(28)) == 0)
+                    if (pid == process.Id && address[9] == 8 && BinaryPrimitives.ReadInt32LittleEndian(address.AsSpan(28)) == 0 &&
+                        BinaryPrimitives.ReadUInt64LittleEndian(address.AsSpan(32)) == 0 && BinaryPrimitives.ReadInt16LittleEndian(address.AsSpan(40)) == 0)
                     { ownHandle = true; return; }
                 }
             });
@@ -139,7 +140,7 @@ public sealed class FlowsealCaptureWindowsTests
         private T Export<T>(string name) where T : Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library, name));
         public Owned Handle(string filter, int layer, short priority, ulong flags) { var h = open(filter, layer, priority, flags); if (h == new IntPtr(-1)) throw new InvalidOperationException("WinDivert test handle failed."); return new(this, h); }
         public bool Receive(IntPtr h, out byte[] packet, out byte[] address) { packet = new byte[65535]; address = new byte[80]; if (!recv(h, packet, (uint)packet.Length, out uint length, address)) return false; Array.Resize(ref packet, (int)length); return true; }
-        public sealed class Owned(Divert api, IntPtr h) : IDisposable { public IntPtr Value => h; public void Shutdown() => api.shutdown(h, 0); public void Dispose() => api.close(h); }
+        public sealed class Owned(Divert api, IntPtr h) : IDisposable { public IntPtr Value => h; public void Shutdown() { if (!api.shutdown(h, 1)) throw new InvalidOperationException("WinDivert test receive shutdown failed."); } public void Dispose() => api.close(h); }
         public void Dispose() => NativeLibrary.Free(library);
     }
 }
