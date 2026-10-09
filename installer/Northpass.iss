@@ -71,7 +71,7 @@ begin
       RaiseException('Northpass could not protect installation ownership.');
     if not Exec(ExpandConstant('{sys}\icacls.exe'), Root + ' /reset /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
       RaiseException('Northpass could not reset installation permissions.');
-    if not Exec(ExpandConstant('{sys}\icacls.exe'), Root + ' /inheritance:r /grant:r "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-545:(OI)(CI)RX" /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
+    if not Exec(ExpandConstant('{sys}\icacls.exe'), Root + ' /inheritance:r /grant:r "*S-1-5-32-544:F" "*S-1-5-18:F" "*S-1-5-32-545:RX" /T /Q', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
       RaiseException('Northpass could not protect installation components.');
     if not Exec(ExpandConstant('{app}\broker\Northpass.Broker.exe'), '--install', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) or (ResultCode <> 0) then
       RaiseException('Northpass could not prepare bundled components. Repair the installation.');
