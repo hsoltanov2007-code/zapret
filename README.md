@@ -10,6 +10,8 @@ A branded splash presents real preparation progress, followed by a short fade in
 
 New installations open in Russian. Saved EN/RU/AZ preferences are preserved; the vector flag/native-name selector in Settings saves language changes immediately. No advanced-tools toggle is shown. Legacy saved opt-ins no longer expose advanced pages. About focuses on Northpass, support and optional application updates; full attribution, licences and source access are separate under **Licenses & legal**. The original route logo is in `branding/` and appears in the title, About, app/tray and installer icons.
 
+Production startup now waits for the reviewed module's capture-initialization acknowledgement. Diagnostics separates that acknowledgement from **unconfirmed** current packet capture, rule matching and transformation; the module supplies no privacy-safe live counters. Capture loss/errors reported by the module revoke Active. Reviewed lists cover YouTube/CDN and Discord; Telegram client/MTProto coverage is not established. See [production traffic audit and manual affected-network tests](docs/FLOWSEAL_TRAFFIC_DIAGNOSIS.md).
+
 ## Production engine and native preview
 
 [Native v0.4 validation](docs/NATIVE_V04_VALIDATION.md) separates synthetic tests, actual Windows loopback/installer acceptance and remaining manual/security/ISP limitations.

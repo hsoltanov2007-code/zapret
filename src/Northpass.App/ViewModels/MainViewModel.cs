@@ -172,7 +172,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
             foreach (var card in ServiceCards) card.Localize(value);
             foreach (var choice in Strategies) choice.Localize(value);
             Changed(nameof(AppUpdateText)); Changed(nameof(QuickDiagnostics));
-            Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(UserMessage)); Changed(nameof(ConnectionNote));
+            Changed(nameof(TrafficDiagnostics)); Changed(nameof(TrafficTechnical)); Changed(nameof(Strings)); Changed(nameof(EngineSetupText)); Changed(nameof(StatusText)); Changed(nameof(ConnectText)); Changed(nameof(UserMessage)); Changed(nameof(ConnectionNote));
             if (!_loading && _settingsReadable) { _settings.Language = value; PersistSelection(); }
         }
     }
@@ -186,6 +186,17 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     public string ConnectText => Strings[SessionOpen ? "Disconnect" : "Connect"];
     public string StatusText => Preparing || _setupPhase == "SetupFailed" ? EngineSetupText : Strings[_status.State == EngineState.Disconnected && _setupPhase == "Ready" && !_hasStartedSession ? "Ready" : _status.State.ToString()];
     public string StatusColor => _status.State switch { EngineState.Active => "#9DC5B1", EngineState.Error => "#DC998D", EngineState.Connecting or EngineState.Stopping => "#D2BE8F", _ => "#949EAA" };
+    public string TrafficDiagnostics => string.Join("\n", new[] {
+        Strings["EngineRunning"] + ": " + Strings[_status.ProcessId is not null && _status.State == EngineState.Active ? "EvidenceYes" : "EvidenceUnknown"],
+        Strings["CaptureInitialization"] + ": " + Strings["Capture" + (_status.Traffic?.Capture.ToString() ?? "Unconfirmed")],
+        Strings["PacketInterception"] + ": " + Strings["EvidenceUnknown"],
+        Strings["TrafficMatched"] + ": " + Strings["EvidenceUnknown"],
+        Strings["TrafficTransformed"] + ": " + Strings["EvidenceUnknown"],
+        Strings["UserServiceAccess"], Strings["TrafficEvidenceScope"]
+    });
+    public string TrafficTechnical => _status.Traffic is { } t
+        ? $"strategy={t.Strategy} capture={t.Capture} TCP={t.TcpPorts} UDP={t.UdpPorts}; matched=unknown transformed=unknown kernel_loss=unknown"
+        : "capture=unknown matched=unknown transformed=unknown kernel_loss=unknown";
     public string ProfileDescription => SelectedProfile?.Description ?? "Select or import a strategy.";
     public string SessionDuration => _status.State == EngineState.Active && _status.StartedAt is { } start
         ? (DateTimeOffset.UtcNow - start).ToString(@"hh\:mm\:ss") : "00:00:00";
@@ -549,6 +560,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (await _controller.GetPerformanceAsync(_lifetime.Token) is { } performance)
             Log("Native performance: " + System.Text.Json.JsonSerializer.Serialize(performance));
+        Log("TRAFFIC_EVIDENCE " + TrafficTechnical);
         string? path = _desktop.PickExport("Northpass-diagnostics-" + DateTime.Now.ToString("yyyyMMdd-HHmmss"), "txt");
         if (path is not null) { File.WriteAllText(path, LogText); Log("Diagnostics exported. Review paths and hostnames before sharing."); }
     }
@@ -582,7 +594,7 @@ public sealed class MainViewModel : ObservableObject, IAsyncDisposable
         if (_status.State != status.State || _status.ProcessId != status.ProcessId) InvalidateDiagnostics();
         _status = status;
         if (status.State == EngineState.Active) _hasStartedSession = true;
-        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(ConnectText), nameof(SessionDuration), nameof(ConnectionNote) }) Changed(name);
+        foreach (string name in new[] { nameof(StatusText), nameof(StatusColor), nameof(SessionOpen), nameof(CanConfigure), nameof(ConnectText), nameof(SessionDuration), nameof(ConnectionNote), nameof(TrafficDiagnostics), nameof(TrafficTechnical) }) Changed(name);
         if (status.Error is not null) Fail(new IOException(status.Error), "ConnectionFailed");
         else _errors.Observe(null);
         RefreshCommands();

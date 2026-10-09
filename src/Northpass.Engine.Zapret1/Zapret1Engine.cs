@@ -11,7 +11,10 @@ public sealed class Zapret1Engine : IDpiEngine
     private readonly IEngineDataProvider _data;
     private readonly IEngineCollisionDetector _collisions;
     private readonly bool _noTrafficCapture;
-    private readonly ProcessSupervisor _process = new();
+    private readonly ProcessSupervisor _process = new(new(
+        FlowsealCaptureObserver.ReadyLine, null, TimeSpan.FromSeconds(15), TimeSpan.Zero),
+        sanitizeLog: FlowsealCaptureObserver.SafeLog);
+    private readonly FlowsealCaptureObserver _capture = new();
     private readonly SemaphoreSlim _operations = new(1, 1);
     private IAsyncDisposable? _engineLease;
     private IEngineDataLease? _dataLease;
@@ -25,8 +28,8 @@ public sealed class Zapret1Engine : IDpiEngine
     {
         if (installation.EngineId != Metadata.Id) throw new ArgumentException("A Zapret1 installation manager is required.");
         (_installation, _data, _collisions, _noTrafficCapture) = (installation, data, collisions ?? new EngineCollisionDetector(), noTrafficCapture);
-        _process.LogReceived += text => LogReceived?.Invoke(text);
-        _process.StatusChanged += state => { _preflightFailure = null; StatusChanged?.Invoke(state); };
+        _process.LogReceived += text => { _capture.Observe(text); LogReceived?.Invoke(text); };
+        _process.StatusChanged += state => { _preflightFailure = null; StatusChanged?.Invoke(WithEvidence(state)); };
     }
     public async Task<ValidationResult> ValidateConfigurationAsync(EngineConfiguration configuration, CancellationToken token = default)
     {
@@ -67,6 +70,9 @@ public sealed class Zapret1Engine : IDpiEngine
             await ProbeAsync(info, info.ArgumentList.Append("--dry-run").ToArray(), token);
             _collisions.Check(); // Recheck immediately before interception; never kill a collision.
             _preflightFailure = null;
+            _capture.Reset(configuration.Profile, _noTrafficCapture);
+            var capture = _capture.Evidence;
+            LogReceived?.Invoke($"FLOWSEAL_CONFIG strategy={capture.Strategy} capture={(_noTrafficCapture ? "test-disabled" : "production-ports")} TCP={capture.TcpPorts} UDP={capture.UdpPorts} rules={FlowsealCatalog.Find(capture.Strategy)!.Rules.Count}");
             await _process.StartAsync(info, token);
         }
         catch (Exception ex)
@@ -132,6 +138,7 @@ public sealed class Zapret1Engine : IDpiEngine
         try { await _process.StopAsync(token); await ReleaseLeasesAsync(); await StartCoreAsync(configuration, token); }
         finally { _operations.Release(); }
     }
+    private EngineStatus WithEvidence(EngineStatus state) => _capture.Apply(state);
     public async Task<EngineStatus> GetStatusAsync(CancellationToken token = default)
     {
         await _operations.WaitAsync(token);
@@ -139,7 +146,7 @@ public sealed class Zapret1Engine : IDpiEngine
         {
             var state = await _process.GetStatusAsync(token);
             if (state.ProcessId is null && state.State is EngineState.Disconnected or EngineState.Error) await ReleaseLeasesAsync();
-            return _preflightFailure ?? state;
+            return _preflightFailure ?? WithEvidence(state);
         }
         finally { _operations.Release(); }
     }

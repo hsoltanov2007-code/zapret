@@ -12,6 +12,20 @@ public sealed class UiStrings(string language)
     }
     private static readonly Dictionary<string, (string En, string Ru, string Az)> Entries = new()
     {
+        ["EngineRunning"] = ("Engine running", "Движок работает", "Mühərrik işləyir"),
+        ["CaptureInitialization"] = ("Capture initialization", "Инициализация перехвата", "Tutmanın başladılması"),
+        ["PacketInterception"] = ("Packets intercepted", "Перехват пакетов", "Paketlərin tutulması"),
+        ["TrafficMatched"] = ("Relevant traffic matched", "Совпадение нужного трафика", "Lazımi trafikin uyğunluğu"),
+        ["TrafficTransformed"] = ("Traffic transformed", "Преобразование трафика", "Trafikin dəyişdirilməsi"),
+        ["EvidenceYes"] = ("Confirmed", "Подтверждено", "Təsdiqlənib"),
+        ["EvidenceUnknown"] = ("Unconfirmed", "Не подтверждено", "Təsdiqlənməyib"),
+        ["CaptureUnconfirmed"] = ("Unconfirmed", "Не подтверждена", "Təsdiqlənməyib"),
+        ["CaptureInitialized"] = ("Confirmed at startup; current packet capture unverified", "Подтверждена при запуске; текущий перехват не проверен", "Başlanğıcda təsdiqlənib; cari paket tutması yoxlanılmayıb"),
+        ["CaptureUnavailable"] = ("Unavailable", "Недоступна", "Əlçatan deyil"),
+        ["CaptureFailed"] = ("Error reported", "Обнаружена ошибка", "Xəta bildirilib"),
+        ["CaptureTestDisabled"] = ("Disabled in test session", "Отключена в тестовом сеансе", "Test sessiyasında söndürülüb"),
+        ["UserServiceAccess"] = ("Actual access: check video playback, chat and calls yourself.", "Реальный доступ: проверьте видео, сообщения и звонки самостоятельно.", "Real giriş: video, mesaj və zəngləri özünüz yoxlayın."),
+        ["TrafficEvidenceScope"] = ("This engine exposes no safe live match/transformation counters. Web checks below test HTTPS only; they do not validate video, voice or Telegram connections.", "Движок не предоставляет безопасных счётчиков совпадений и преобразований. Веб-проверки оценивают только HTTPS, а не видео, голос или подключения Telegram.", "Mühərrik təhlükəsiz canlı uyğunluq və dəyişiklik sayğacları vermir. Veb yoxlamaları yalnız HTTPS-i yoxlayır; video, səs və Telegram bağlantılarını təsdiqləmir."),
         ["EngineSetup"] = ("Components", "Компоненты", "Komponentlər"),
         ["SetupRequired"] = ("Preparing components", "Подготовка компонентов", "Komponentlər hazırlanır"),
         ["Downloading"] = ("Preparing components", "Подготовка компонентов", "Komponentlər hazırlanır"),

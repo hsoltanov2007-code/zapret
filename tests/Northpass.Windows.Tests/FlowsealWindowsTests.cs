@@ -58,7 +58,11 @@ public sealed class FlowsealWindowsTests
                     Assert.Throws<IOException>(() => File.Open(file, FileMode.Open, FileAccess.Write, FileShare.Read));
                 }
                 var info = Zapret1Engine.CreateStartInfo(new(installed.ExecutablePath, profile), dataLease);
-                info.ArgumentList.Add("--dry-run"); info.RedirectStandardOutput = true; info.RedirectStandardError = true;
+                // Ask the ACTUAL reviewed parser to render its production kernel
+                // filter, without opening a network interception handle.
+                string filterPath = Path.Combine(dataLease.DirectoryPath, "compiled-filter.txt");
+                info.ArgumentList.Add("--wf-save=" + filterPath);
+                info.RedirectStandardOutput = true; info.RedirectStandardError = true;
                 using var process = Process.Start(info)!;
                 var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
@@ -66,7 +70,14 @@ public sealed class FlowsealWindowsTests
                 finally { if (!process.HasExited) { process.Kill(true); await process.WaitForExitAsync(); } }
                 string text = await output + await error;
                 Assert.True(process.ExitCode == 0, strategy.Id + ": " + text);
-                Assert.Contains("command line parameters verified", text);
+                Assert.Contains("raw filter saved", text);
+                string kernel = File.ReadAllText(filterPath); File.Delete(filterPath);
+                Assert.Contains("!impostor and !loopback", kernel);
+                Assert.Contains("outbound", kernel); Assert.Contains("inbound", kernel);
+                Assert.Contains("tcp.DstPort", kernel); Assert.Contains("udp.DstPort", kernel);
+                Assert.Contains("443", kernel); Assert.DoesNotContain("and false", kernel);
+                Assert.DoesNotContain(" ip and", kernel); Assert.DoesNotContain(" ipv6 and", kernel);
+                Evidence(repo, "flowseal-filter-" + strategy.Id, "Actual reviewed parser rendered production dual-stack TCP/UDP filter: " + kernel);
             }
             Assert.Empty(Directory.GetDirectories(dataRoot));
             var runtime = new FileInfo(Path.Combine(root, manifest.Revision, "bin/cygwin1.dll"));

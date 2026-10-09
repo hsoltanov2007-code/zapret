@@ -5,19 +5,20 @@ using Northpass.Models;
 namespace Northpass.Engine;
 
 // Optional owned-child protocol. Legacy engines retain their existing startup behavior.
-public sealed record ChildProcessProtocol(string ReadyLine, string StopCommand, TimeSpan StartupTimeout, TimeSpan ShutdownTimeout);
+public sealed record ChildProcessProtocol(string ReadyLine, string? StopCommand, TimeSpan StartupTimeout, TimeSpan ShutdownTimeout);
 
 // Owns exactly one foreground child. All lifecycle transitions are serialized.
 // Active means the process is alive, never that a site is accessible.
 public sealed class ProcessSupervisor : IAsyncDisposable
 {
     private readonly ChildProcessProtocol? _protocol;
+    private readonly Func<string, string?>? _sanitizeLog;
     private Task _pumps = Task.CompletedTask;
     private readonly Func<Process, CancellationToken, Task>? _initializeChild;
     private readonly Func<CancellationToken, Task>? _stopChild;
     public ProcessSupervisor(ChildProcessProtocol? protocol = null,
-        Func<Process, CancellationToken, Task>? initializeChild = null, Func<CancellationToken, Task>? stopChild = null)
-        => (_protocol, _initializeChild, _stopChild) = (protocol, initializeChild, stopChild);
+        Func<Process, CancellationToken, Task>? initializeChild = null, Func<CancellationToken, Task>? stopChild = null, Func<string, string?>? sanitizeLog = null)
+        => (_protocol, _initializeChild, _stopChild, _sanitizeLog) = (protocol, initializeChild, stopChild, sanitizeLog);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private Process? _process;
     private volatile EngineStatus _status = new(EngineState.Disconnected);
@@ -77,7 +78,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
                     if (completed == exited) await exited;
                 }
                 catch (OperationCanceledException) when (!token.IsCancellationRequested)
-                { throw new TimeoutException("Native engine did not confirm initialization within its startup deadline."); }
+                { throw new TimeoutException("Engine did not confirm initialization within its startup deadline."); }
             }
             if (process.HasExited)
             {
@@ -114,6 +115,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             while (await reader.ReadLineAsync() is { } line)
             {
                 string text = prefix + (line.Length > 16384 ? line[..16384] + "…" : line);
+                if (_sanitizeLog is not null) { var safe = _sanitizeLog(text); if (safe is null) continue; text = safe; }
                 recent.Enqueue(text); while (recent.Count > 8) recent.TryDequeue(out _);
                 LogReceived?.Invoke(text);
                 if (prefix.Length == 0 && line == _protocol?.ReadyLine) ready?.TrySetResult();
@@ -166,7 +168,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
 
     private async Task RequestGracefulStopAsync(Process process)
     {
-        if (_protocol is null || process.HasExited) return;
+        if (_protocol?.StopCommand is null || process.HasExited) return;
         try
         {
             using var timeout = new CancellationTokenSource(_protocol.ShutdownTimeout);
@@ -195,7 +197,7 @@ public sealed class ProcessSupervisor : IAsyncDisposable
             int exitCode = process.ExitCode;
             _process = null;
             process.Dispose();
-            if (_protocol is not null && exitCode != 0)
+            if (_protocol?.StopCommand is not null && exitCode != 0)
             {
                 var failure = new InvalidOperationException($"Native engine stopped with an error (code {exitCode}). See the diagnostic logs; scoped packet delivery is not guaranteed.");
                 SetStatus(new(EngineState.Error, ExitCode: exitCode, Error: failure.Message));
