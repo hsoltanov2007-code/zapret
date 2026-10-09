@@ -154,7 +154,8 @@ public:
                         if (observed_ <= 256) { std::lock_guard guard(output_);
                             std::cout << "NORTHPASS_LAB_TRACE stage=post seq=" << view.sequence << " ack=" << view.acknowledgement
                                 << " bytes=" << count << " payload=" << view.payload.size() << " flags=" << static_cast<unsigned>(view.tcp_flags)
-                                << " hello=" << simulator_recognizes_client_hello(packet) << '\n' << std::flush;
+                                << " hello=" << simulator_recognizes_client_hello(packet)
+                                << " checksum_valid=" << (observe_checksum(packet, {true, true, false, address.IPv6 != 0, true, true, false}) == ChecksumObservation::Valid) << '\n' << std::flush;
                         }
                     }
                 }
@@ -243,8 +244,9 @@ int run(const Options& options) {
         if (!decision.proposal) { ++rejected; return forward(packet); }
         SegmentTransaction transaction(bytes, split.transaction_configuration());
         if (!transaction.propose(*decision.proposal) || !transaction.commit()) { ++rejected; return forward(packet); }
+        if (WaitForSingleObject(stop.get(), 0) != WAIT_TIMEOUT) { ++rejected; return forward(packet); }
         ++accepted; split_latency_ns += monotonic_ns() - started;
-        { std::lock_guard guard(output_mutex);
+        if (accepted <= 64) { std::lock_guard guard(output_mutex);
             std::cout << "NORTHPASS_LAB_TRACE stage=original seq=" << view.sequence << " ack=" << view.acknowledgement
                 << " bytes=" << bytes.size() << " payload=" << view.payload.size() << " flags=" << static_cast<unsigned>(view.tcp_flags)
                 << " hello=1 segments=" << transaction.segments().size() << " retransmission=" << decision.retransmission << '\n' << std::flush;
@@ -254,8 +256,12 @@ int run(const Options& options) {
         for (std::size_t i = 0; i < transaction.segments().size(); ++i) {
             const auto& segment = transaction.segments()[i]; UINT sent{};
             transmission_attempted = true; // includes an ambiguous FIRST send failure
-            if (options.lab_send_failure == i + 1 || !divert.send(divert.handle, segment.data(), static_cast<UINT>(segment.size()), &sent, &address) || sent != segment.size()) {
+            const bool injected = options.lab_send_failure == i + 1;
+            const bool delivered = !injected && divert.send(divert.handle, segment.data(), static_cast<UINT>(segment.size()), &sent, &address);
+            const auto code = injected ? ERROR_GEN_FAILURE : !delivered ? GetLastError() : sent != segment.size() ? ERROR_WRITE_FAULT : ERROR_SUCCESS;
+            if (code != ERROR_SUCCESS) {
                 transaction.send_failed(); ++send_failures; ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get());
+                { std::lock_guard guard(error_mutex); receive_error = windows_error(injected ? "Injected Split lab reinjection" : "Split lab reinjection", code) + " No rollback after attempted send; connection may be interrupted."; }
                 { std::lock_guard guard(output_mutex); std::cout << "NORTHPASS_LAB_SEND_FAILURE transmitted=" << transaction.sent()
                     << " unsent_segments=" << transaction.segments().size() - transaction.sent()
                     << " rollback_allowed=0 connection_may_be_interrupted=1\n" << std::flush; }
@@ -263,7 +269,7 @@ int run(const Options& options) {
             }
             if (!transaction.record_sent(i)) throw std::runtime_error("Lab transaction send accounting failed.");
             ++lab_reinjections;
-            { std::lock_guard guard(output_mutex); const auto sent_view = classify(segment);
+            if (accepted <= 64) { std::lock_guard guard(output_mutex); const auto sent_view = classify(segment);
                 std::cout << "NORTHPASS_LAB_TRACE stage=sent seq=" << sent_view.sequence << " ack=" << sent_view.acknowledgement
                     << " bytes=" << segment.size() << " payload=" << sent_view.payload.size() << " flags=" << static_cast<unsigned>(sent_view.tcp_flags)
                     << " hello=" << simulator_recognizes_client_hello(segment) << " checksum_valid=1\n" << std::flush; }

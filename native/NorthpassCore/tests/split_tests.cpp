@@ -54,7 +54,7 @@ void test(std::string_view name) {
         }
         auto extra = payload; extra.push_back(0); require(parse_client_hello(extra).state == ClientHelloState::Unsupported);
         // Bounds exploration includes random extension and handshake lengths.
-        for (unsigned i = 0; i < 65536; ++i) { auto p = hello(10); std::fill(p.begin() + 56, p.end(), 255); word(p, 54, i); require((parse_client_hello(p).state == ClientHelloState::Complete) == (i == 10)); }
+        for (unsigned i = 0; i < 65536; ++i) { auto p = hello(10); std::fill(p.begin() + 56, p.end(), std::uint8_t{255}); word(p, 54, i); require((parse_client_hello(p).state == ClientHelloState::Complete) == (i == 10)); }
     } else if (name == "split_sequences") {
         for (bool ipv6 : {false, true}) for (bool timestamps : {false, true}) {
             auto original = packet(payload, ipv6, 0xfffffffe, 0x18, false, 2001, timestamps); FlowTracker flow;

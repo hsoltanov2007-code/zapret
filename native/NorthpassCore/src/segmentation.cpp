@@ -28,10 +28,12 @@ bool segmentation_layout(std::span<const std::uint8_t> bytes) noexcept {
         bytes[p.transport_offset + 12] & 1 || bytes[p.transport_offset + 18] || bytes[p.transport_offset + 19]) return false;
     // Only EOL, NOP and timestamps have reviewed per-segment semantics here.
     const auto end = bytes.size() - p.payload.size();
+    bool timestamp_seen = false;
     for (std::size_t at = p.transport_offset + 20; at < end;) {
         if (bytes[at] == 0) { for (; at < end; ++at) if (bytes[at] != 0) return false; break; }
         if (bytes[at] == 1) { ++at; continue; }
-        if (bytes[at] != 8 || end - at < 10 || bytes[at + 1] != 10) return false;
+        if (bytes[at] != 8 || end - at < 10 || bytes[at + 1] != 10 || timestamp_seen) return false;
+        timestamp_seen = true;
         at += 10;
     }
     return true;
