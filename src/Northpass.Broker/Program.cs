@@ -35,8 +35,9 @@ try
     if((args.Length!=6 && !noTraffic) || args[0]!="--owner" || args[2]!="--created" || args[4]!="--pipe" ||
         !int.TryParse(args[1],NumberStyles.None,CultureInfo.InvariantCulture,out int pid) || pid<=0 ||
         !long.TryParse(args[3],NumberStyles.None,CultureInfo.InvariantCulture,out long created) || !BrokerPipe.ValidId(args[5]))throw new InvalidDataException("Invalid broker launch contract.");
-    evidence=await BrokerEvidenceWriter.ConnectAsync(args[5],pid);Stage(BrokerStage.WorkerOwner);
+    evidence=await BrokerEvidenceWriter.ConnectAsync(args[5],pid);Stage(BrokerStage.BootstrapIntegrity);
     BrokerSecurity.ValidateProtectedApplication(root);
+    Stage(BrokerStage.WorkerOwner);
     using var owner=Process.GetProcessById(pid);
     BrokerSecurity.ValidatePeer(owner,Path.Combine(root,"Northpass.exe"),created,requireAdmin:false);
     using var lifetime=new CancellationTokenSource();
@@ -49,9 +50,12 @@ try
     Stage(BrokerStage.Authentication);
     using(var startup=CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token))
     {
-        startup.CancelAfter(TimeSpan.FromSeconds(10));string hello=await BrokerProtocol.ReadAsync<string>(pipe,startup.Token);
-        if(hello.Length!=72 || !hello.StartsWith("HELLO 3 ",StringComparison.Ordinal) || !hello[8..].All(c=>c is >= '0' and <= '9' or >= 'A' and <= 'F'))throw new InvalidDataException("Invalid broker authentication challenge.");
-        await BrokerProtocol.WriteAsync(pipe,"AUTH 3 "+hello[8..],startup.Token);
+        startup.CancelAfter(TimeSpan.FromSeconds(10));
+        try {
+            string hello=await BrokerProtocol.ReadAsync<string>(pipe,startup.Token);
+            if(hello.Length!=72 || !hello.StartsWith("HELLO 3 ",StringComparison.Ordinal) || !hello[8..].All(c=>c is >= '0' and <= '9' or >= 'A' and <= 'F'))throw new InvalidDataException("Invalid broker authentication challenge.");
+            await BrokerProtocol.WriteAsync(pipe,"AUTH 3 "+hello[8..],startup.Token);
+        } catch(OperationCanceledException ex)when(!lifetime.IsCancellationRequested){throw new TimeoutException("Broker authentication deadline expired.",ex);}
     }
     Stage(BrokerStage.Preparing);
     using var client=new HttpClient();
@@ -130,7 +134,7 @@ try
     }
     return 0;
 }
-catch(Exception ex){evidence?.Report(stage,BrokerStartup.SafeCode(ex));Console.Error.WriteLine($"NORTHPASS_BROKER_ERROR stage={stage} code={BrokerStartup.SafeCode(ex)}");return 0x4e500000|((int)stage<<8)|1;}
+catch(Exception ex){evidence?.Report(stage,BrokerStartup.SafeCode(ex));Console.Error.WriteLine($"NORTHPASS_BROKER_ERROR stage={stage} code={BrokerStartup.SafeCode(ex)}");int kind=ex switch {UnauthorizedAccessException=>2,InvalidDataException=>3,TimeoutException=>4,_=>1};return 0x4e500000|((int)stage<<8)|kind;}
 finally {evidence?.Dispose();}
 
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]

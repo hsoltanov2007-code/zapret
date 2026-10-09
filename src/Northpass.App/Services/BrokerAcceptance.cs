@@ -21,7 +21,7 @@ internal static class BrokerAcceptance
             try {await client.RequestAsync("DETECT","native");throw new IOException("Substituted owner image unexpectedly authenticated.");}
             catch(BrokerStartupException ex)
             {
-                if(ex.Failure.Kind!=BrokerFailureKind.HelperExited || ex.Failure.Stage!=BrokerStage.WorkerOwner || !ex.Failure.CleanupCompleted || ex.Failure.HelperExitCode is null)throw;
+                if(ex.Failure.Kind!=BrokerFailureKind.AuthenticationRejected || ex.Failure.Stage!=BrokerStage.WorkerOwner || !ex.Failure.CleanupCompleted || ex.Failure.HelperExitCode is null)throw;
                 int evidence=Array.IndexOf(args,"--evidence");
                 await File.WriteAllTextAsync(args[evidence+1],JsonSerializer.Serialize(new { Failure=ex.Failure,Logs=logs.ToArray(),NoEngineStarted=true }));
                 return;

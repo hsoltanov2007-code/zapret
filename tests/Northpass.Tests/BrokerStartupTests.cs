@@ -13,6 +13,10 @@ public sealed class BrokerStartupTests
         Assert.Equal(BrokerStage.WorkerOwner,BrokerStartup.ExitStage(0x4e500601));
         Assert.Equal(BrokerStage.BootstrapIntegrity,BrokerStartup.ExitStage(0x4e510401));
         Assert.Null(BrokerStartup.ExitStage(17));Assert.Null(BrokerStartup.ExitStage(0x4e50ff01));
+        Assert.Equal(BrokerFailureKind.AuthenticationRejected,BrokerStartup.Classify(new BrokerHelperExitedException(),false,BrokerStage.PipeConnect,0x4e500602));
+        Assert.Equal(BrokerFailureKind.InstallationRejected,BrokerStartup.ExitKind(0x4e500402));
+        Assert.Equal(BrokerFailureKind.AuthenticationRejected,BrokerStartup.ExitKind(0x4e500903));
+        Assert.Null(BrokerStartup.ExitKind(17));
     }
     [Fact] public async Task ExitWinsWhenPipeAndExitCompleteTogether()=>await Assert.ThrowsAsync<BrokerHelperExitedException>(()=>BrokerStartup.AwaitAsync(Task.CompletedTask,Task.CompletedTask,default,TimeSpan.Zero));
     [Fact] public async Task ExternalCancellationIsDistinct()

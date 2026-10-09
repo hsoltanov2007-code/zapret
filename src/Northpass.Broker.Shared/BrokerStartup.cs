@@ -37,8 +37,8 @@ public static class BrokerStartup
         OperationCanceledException when callerCancelled=>BrokerFailureKind.Cancelled,
         UnauthorizedAccessException when stage!=BrokerStage.Installation=>BrokerFailureKind.AuthenticationRejected,
         UnauthorizedAccessException or InvalidDataException=>BrokerFailureKind.InstallationRejected,
-        BrokerHelperExitedException=>BrokerFailureKind.HelperExited,
-        _ when exit is not null=>BrokerFailureKind.HelperExited,
+        BrokerHelperExitedException=>ExitKind(exit)??BrokerFailureKind.HelperExited,
+        _ when exit is not null=>ExitKind(exit)??BrokerFailureKind.HelperExited,
         OperationCanceledException or TimeoutException=>BrokerFailureKind.StartupTimeout,
         _=>BrokerFailureKind.LaunchFailed
     };
@@ -46,6 +46,15 @@ public static class BrokerStartup
     {
         if(exit is not {} value || (value&unchecked((int)0xffff0000)) is not(0x4e500000 or 0x4e510000))return null;
         var stage=(BrokerStage)((value>>8)&255);return Enum.IsDefined(stage)?stage:null;
+    }
+    public static BrokerFailureKind? ExitKind(int? exit)
+    {
+        var stage=ExitStage(exit);
+        if(stage is null || exit is not {} code)return null;
+        if((code&255)==2)return stage==BrokerStage.BootstrapIntegrity?BrokerFailureKind.InstallationRejected:BrokerFailureKind.AuthenticationRejected;
+        if((code&255)==3)return stage is BrokerStage.Authentication or BrokerStage.PeerIdentity?BrokerFailureKind.AuthenticationRejected:BrokerFailureKind.InstallationRejected;
+        if((code&255)==4)return BrokerFailureKind.StartupTimeout;
+        return null; // crash/arbitrary exit never becomes an inferred rejection
     }
     public static async Task AwaitAsync(Task operation,Task ownedExit,CancellationToken caller,TimeSpan timeout)
     {
