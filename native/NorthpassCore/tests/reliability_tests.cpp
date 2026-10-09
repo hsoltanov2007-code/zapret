@@ -26,6 +26,10 @@ void check(std::string_view name) {
         b.push_back(0); require(classify(b).state == ParseState::Malformed); b.pop_back();
         b.insert(b.begin()+20,4,0); b[0]=0x46; p16(b,2,40); b[20]=7; b[21]=5; require(classify(b).state == ParseState::Malformed);
         b[21]=4; require(classify(b).state == ParseState::Parsed);
+        std::vector<std::uint8_t> tcp(44); tcp[0]=0x45; p16(tcp,2,44); tcp[8]=64; tcp[9]=6; tcp[32]=0x60;
+        tcp[40]=2; tcp[41]=4; require(classify(tcp).state==ParseState::Parsed);
+        tcp[41]=5; require(classify(tcp).state==ParseState::Malformed); tcp[41]=4;
+        tcp[32]=0x62; require(classify(tcp).state==ParseState::Malformed);
         auto v6=udp(true); v6.insert(v6.begin()+40,8,0); p16(v6,4,24); v6[6]=0; v6[40]=17; v6[42]=5; v6[43]=9;
         require(classify(v6).state == ParseState::Malformed); v6[43]=2; require(classify(v6).state == ParseState::Parsed);
         std::mt19937 random(123); PassThroughStrategy s; PacketProcessor processor(s);

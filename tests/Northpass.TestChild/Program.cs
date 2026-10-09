@@ -76,13 +76,14 @@ static class PipeFixture
 {
     public static async Task<NamedPipeClientStream> OpenAsync(string id)
     {
+        int error = 0;
         for (int attempt = 0; attempt < 400; attempt++)
         {
             var handle = CreateFile("\\\\.\\pipe\\Northpass.Native." + id, 0x00100003, 0, IntPtr.Zero, 3, 0x40000000, IntPtr.Zero);
             if (!handle.IsInvalid) return new NamedPipeClientStream(PipeDirection.InOut, true, true, handle);
-            handle.Dispose(); await Task.Delay(20);
+            error = Marshal.GetLastWin32Error(); handle.Dispose(); await Task.Delay(20);
         }
-        throw new IOException("Fixture pipe unavailable.");
+        throw new IOException("Fixture pipe unavailable, Win32 error " + error);
     }
     public static async Task WriteAsync(Stream pipe, string text)
     {

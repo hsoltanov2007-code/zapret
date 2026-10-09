@@ -34,6 +34,20 @@ public sealed class NativeIpcWindowsTests
         return info;
     }
     [Fact]
+    public async Task ClientRejectsARealPipeServerThatIsNotItsOwnedProcess()
+    {
+        string id = NativePipeClient.NewIdentifier();
+        using var server = new NamedPipeServerStream("Northpass.Native." + id, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+        var info = Fixture("wait", ""); info.RedirectStandardInput = true;
+        using var owned = Process.Start(info)!;
+        await using var client = new NativePipeClient(); using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        try
+        {
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() => client.ConnectAsync(owned, id, deadline.Token));
+        }
+        finally { if (!owned.HasExited) owned.Kill(true); await owned.WaitForExitAsync(); }
+    }
+    [Fact]
     public async Task AuthenticatedOwnedChannelMetricsIpv6IntegrityAndConcurrentShutdownAreReal()
     {
         using var http = new HttpClient(); var manager = Manager(http); var installed = await manager.EnsureInstalledAsync();

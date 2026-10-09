@@ -65,14 +65,20 @@ Handle parent_handle(DWORD expected) {
     if (!matched || WaitForSingleObject(parent.get(), 0) != WAIT_TIMEOUT) throw std::runtime_error("The declared owner is not the live direct parent.");
     return parent;
 }
+class ConsoleCancellation {
+public:
+    explicit ConsoleCancellation(HANDLE stop) {
+        control_stop = stop;
+        if (!SetConsoleCtrlHandler(console_control, TRUE)) { control_stop = nullptr; throw std::runtime_error("Control handler initialization failed."); }
+    }
+    ~ConsoleCancellation() { SetConsoleCtrlHandler(console_control, FALSE); control_stop = nullptr; }
+};
 class Control {
 public:
     explicit Control(HANDLE stop) : stop_(stop) {
         const auto input = GetStdHandle(STD_INPUT_HANDLE);
         if (!input || input == INVALID_HANDLE_VALUE || GetFileType(input) != FILE_TYPE_PIPE) throw std::runtime_error("Owned stdin pipe is required.");
-        control_stop = stop;
-        if (!SetConsoleCtrlHandler(console_control, TRUE)) { control_stop = nullptr; throw std::runtime_error("Control handler initialization failed."); }
-        try { worker_ = std::thread([input, stop] {
+        worker_ = std::thread([input, stop] {
             std::string command; DWORD count{}; char byte{};
             while (WaitForSingleObject(stop, 0) == WAIT_TIMEOUT) {
                 DWORD available{};
@@ -85,10 +91,9 @@ public:
                 else break; // refuse unbounded control data
             }
             SetEvent(stop); // STOP, owner pipe closure or read failure all cancel.
-        }); } catch (...) { SetConsoleCtrlHandler(console_control, FALSE); control_stop = nullptr; throw; }
+        });
     }
     ~Control() {
-        SetConsoleCtrlHandler(console_control, FALSE); control_stop = nullptr;
         SetEvent(stop_);
         if (worker_.joinable()) worker_.join();
     }
@@ -131,6 +136,7 @@ int run(const Options& options) {
     struct MutexRelease { HANDLE value; ~MutexRelease() { ReleaseMutex(value); } } release{singleton.get()};
     Handle stop(CreateEventW(nullptr, TRUE, FALSE, nullptr));
     if (!stop.get()) throw std::runtime_error("Cancellation event initialization failed.");
+    ConsoleCancellation console(stop.get());
     Metrics metrics; ResourceSampler resources;
     // Preallocate all queue storage before opening a driver/filter.
     PacketQueue queue(Metrics::queue_capacity);

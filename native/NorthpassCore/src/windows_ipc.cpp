@@ -111,9 +111,11 @@ PipeControl::PipeControl(std::string_view id, HANDLE parent, DWORD parent_pid, H
     std::function<std::string()> snapshot) : parent_(parent), stop_(stop), metrics_(metrics) {
     if (!valid_pipe_id(id)) throw std::runtime_error("IPC identifier rejected.");
     const auto name = L"\\\\.\\pipe\\Northpass.Native." + std::wstring(id.begin(), id.end());
-    // Specific read/write/synchronize rights exclude FILE_CREATE_PIPE_INSTANCE (4).
-    // Logon SID restricts other sessions; mandatory medium label excludes low integrity.
-    const auto sddl = L"D:P(A;;GA;;;SY)(A;;0x00100003;;;" + token_sid(parent, true) + L")S:(ML;;NW;;;ME)";
+    // Individual file read/write/attribute/control-query rights, excluding
+    // FILE_CREATE_PIPE_INSTANCE (4). User SID works for interactive and service
+    // logons; peer_matches separately enforces the exact logon session and PID.
+    // Mandatory medium label excludes low-integrity writers.
+    const auto sddl = L"D:P(A;;GA;;;SY)(A;;0x0012019b;;;" + token_sid(parent, false) + L")S:(ML;;NW;;;ME)";
     PSECURITY_DESCRIPTOR descriptor{};
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl.c_str(), SDDL_REVISION_1, &descriptor, nullptr))
         throw std::runtime_error(windows_error("IPC ACL construction", GetLastError()));
