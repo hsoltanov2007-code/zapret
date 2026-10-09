@@ -165,7 +165,7 @@ public sealed class WindowSmokeTests
                         used.StartError=null;model.ConnectCommand.Execute(null);
                         await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);
                         Assert.True(model.SessionOpen);model.ConnectCommand.Execute(null);
-                        await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);Assert.False(model.SessionOpen);
+                        await app.Dispatcher.InvokeAsync(()=>{},DispatcherPriority.Background);Assert.False(model.SessionOpen);model.Language="en";
                         stage = "custom modal accept and cancel";
                         foreach (bool accept in new[] { false, true })
                         {
