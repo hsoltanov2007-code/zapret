@@ -47,61 +47,133 @@ public static class BrokerSecurity
         }
         catch { foreach(var lease in leases)lease.Dispose();throw; }
     }
+    // All peer queries use one held process handle. TOKEN_QUERY is sufficient;
+    // neither PROCESS_ALL_ACCESS nor TOKEN_DUPLICATE is requested.
     public static void ValidatePeer(Process process,string expectedImage,long expectedStart,bool requireAdmin)
     {
-        if(CreationTime(process)!=expectedStart)throw new UnauthorizedAccessException("Broker peer process identity changed.");
-        char[] buffer=new char[32768];uint length=(uint)buffer.Length;
-        using var queried=OpenProcess(0x1000,false,process.Id);
-        if(queried.IsInvalid || !QueryFullProcessImageName(queried,0,buffer,ref length) || !Path.GetFullPath(new string(buffer,0,(int)length)).Equals(Path.GetFullPath(expectedImage),StringComparison.OrdinalIgnoreCase))
-            throw new UnauthorizedAccessException("Broker peer executable substitution rejected.");
-        if(!OpenProcessToken(queried,8,out var token))throw new UnauthorizedAccessException("Broker peer token unavailable.");
+        using var queried=OpenProcess(0x101000,false,process.Id);
+        if(queried.IsInvalid)throw Api(BrokerSecurityCheck.ProcessOpen);
+        uint state=WaitForSingleObject(queried,0);
+        if(state==0)throw Rejected(BrokerSecurityCheck.ProcessAlive,BrokerSecurityOutcome.ProcessExited);
+        if(state!=258)throw Api(BrokerSecurityCheck.ProcessAlive);
+        if(!GetProcessTimes(queried,out long created,out _,out _,out _))throw Api(BrokerSecurityCheck.CreationTimeQuery);
+        if(created!=expectedStart)throw Rejected(BrokerSecurityCheck.CreationTime);
+        ValidateImage(queried,expectedImage);
+        if(!OpenProcessToken(queried,8,out var token))throw Api(BrokerSecurityCheck.PeerTokenOpen);
         using(token)
-        using(var identity=new WindowsIdentity(token.DangerousGetHandle()))
-        using(var current=WindowsIdentity.GetCurrent())
+        using(var currentProcess=Process.GetCurrentProcess())
+        using(var currentHandle=ObserveProcess(currentProcess))
         {
-            if(identity.User!=current.User || Logon(token)!=Logon(current.AccessToken))throw new UnauthorizedAccessException("Broker peer user/logon mismatch.");
-            if(requireAdmin && !IsElevatedAdministrator(token))throw new UnauthorizedAccessException("Broker peer is not elevated.");
+            if(!OpenProcessToken(currentHandle,8,out var current))throw Api(BrokerSecurityCheck.CurrentTokenOpen);
+            using(current)ValidateTokenIdentity(token,current,requireAdmin);
         }
     }
-    private static bool IsElevatedAdministrator(SafeAccessTokenHandle token)
+    private static BrokerSecurityException Api(BrokerSecurityCheck check) =>
+        new(new(check,BrokerSecurityOutcome.ApiFailure,Marshal.GetLastWin32Error()));
+    private static BrokerSecurityException Rejected(BrokerSecurityCheck check,BrokerSecurityOutcome outcome=BrokerSecurityOutcome.IdentityMismatch) =>
+        new(new(check,outcome,unchecked((int)0x80070005)));
+    private static void ValidateImage(SafeProcessHandle process,string expectedImage)
     {
-        // Query only. WindowsPrincipal.IsInRole duplicates a foreign primary
-        // token and would require TOKEN_DUPLICATE across the integrity boundary.
-        byte[] elevation=new byte[4];
-        if(!GetTokenInformation(token,20,elevation,4,out _) || BitConverter.ToInt32(elevation)!=1)return false;
-        _=GetTokenBuffer(token,2,IntPtr.Zero,0,out int size);
-        if(size is <8 or >65536)throw new UnauthorizedAccessException("Invalid peer group information size.");
+        char[] buffer=new char[32768];uint length=(uint)buffer.Length;
+        if(!QueryFullProcessImageName(process,0,buffer,ref length))throw Api(BrokerSecurityCheck.ImageQuery);
+        if(length==0 || length>buffer.Length)throw Rejected(BrokerSecurityCheck.ImageQuery,BrokerSecurityOutcome.InvalidData);
+        if(!Path.GetFullPath(new string(buffer,0,(int)length)).Equals(Path.GetFullPath(expectedImage),StringComparison.OrdinalIgnoreCase))
+            throw Rejected(BrokerSecurityCheck.ImagePath);
+    }
+    // Internal for actual Windows token regression tests, never an IPC surface.
+    internal static void ValidateTokenIdentity(SafeAccessTokenHandle peer,SafeAccessTokenHandle current,bool requireAdmin)
+    {
+        var peerUser=User(peer,BrokerSecurityCheck.PeerUserQuery);
+        var currentUser=User(current,BrokerSecurityCheck.CurrentUserQuery);
+        if(peerUser!=currentUser)throw Rejected(BrokerSecurityCheck.UserSid);
+        ulong peerLogon=AuthenticationId(peer,BrokerSecurityCheck.PeerStatisticsQuery);
+        ulong currentLogon=AuthenticationId(current,BrokerSecurityCheck.CurrentStatisticsQuery);
+        int peerSession=IntValue(peer,12,BrokerSecurityCheck.PeerSessionQuery);
+        int currentSession=IntValue(current,12,BrokerSecurityCheck.CurrentSessionQuery);
+        // A linked match is evidence only; equality policy remains fail-closed.
+        BrokerIdentityPolicy.Validate(new(peerUser.Value,peerLogon,peerSession),
+            new(currentUser.Value,currentLogon,currentSession),()=>InspectLinked(current,peerUser,peerLogon,peerSession));
+        if(requireAdmin)
+        {
+            if(IntValue(peer,20,BrokerSecurityCheck.ElevationQuery)!=1)throw Rejected(BrokerSecurityCheck.Elevated);
+            if(!IsAdministratorGroupEnabled(peer))throw Rejected(BrokerSecurityCheck.AdministratorGroup);
+        }
+    }
+    private static (BrokerLinkedTokenStatus,int) InspectLinked(SafeAccessTokenHandle current,SecurityIdentifier peerUser,ulong peerLogon,int peerSession)
+    {
+        try
+        {
+            int type=IntValue(current,18,BrokerSecurityCheck.ElevationQuery);
+            if(type==1)return (BrokerLinkedTokenStatus.NotSplit,0);
+            if(type is not(2 or 3))return (BrokerLinkedTokenStatus.QueryFailed,13);
+            byte[] value=Query(current,19,IntPtr.Size,BrokerSecurityCheck.CurrentStatisticsQuery);
+            using var linked=new SafeAccessTokenHandle(IntPtr.Size==8?new IntPtr(BitConverter.ToInt64(value)):new IntPtr(BitConverter.ToInt32(value)));
+            if(linked.IsInvalid)return (BrokerLinkedTokenStatus.QueryFailed,6);
+            bool match=User(linked,BrokerSecurityCheck.CurrentUserQuery)==peerUser &&
+                AuthenticationId(linked,BrokerSecurityCheck.CurrentStatisticsQuery)==peerLogon &&
+                IntValue(linked,12,BrokerSecurityCheck.CurrentSessionQuery)==peerSession;
+            return (match?BrokerLinkedTokenStatus.MatchesPeer:BrokerLinkedTokenStatus.DifferentIdentity,0);
+        }
+        catch(BrokerSecurityException ex){return (BrokerLinkedTokenStatus.QueryFailed,ex.Detail.Code);}
+    }
+    private static byte[] Query(SafeAccessTokenHandle token,int kind,int size,BrokerSecurityCheck check)
+    {
+        byte[] data=new byte[size];
+        if(!GetTokenInformation(token,kind,data,size,out int returned))throw Api(check);
+        if(returned!=size)throw Rejected(check,BrokerSecurityOutcome.InvalidData);
+        return data;
+    }
+    private static int IntValue(SafeAccessTokenHandle token,int kind,BrokerSecurityCheck check)=>BitConverter.ToInt32(Query(token,kind,4,check));
+    private static ulong AuthenticationId(SafeAccessTokenHandle token,BrokerSecurityCheck check)=>BitConverter.ToUInt64(Query(token,10,56,check),8);
+    private static T VariableQuery<T>(SafeAccessTokenHandle token,int kind,BrokerSecurityCheck check,Func<IntPtr,int,T> read)
+    {
+        bool first=GetTokenBuffer(token,kind,IntPtr.Zero,0,out int size);
+        int error=Marshal.GetLastWin32Error();
+        if(!first && error!=122)throw new BrokerSecurityException(new(check,BrokerSecurityOutcome.ApiFailure,error));
+        if(size<8 || size>65536)throw Rejected(check,BrokerSecurityOutcome.InvalidData);
         IntPtr buffer=Marshal.AllocHGlobal(size);
-        try {
-            if(!GetTokenBuffer(token,2,buffer,size,out _))throw new UnauthorizedAccessException("Peer group query failed.");
-            int count=Marshal.ReadInt32(buffer);int stride=IntPtr.Size==8?16:8,offset=IntPtr.Size;
-            if(count<0 || count>(size-offset)/stride)throw new UnauthorizedAccessException("Peer group bounds rejected.");
-            for(int i=0;i<count;i++) {
-                IntPtr sid=Marshal.ReadIntPtr(buffer,offset+i*stride);int flags=Marshal.ReadInt32(buffer,offset+i*stride+IntPtr.Size);
-                if((flags&4)!=0 && (flags&16)==0 && new SecurityIdentifier(sid).IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid))return true;
-            }
-            return false;
-        } finally {Marshal.FreeHGlobal(buffer);}
+        try
+        {
+            if(!GetTokenBuffer(token,kind,buffer,size,out int returned))throw Api(check);
+            if(returned<8 || returned>size)throw Rejected(check,BrokerSecurityOutcome.InvalidData);
+            return read(buffer,returned);
+        }
+        finally {Marshal.FreeHGlobal(buffer);}
     }
-    [DllImport("advapi32.dll",EntryPoint="GetTokenInformation",SetLastError=true)]private static extern bool GetTokenBuffer(SafeAccessTokenHandle token,int kind,IntPtr buffer,int size,out int length);
-    private static string Logon(SafeAccessTokenHandle token)
+    private static SecurityIdentifier ReadSid(IntPtr buffer,int size,IntPtr sid,BrokerSecurityCheck check)
     {
-        byte[] buffer=new byte[128];
-        byte[] session=new byte[4];
-        if(!GetTokenInformation(token,10,buffer,buffer.Length,out _) || !GetTokenInformation(token,12,session,4,out _))throw new UnauthorizedAccessException("Token authorization query failed.");
-        // TOKEN_STATISTICS: AuthenticationId at offset 8, invariant across a UAC split token.
-        return Convert.ToHexString(buffer.AsSpan(8,8))+Convert.ToHexString(session);
+        long offset=sid.ToInt64()-buffer.ToInt64();
+        if(offset<0 || offset>size-8)throw Rejected(check,BrokerSecurityOutcome.InvalidData);
+        int length=8+4*Marshal.ReadByte(sid,1);
+        if(Marshal.ReadByte(sid)!=1 || length>68 || length>size-offset)throw Rejected(check,BrokerSecurityOutcome.InvalidData);
+        return new SecurityIdentifier(sid);
     }
+    private static SecurityIdentifier User(SafeAccessTokenHandle token,BrokerSecurityCheck check)=>
+        VariableQuery(token,1,check,(buffer,size)=>ReadSid(buffer,size,Marshal.ReadIntPtr(buffer),check));
+    private static bool IsAdministratorGroupEnabled(SafeAccessTokenHandle token)=>VariableQuery(token,2,BrokerSecurityCheck.GroupsQuery,(buffer,size)=>
+    {
+        int count=Marshal.ReadInt32(buffer),stride=IntPtr.Size==8?16:8,offset=IntPtr.Size;
+        if(count<0 || count>(size-offset)/stride)throw Rejected(BrokerSecurityCheck.GroupsQuery,BrokerSecurityOutcome.InvalidData);
+        for(int i=0;i<count;i++)
+        {
+            var sid=ReadSid(buffer,size,Marshal.ReadIntPtr(buffer,offset+i*stride),BrokerSecurityCheck.GroupsQuery);
+            int flags=Marshal.ReadInt32(buffer,offset+i*stride+IntPtr.Size);
+            if((flags&4)!=0 && (flags&16)==0 && sid.IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid))return true;
+        }
+        return false;
+    });
+    [DllImport("advapi32.dll",EntryPoint="GetTokenInformation",SetLastError=true)]private static extern bool GetTokenBuffer(SafeAccessTokenHandle token,int kind,IntPtr buffer,int size,out int length);
     public static SafeProcessHandle ObserveProcess(Process process)
     {
         var handle=OpenProcess(0x101000,false,process.Id); // synchronize + query limited; no write/control access
-        if(handle.IsInvalid){int error=Marshal.GetLastWin32Error();handle.Dispose();throw new System.ComponentModel.Win32Exception(error);}
+        if(handle.IsInvalid){int error=Marshal.GetLastWin32Error();handle.Dispose();throw new BrokerSecurityException(new(BrokerSecurityCheck.ProcessOpen,BrokerSecurityOutcome.ApiFailure,error));}
         return handle;
     }
     public static long CreationTime(Process process)
     {
         using var handle=ObserveProcess(process);
-        if(HasExited(handle) || !GetProcessTimes(handle,out long created,out _,out _,out _))throw new UnauthorizedAccessException("Broker peer creation time unavailable or process exited.");
+        if(HasExited(handle))throw Rejected(BrokerSecurityCheck.ProcessAlive,BrokerSecurityOutcome.ProcessExited);
+        if(!GetProcessTimes(handle,out long created,out _,out _,out _))throw Api(BrokerSecurityCheck.CreationTimeQuery);
         return created;
     }
     public static int? ExitCode(SafeProcessHandle handle)=>HasExited(handle) && GetExitCodeProcess(handle,out int code)?code:null;
@@ -121,16 +193,22 @@ public static class BrokerSecurity
     }
     public static void ValidateWorkerOrigin(Process worker,Process bootstrap)
     {
-        if(CreationTime(worker)<CreationTime(bootstrap))throw new UnauthorizedAccessException("Broker bootstrap ownership changed.");
+        if(CreationTime(worker)<CreationTime(bootstrap))throw Rejected(BrokerSecurityCheck.WorkerCreationOrder);
         using var snapshot=CreateToolhelp32Snapshot(2,0);
+        if(snapshot.IsInvalid)throw Api(BrokerSecurityCheck.SnapshotOpen);
         var entry=new ProcessEntry{Size=(uint)Marshal.SizeOf<ProcessEntry>()};bool matched=false;
-        if(Process32First(snapshot,ref entry))do{if(entry.Pid==worker.Id){matched=entry.ParentPid==bootstrap.Id;break;}}while(Process32Next(snapshot,ref entry));
-        if(!matched)throw new UnauthorizedAccessException("Broker worker is not the owned bootstrap child.");
+        bool more=Process32First(snapshot,ref entry);
+        while(more)
+        {
+            if(entry.Pid==worker.Id){matched=entry.ParentPid==bootstrap.Id;break;}
+            more=Process32Next(snapshot,ref entry);
+        }
+        if(!more && Marshal.GetLastWin32Error()!=18)throw Api(BrokerSecurityCheck.SnapshotRead);
+        if(!matched)throw Rejected(BrokerSecurityCheck.WorkerParent);
         // Advisory evidence needs only held bootstrap ownership and exact image;
         // it must still be available when subsequent token authorization fails.
-        using var queried=ObserveProcess(worker);char[] image=new char[32768];uint length=(uint)image.Length;
-        if(!QueryFullProcessImageName(queried,0,image,ref length) || !Path.GetFullPath(new string(image,0,(int)length)).Equals(Path.Combine(AppContext.BaseDirectory,"broker","Northpass.Broker.Worker.exe"),StringComparison.OrdinalIgnoreCase))
-            throw new UnauthorizedAccessException("Broker worker executable substitution rejected.");
+        using var queried=ObserveProcess(worker);
+        ValidateImage(queried,Path.Combine(AppContext.BaseDirectory,"broker","Northpass.Broker.Worker.exe"));
     }
     [StructLayout(LayoutKind.Sequential,CharSet=CharSet.Unicode)]private struct ProcessEntry
     {public uint Size,Usage,Pid;public UIntPtr Heap;public uint Module,Threads,ParentPid;public int Priority;public uint Flags;[MarshalAs(UnmanagedType.ByValTStr,SizeConst=260)]public string Name;}

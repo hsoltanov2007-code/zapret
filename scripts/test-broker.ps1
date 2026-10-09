@@ -80,7 +80,7 @@ try {
         if ($mode -eq 'early-worker-exit') {
             $proof = Get-Content $evidence -Raw | ConvertFrom-Json
             if ($helper.ExitCode -ne 0x4e500602 -or [int]$proof.Failure.Kind -ne 4 -or [int]$proof.Failure.Stage -ne 6 -or !$proof.Failure.CleanupCompleted -or !$proof.NoEngineStarted -or $proof.Failure.ElapsedMilliseconds -ge 15000) { throw 'Early actual worker-owner rejection was masked or ownership cleanup failed.' }
-            Write-Host '::notice title=Pre-authentication worker termination::Actual protected bootstrap/worker rejected a deliberately renamed desktop owner image. Client reported AuthenticationRejected / WorkerOwner, owned exit 0x4e500602 and completed cleanup before the 15-second timeout; no engine started. Deliberate security fixture, not reproduction of the reported desktop cause.'
+            Write-Host '::notice title=Pre-authentication worker termination::Actual protected bootstrap/worker rejected a deliberately renamed desktop owner image. Client reported AuthenticationRejected / WorkerOwner with check=ImagePath and outcome=IdentityMismatch, owned exit 0x4e500602 and completed cleanup before the 15-second timeout; no engine started. Deliberate security fixture, not reproduction of the reported desktop cause.'
             Remove-Item $image,$handoff,($handoff+'.pid') -Force -ErrorAction SilentlyContinue
             continue
         }

@@ -138,7 +138,7 @@ jobs:
           ./scripts/build-native.ps1
           dotnet restore tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj --locked-mode
           if ($LASTEXITCODE -ne 0) { throw 'Compatibility restore failed.' }
-          $output = dotnet test tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj -c Release --no-restore --filter FullyQualifiedName~NativeSplitLabWindowsTests --logger trx --results-directory TestResults 2>&1
+          $output = dotnet test tests/Northpass.Windows.Tests/Northpass.Windows.Tests.csproj -c Release --no-restore --filter "FullyQualifiedName~NativeSplitLabWindowsTests|FullyQualifiedName~BrokerSecurityWindowsTests|FullyQualifiedName~BrokerEvidenceWindowsTests" --logger trx --results-directory TestResults 2>&1
           $result = $LASTEXITCODE
           $output | Write-Output
           if ($result -ne 0) {
@@ -149,6 +149,10 @@ jobs:
           $summary = $output | Where-Object { $_ -match 'Passed!.*Total:\s*[1-9]\d*' } | Select-Object -Last 1
           if (!$summary) { throw 'Compatibility lab did not confirm executed tests.' }
           Write-Host "::notice title=Windows Server 2022 actual lab::$summary"
+          Get-ChildItem TestResults/engine-broker-token-coverage.txt | ForEach-Object {
+            $evidence = (Get-Content $_.FullName -Raw).Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Host "::notice title=Broker token coverage::$evidence"
+          }
       - uses: actions/upload-artifact@v4
         if: always()
         with:

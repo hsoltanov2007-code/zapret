@@ -8,9 +8,9 @@ namespace Northpass.Broker;
 
 public enum BrokerStage { Installation=1, Elevation=2, BootstrapOwner=3, BootstrapIntegrity=4, WorkerCreate=5, WorkerOwner=6, PipeConnect=7, PeerIdentity=8, Authentication=9, Preparing=10, EngineStart=11, Ready=12, Cleanup=13 }
 public enum BrokerFailureKind { UacDenied, Cancelled, StartupTimeout, HelperExited, AuthenticationRejected, InstallationRejected, EngineLaunchFailed, IpcDisconnected, CleanupIncomplete, LaunchFailed }
-public sealed record BrokerFailure(BrokerFailureKind Kind, BrokerStage Stage, long ElapsedMilliseconds, int SafeCode, int? HelperExitCode, bool CleanupCompleted)
+public sealed record BrokerFailure(BrokerFailureKind Kind, BrokerStage Stage, long ElapsedMilliseconds, int SafeCode, int? HelperExitCode, bool CleanupCompleted, BrokerSecurityDetail? Security=null)
 {
-    public string Diagnostic => $"BROKER_FAILURE kind={Kind} stage={Stage} elapsed_ms={ElapsedMilliseconds} code={SafeCode} helper_exit={HelperExitCode?.ToString(CultureInfo.InvariantCulture)??"unavailable"} cleanup={(CleanupCompleted?"complete":"pending")}";
+    public string Diagnostic => $"BROKER_FAILURE kind={Kind} stage={Stage} elapsed_ms={ElapsedMilliseconds} code={SafeCode} helper_exit={HelperExitCode?.ToString(CultureInfo.InvariantCulture)??"unavailable"} cleanup={(CleanupCompleted?"complete":"pending")}{(Security is null?"":" "+Security.Diagnostic)}";
     public string MessageKey => Kind switch { BrokerFailureKind.UacDenied=>"PermissionDeclined", BrokerFailureKind.Cancelled=>"ConnectionCancelled", BrokerFailureKind.StartupTimeout=>"BrokerTimeout", BrokerFailureKind.HelperExited=>"BrokerExited", BrokerFailureKind.AuthenticationRejected=>"BrokerRejected", BrokerFailureKind.InstallationRejected=>"ReinstallRequired", BrokerFailureKind.CleanupIncomplete=>"BrokerCleanup", BrokerFailureKind.EngineLaunchFailed=>"ConnectionFailed", _=>"BrokerFailed" };
 }
 public sealed class BrokerStartupException(BrokerFailure failure, Exception? inner=null) : IOException(failure.Diagnostic,inner)
@@ -69,7 +69,7 @@ public static class BrokerStartup
         if(operation.IsCompleted) { await operation.ConfigureAwait(false); return; }
         throw new TimeoutException("Owned broker IPC startup deadline expired.");
     }
-    public static int SafeCode(Exception exception) => exception is Win32Exception windows ? windows.NativeErrorCode : exception.HResult;
+    public static int SafeCode(Exception exception) => exception is BrokerSecurityException security ? security.Detail.Code : exception is Win32Exception windows ? windows.NativeErrorCode : exception.HResult;
     public static async Task<bool> WaitForCleanupAsync(Func<bool> hasExited,TimeSpan timeout)
     {
         var clock=Stopwatch.StartNew();
@@ -81,19 +81,29 @@ public sealed class BrokerHelperExitedException : IOException { public BrokerHel
 
 // Advisory stage data never authorizes commands. Fixed numeric schema, no
 // account names, paths, command lines, nonces, packet data or exception text.
-public sealed record BrokerEvidenceRecord(BrokerStage Stage,long ElapsedMilliseconds,int Code,int WorkerId)
+public sealed record BrokerEvidenceRecord(BrokerStage Stage,long ElapsedMilliseconds,int Code,int WorkerId,BrokerSecurityDetail? Security=null)
 {
     public static BrokerEvidenceRecord Parse(string line)
     {
         if(line.Length>128)throw new InvalidDataException("Broker evidence exceeds bounds.");
         string[] fields=line.Split(' ');
-        if(fields.Length!=5 || fields[0]!="NPB1" || !int.TryParse(fields[1],NumberStyles.None,CultureInfo.InvariantCulture,out int stage) || !Enum.IsDefined((BrokerStage)stage) ||
+        bool detailed=fields.Length==9 && fields[0]=="NPB2";
+        if((!detailed && (fields.Length!=5 || fields[0]!="NPB1")) || !int.TryParse(fields[1],NumberStyles.None,CultureInfo.InvariantCulture,out int stage) || !Enum.IsDefined((BrokerStage)stage) ||
             !long.TryParse(fields[2],NumberStyles.None,CultureInfo.InvariantCulture,out long elapsed) || elapsed>3600000 ||
             !int.TryParse(fields[3],NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture,out int code) ||
             !int.TryParse(fields[4],NumberStyles.None,CultureInfo.InvariantCulture,out int worker))throw new InvalidDataException("Broker evidence schema rejected.");
-        return new((BrokerStage)stage,elapsed,code,worker);
+        BrokerSecurityDetail? detail=null;
+        if(detailed)
+        {
+            if(!int.TryParse(fields[5],NumberStyles.None,CultureInfo.InvariantCulture,out int check) || !Enum.IsDefined((BrokerSecurityCheck)check) || check==0 ||
+               !int.TryParse(fields[6],NumberStyles.None,CultureInfo.InvariantCulture,out int outcome) || !Enum.IsDefined((BrokerSecurityOutcome)outcome) || outcome==0 ||
+               !int.TryParse(fields[7],NumberStyles.None,CultureInfo.InvariantCulture,out int linked) || !Enum.IsDefined((BrokerLinkedTokenStatus)linked) ||
+               !int.TryParse(fields[8],NumberStyles.AllowLeadingSign,CultureInfo.InvariantCulture,out int linkedCode))throw new InvalidDataException("Broker security evidence rejected.");
+            detail=new((BrokerSecurityCheck)check,(BrokerSecurityOutcome)outcome,code,(BrokerLinkedTokenStatus)linked,linkedCode);
+        }
+        return new((BrokerStage)stage,elapsed,code,worker,detail);
     }
-    public string Diagnostic=>$"BROKER_STAGE stage={Stage} elapsed_ms={ElapsedMilliseconds} code={Code} worker_pid={WorkerId}";
+    public string Diagnostic=>$"BROKER_STAGE stage={Stage} elapsed_ms={ElapsedMilliseconds} code={Code} worker_pid={WorkerId}{(Security is null?"":" "+Security.Diagnostic)}";
 }
 
 [System.Runtime.Versioning.SupportedOSPlatform("windows")]
@@ -109,6 +119,13 @@ public sealed class BrokerStartupEvidence : IAsyncDisposable
     private readonly Queue<BrokerEvidenceRecord> _records=new();
     public BrokerEvidenceRecord? Last { get {lock(_sync)return _last;} }
     public BrokerEvidenceRecord[] Records { get {lock(_sync)return _records.ToArray();} }
+    public async Task DrainExitedAsync()
+    {
+        // Once the owned helper exited, allow its already-written terminal
+        // evidence to reach the reader before cancellation closes the pipes.
+        try {await Task.WhenAll(_readers).WaitAsync(TimeSpan.FromMilliseconds(500)).ConfigureAwait(false);}
+        catch(TimeoutException){ }
+    }
     public BrokerStartupEvidence(string id,Action<string> log)
     {
         _log=log;_bootstrap=BrokerPipe.CreateEvidenceServer(id,false);
@@ -168,10 +185,13 @@ public sealed class BrokerEvidenceWriter : IDisposable
         catch{writer.Dispose();} // advisory only; authentication still mandatory
         return writer;
     }
-    public void Report(BrokerStage stage,int code=0)
+    public void Report(BrokerStage stage,int code=0,BrokerSecurityDetail? security=null)
     {
         if(_pipe is null || _records++>=32)return;
-        byte[] line=Encoding.ASCII.GetBytes(FormattableString.Invariant($"NPB1 {(int)stage} {_clock.ElapsedMilliseconds} {code} {Environment.ProcessId}\n"));
+        string message=security is null
+            ? FormattableString.Invariant($"NPB1 {(int)stage} {_clock.ElapsedMilliseconds} {code} {Environment.ProcessId}\n")
+            : FormattableString.Invariant($"NPB2 {(int)stage} {_clock.ElapsedMilliseconds} {code} {Environment.ProcessId} {(int)security.Check} {(int)security.Outcome} {(int)security.Linked} {security.LinkedCode}\n");
+        byte[] line=Encoding.ASCII.GetBytes(message);
         using var timeout=new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
         try {_pipe.WriteAsync(line,timeout.Token).AsTask().GetAwaiter().GetResult();}catch{Dispose();}
     }
