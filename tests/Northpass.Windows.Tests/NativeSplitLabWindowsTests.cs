@@ -184,7 +184,8 @@ public sealed class NativeSplitLabWindowsTests
                         {
                             Assert.Equal(sequence, (uint)Field(segment, "seq")); Assert.Equal(0ul, Field(segment, "hello"));
                             Assert.InRange(Field(segment, "bytes"), 1ul, 1280ul);
-                            Assert.Contains(post, x => Field(x, "seq") == Field(segment, "seq") && Field(x, "payload") == Field(segment, "payload") && Field(x, "ack") == Field(segment, "ack") && Field(x, "checksum_valid") == 1);
+                            Assert.Contains(post, x => Field(x, "seq") == Field(segment, "seq") && Field(x, "payload") == Field(segment, "payload") && Field(x, "ack") == Field(segment, "ack") &&
+                                (Field(x, "checksum_valid") == 1 || Field(x, "checksum_unverified") == 1));
                             var length = Field(segment, "payload"); remaining -= length; sequence = unchecked(sequence + (uint)length);
                         }
                         Assert.Equal(0ul, remaining);

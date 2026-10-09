@@ -134,7 +134,10 @@ public:
         if (marker != std::string::npos) filter.replace(marker, 9, "true"); // read-only observer must see reinjected lab packets too
         handle_ = divert.open(filter.c_str(), WINDIVERT_LAYER_NETWORK, -100, WINDIVERT_FLAG_SNIFF | WINDIVERT_FLAG_RECV_ONLY);
         if (handle_ == INVALID_HANDLE_VALUE) throw std::runtime_error(windows_error("Lab trace opening", GetLastError()));
-        try { worker_ = std::thread([this, &metrics, port = options.port] {
+        try {
+            for (const auto& [name, value] : std::array<std::pair<WINDIVERT_PARAM, UINT64>, 3>{ {{WINDIVERT_PARAM_QUEUE_LENGTH, 128}, {WINDIVERT_PARAM_QUEUE_SIZE, 262144}, {WINDIVERT_PARAM_QUEUE_TIME, 500}} })
+                if (!divert.parameter(handle_, name, value)) throw std::runtime_error(windows_error("Bounded lab trace queue", GetLastError()));
+            worker_ = std::thread([this, &metrics, port = options.port] {
             try {
                 Handle ready(CreateEventW(nullptr, TRUE, FALSE, nullptr));
                 if (!ready.get()) throw std::runtime_error("Lab trace event unavailable.");
@@ -152,18 +155,27 @@ public:
                     if (view.state == ParseState::Parsed && view.transport == Transport::Tcp && view.destination.port == port && !view.payload.empty()) {
                         ++observed_;
                         if (observed_ <= 256) { std::lock_guard guard(output_);
+                            const PacketMetadata metadata{true, true, false, address.IPv6 != 0, true, true, false};
+                            const auto lab_checksum = observe_split_input_checksum(packet, metadata);
                             std::cout << "NORTHPASS_LAB_TRACE stage=post seq=" << view.sequence << " ack=" << view.acknowledgement
                                 << " bytes=" << count << " payload=" << view.payload.size() << " flags=" << static_cast<unsigned>(view.tcp_flags)
                                 << " hello=" << simulator_recognizes_client_hello(packet)
-                                << " checksum_valid=" << (observe_checksum(packet, {true, true, false, address.IPv6 != 0, true, true, false}) == ChecksumObservation::Valid) << '\n' << std::flush;
+                                << " checksum_valid=" << (observe_checksum(packet, metadata) == ChecksumObservation::Valid)
+                                << " checksum_unverified=" << (lab_checksum == ChecksumObservation::OffloadUnverified)
+                                << " ip_field=" << (view.ip_version == 4 ? (static_cast<unsigned>(packet[10]) << 8) | packet[11] : 0)
+                                << " tcp_field=" << ((static_cast<unsigned>(packet[view.transport_offset + 16]) << 8) | packet[view.transport_offset + 17]) << '\n' << std::flush;
                         }
                     }
                 }
             } catch (...) { ++metrics.fatal; SetEvent(stop_); }
         }); } catch (...) { divert_.close(handle_); handle_ = INVALID_HANDLE_VALUE; throw; }
     }
-    void stop() { SetEvent(stop_); if (worker_.joinable()) worker_.join(); }
-    ~LabTrace() { stop(); if (handle_ != INVALID_HANDLE_VALUE) divert_.close(handle_); }
+    bool stop() {
+        SetEvent(stop_); if (worker_.joinable()) worker_.join();
+        if (handle_ != INVALID_HANDLE_VALUE) { if (!divert_.close(handle_)) return false; handle_ = INVALID_HANDLE_VALUE; }
+        return true;
+    }
+    ~LabTrace() { (void)stop(); }
     std::uint64_t observed() const { return observed_.load(); }
 private:
     Divert& divert_; HANDLE stop_, handle_{INVALID_HANDLE_VALUE}; std::mutex& output_; std::thread worker_;
@@ -328,11 +340,15 @@ int run(const Options& options) {
                 // Consumer/native pass-through is unchanged. Only explicit bounded
                 // lab sessions may propose modifications BEFORE original forwarding.
                 if (options.lab_split) {
+                    const auto previous_proposed = proposed, previous_accepted = accepted;
                     bool transmission_attempted = false;
                     try { (void)lab_forward(packet, address, transmission_attempted); }
                     catch (...) {
                         if (transmission_attempted) { ++send_failures; ++metrics.dropped_known; ++metrics.fatal; SetEvent(stop.get()); }
-                        else { ++lab_observation_errors; (void)forward(packet); }
+                        else {
+                            if (proposed > previous_proposed && accepted == previous_accepted) ++rejected;
+                            ++lab_observation_errors; (void)forward(packet);
+                        }
                     }
                 } else (void)forward(packet);
                 if (!queue.try_push(packet)) ++metrics.backpressure; // skip observation, never reorder originals or wait on space
@@ -379,7 +395,7 @@ int run(const Options& options) {
         if (Clock::now() - last_report >= std::chrono::seconds(1)) { report(); last_report = Clock::now(); }
     }
     receiver.join();
-    if (trace) trace->stop();
+    if (trace && !trace->stop()) ++metrics.fatal;
     split.shutdown(); report();
     if (options.lab_split) {
         std::cout << "NORTHPASS_SPLIT_METRICS protocol=4 proposed=" << proposed << " accepted=" << accepted << " rejected=" << rejected
