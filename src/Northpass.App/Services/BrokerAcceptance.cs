@@ -46,6 +46,7 @@ internal static class BrokerAcceptance
             await File.WriteAllTextAsync(args[handoff+1]+".crash",JsonSerializer.Serialize(new{Worker=client.AuthenticatedWorkerIdForAcceptance,Native=nativePid}));
             var deadline=DateTime.UtcNow.AddSeconds(15);
             while((await engine.GetStatusAsync()).State!=EngineState.Error){if(DateTime.UtcNow>=deadline)throw new IOException("Worker crash was not detected.");await Task.Delay(50);}
+            if(!faultNotification)throw new IOException("Polled worker failure did not notify controller recovery before STOP.");
             try{await engine.StopAsync();}catch(IOException){ } // failure is reported, never silently re-elevated
         }
         else if(mode!="parent-death")await engine.StopAsync();
