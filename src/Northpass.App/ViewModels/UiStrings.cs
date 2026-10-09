@@ -12,6 +12,16 @@ public sealed class UiStrings(string language)
     }
     private static readonly Dictionary<string, (string En, string Ru, string Az)> Entries = new()
     {
+        ["TelegramDesktopTitle"] = ("Telegram Desktop connection", "Подключение Telegram Desktop", "Telegram Desktop bağlantısı"),
+        ["TelegramProbeAction"] = ("Check direct connection", "Проверить прямое подключение", "Birbaşa bağlantını yoxla"),
+        ["TelegramProbeConsent"] = ("Send harmless initial MTProto probes to four official bootstrap endpoints over TCP 443 (IPv4/IPv6, plain and obfuscated abridged)? No account login, messages or credentials. Your Telegram proxy is not used or changed. This may take up to 32 seconds.", "Отправить безопасные начальные MTProto-запросы четырём официальным адресам по TCP 443 (IPv4/IPv6, обычный и обфусцированный транспорт)? Без входа в аккаунт, сообщений и учётных данных. Прокси Telegram не используется и не меняется. Проверка займёт до 32 секунд.", "Dörd rəsmi başlanğıc ünvana TCP 443 ilə ilkin MTProto sorğuları göndərilsin (IPv4/IPv6, adi və obfuskasiya edilmiş)? Hesaba giriş, mesaj və giriş məlumatları yoxdur. Telegram proksisi istifadə edilmir və dəyişmir. 32 saniyəyədək çəkə bilər."),
+        ["TelegramProbeScope"] = ("Only initial direct MTProto reachability. A reply is unauthenticated and does not prove login, messaging, media or DPI bypass. Proxy and dynamically updated app endpoints may differ.", "Только начальная доступность прямого MTProto. Ответ не аутентифицирован и не подтверждает вход, сообщения, медиа или обход DPI. Прокси и обновлённые адреса приложения могут отличаться.", "Yalnız ilkin birbaşa MTProto əlçatanlığı. Cavab autentifikasiya edilməyib; giriş, mesaj, media və DPI keçidini təsdiqləmir. Proksi və yenilənmiş tətbiq ünvanları fərqlənə bilər."),
+        ["TelegramInitialResponse"] = ("Initial MTProto reply", "Начальный ответ MTProto", "İlkin MTProto cavabı"),
+        ["TelegramTimeout"] = ("Timed out", "Истекло время ожидания", "Gözləmə vaxtı bitdi"),
+        ["TelegramTcpError"] = ("TCP connection error", "Ошибка TCP-подключения", "TCP bağlantı xətası"),
+        ["TelegramInvalidResponse"] = ("Unexpected initial response", "Неожиданный начальный ответ", "Gözlənilməz ilkin cavab"),
+        ["TelegramClosed"] = ("Connection closed", "Соединение закрыто", "Bağlantı bağlandı"),
+        ["TelegramProbeCancelled"] = ("Check cancelled", "Проверка отменена", "Yoxlama ləğv edildi"),
         ["EngineRunning"] = ("Engine running", "Движок работает", "Mühərrik işləyir"),
         ["CaptureInitialization"] = ("Capture initialization", "Инициализация перехвата", "Tutmanın başladılması"),
         ["PacketInterception"] = ("Packets intercepted", "Перехват пакетов", "Paketlərin tutulması"),

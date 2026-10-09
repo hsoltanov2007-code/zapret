@@ -14,3 +14,12 @@ Northpass is independent of Flowseal, Zapret, WinDivert and Cygwin. The consumer
 No written source offer is substituted for the included third-party source archives. Build fails if their acquisition/integrity checks fail. The selected distribution excludes full upstream archive utilities whose licences would require additional review. Northpass does not claim authorship of dependencies or alter their licence rights.
 
 No project-wide licence for the original Northpass code has been selected; the repository owner must choose one before a public release. The requested development artifacts are unsigned and are not an authenticated release. See `docs/WINDOWS_ACCEPTANCE.md` before distribution.
+
+### Telegram endpoint provenance
+
+The compiled bootstrap endpoint facts are attributed to the official Telegram
+Desktop project at revision `86262333a457f62709726ee4ab9c48fa58824da4`:
+https://github.com/telegramdesktop/tdesktop/tree/86262333a457f62709726ee4ab9c48fa58824da4
+(its legal information: `LEGAL` in that tree). No Telegram Desktop executable or
+library is included. Northpass's initial-protocol diagnostic is original code;
+endpoint provenance and limitations are in `docs/TELEGRAM_DESKTOP.md`.
