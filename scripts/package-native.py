@@ -41,7 +41,7 @@ def package(executable, sdk, output):
     with zipfile.ZipFile(output / "source/NorthpassCore-source.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
         tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=ROOT).decode().split("\0")
         roots = ("native/", "src/", "tests/", "scripts/", "installer/", "profiles/", "engine/", "branding/", "docs/")
-        metadata = {"Northpass.sln", "Directory.Build.props", "global.json", "NuGet.Config", "README.md", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md"}
+        metadata = {"Northpass.sln", "Directory.Build.props", "global.json", "NuGet.Config", "NuGet.config", "README.md", "THIRD_PARTY_NOTICES.md", "CHANGELOG.md"}
         for name in sorted(n for n in tracked if n and (n.startswith(roots) or n in metadata)):
             archive.write(ROOT / name, name)
         archive.writestr("BUILD-REVISION.txt", revision + "\n")
