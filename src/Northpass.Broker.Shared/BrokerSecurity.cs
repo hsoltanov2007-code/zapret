@@ -60,9 +60,30 @@ public static class BrokerSecurity
         using(var current=WindowsIdentity.GetCurrent())
         {
             if(identity.User!=current.User || Logon(token)!=Logon(current.AccessToken))throw new UnauthorizedAccessException("Broker peer user/logon mismatch.");
-            if(requireAdmin && !new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))throw new UnauthorizedAccessException("Broker peer is not elevated.");
+            if(requireAdmin && !IsElevatedAdministrator(token))throw new UnauthorizedAccessException("Broker peer is not elevated.");
         }
     }
+    private static bool IsElevatedAdministrator(SafeAccessTokenHandle token)
+    {
+        // Query only. WindowsPrincipal.IsInRole duplicates a foreign primary
+        // token and would require TOKEN_DUPLICATE across the integrity boundary.
+        byte[] elevation=new byte[4];
+        if(!GetTokenInformation(token,20,elevation,4,out _) || BitConverter.ToInt32(elevation)!=1)return false;
+        _=GetTokenBuffer(token,2,IntPtr.Zero,0,out int size);
+        if(size is <8 or >65536)throw new UnauthorizedAccessException("Invalid peer group information size.");
+        IntPtr buffer=Marshal.AllocHGlobal(size);
+        try {
+            if(!GetTokenBuffer(token,2,buffer,size,out _))throw new UnauthorizedAccessException("Peer group query failed.");
+            int count=Marshal.ReadInt32(buffer);int stride=IntPtr.Size==8?16:8,offset=IntPtr.Size;
+            if(count<0 || count>(size-offset)/stride)throw new UnauthorizedAccessException("Peer group bounds rejected.");
+            for(int i=0;i<count;i++) {
+                IntPtr sid=Marshal.ReadIntPtr(buffer,offset+i*stride);int flags=Marshal.ReadInt32(buffer,offset+i*stride+IntPtr.Size);
+                if((flags&4)!=0 && (flags&16)==0 && new SecurityIdentifier(sid).IsWellKnown(WellKnownSidType.BuiltinAdministratorsSid))return true;
+            }
+            return false;
+        } finally {Marshal.FreeHGlobal(buffer);}
+    }
+    [DllImport("advapi32.dll",EntryPoint="GetTokenInformation",SetLastError=true)]private static extern bool GetTokenBuffer(SafeAccessTokenHandle token,int kind,IntPtr buffer,int size,out int length);
     private static string Logon(SafeAccessTokenHandle token)
     {
         byte[] buffer=new byte[128];
